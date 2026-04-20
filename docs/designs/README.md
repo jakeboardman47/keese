@@ -13,7 +13,7 @@ last_verified: 2026-04-19
 # designs/ — WHY
 
 Design docs explain **why** the project is shaped the way it is.
-All 36 design docs must reach `status: current` and score ≥ 90/100
+All 37 design docs must reach `status: current` and score ≥ 90/100
 before any spec is authored and before any controller code is written.
 
 > **Gate status: CLOSED.** See [../plans/README.md](../plans/README.md).
