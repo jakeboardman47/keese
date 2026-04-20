@@ -37,7 +37,7 @@ jobs:
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
-      - uses: opentofu/setup-opentofu@v1
+      - uses: opentofu/setup-opentofu@v2
         if: steps.tf.outputs.present == 'true'
       - name: tofu fmt check
         if: steps.tf.outputs.present == 'true'
