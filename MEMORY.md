@@ -28,6 +28,14 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Gotchas
 
+### 2026-04-20 — 05b credential injection patterns
+
+- [05b + 05b-ii authored](docs/designs/05b-credential-injection-patterns.md) —
+  BSP encoding for static/AWS/GCP/Azure/pool credential types; rotation drain
+  formula `max(remaining_old_TTL, 0.70 × new_TTL)`; workspace > tenant > cluster
+  BSP precedence; vault-agent sidecar on gateway pod (not agent pod) for non-AI
+  upstreams; iter-1 score 92.5 SHIP. 17 iter-1 flagged for pool state machine.
+
 ### 2026-04-20 — scaffolding cycle
 
 - [markdownlint relaxations](.markdownlint.json) — MD003/MD004/MD007/

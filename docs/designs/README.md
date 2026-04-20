@@ -32,7 +32,8 @@ before any spec is authored and before any controller code is written.
 | 04c | [04c-token-revocation.md](04c-token-revocation.md) | Token Revocation | authz | current |
 | 05a | [05a-envoy-ai-gateway-topology.md](05a-envoy-ai-gateway-topology.md) | Envoy AI Gateway Topology | egress | current |
 | 05a-ii | [05a-ii-iter-log.md](05a-ii-iter-log.md) | Envoy AI Gateway Topology: Iteration Log | egress | current |
-| 05b | [05b-credential-injection-patterns.md](05b-credential-injection-patterns.md) | Credential Injection Patterns | egress | draft |
+| 05b | [05b-credential-injection-patterns.md](05b-credential-injection-patterns.md) | Credential Injection Patterns | egress | current |
+| 05b-ii | [05b-ii-bsp-examples.md](05b-ii-bsp-examples.md) | Credential Injection: BSP YAML Examples + Iteration Log | egress | current |
 | 05c | [05c-mcp-policy-enforcement.md](05c-mcp-policy-enforcement.md) | MCP Policy Enforcement | egress | current |
 | 06 | [06-guardrailbinding.md](06-guardrailbinding.md) | GuardrailBinding | guardrails | draft |
 | 07 | [07-agent-runtime-spi.md](07-agent-runtime-spi.md) | Agent Runtime SPI | runtime | draft |
