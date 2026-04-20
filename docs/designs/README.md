@@ -22,7 +22,7 @@ before any spec is authored and before any controller code is written.
 
 | # | Doc | Title | Category | Status |
 |---|---|---|---|---|
-| 01 | [01-tenancy-capsule.md](01-tenancy-capsule.md) | Tenancy via Capsule | tenancy | draft |
+| 01 | [01-tenancy-capsule.md](01-tenancy-capsule.md) | Tenancy via Capsule | tenancy | current |
 | 02 | [02-workspace-model.md](02-workspace-model.md) | Workspace Model | workspace | draft |
 | 03 | [03-workflow-argo-delegation.md](03-workflow-argo-delegation.md) | Workflow Argo Delegation | workflow | draft |
 | 04a | [04a-openfga-authz-model.md](04a-openfga-authz-model.md) | OpenFGA Authorization Model | authz | draft |
@@ -49,7 +49,9 @@ before any spec is authored and before any controller code is written.
 | 17 | [17-credential-broker.md](17-credential-broker.md) | Credential Broker | egress | draft |
 | 18 | [18-process-lifecycle.md](18-process-lifecycle.md) | Process Lifecycle | reliability | draft |
 | 19 | [19-ide-and-debugging.md](19-ide-and-debugging.md) | IDE and Debugging | developer-experience | draft |
-| 20 | [20-api-group-layout.md](20-api-group-layout.md) | API Group Layout | api | draft |
+| 20 | [20-api-group-layout.md](20-api-group-layout.md) | API Group Layout (redirect) | api | superseded |
+| 20a | [20a-api-group-layout.md](20a-api-group-layout.md) | API Group Layout: Groups, Kinds, Shared Types, Versioning | api | current |
+| 20b | [20b-api-group-layout.md](20b-api-group-layout.md) | API Group Layout: Trade-offs, Failure Modes, Rollback, Observability | api | current |
 | 21 | [21-opentofu-cloud-deployment.md](21-opentofu-cloud-deployment.md) | OpenTofu Cloud Deployment | deployment | draft |
 | 22 | [22-workflow-composition-examples.md](22-workflow-composition-examples.md) | Workflow Composition Examples | workflow | draft |
 
