@@ -28,7 +28,7 @@ before any spec is authored and before any controller code is written.
 | 04a | [04a-openfga-authz-model.md](04a-openfga-authz-model.md) | OpenFGA Authorization Model | authz | draft |
 | 04b | [04b-projected-sa-identity.md](04b-projected-sa-identity.md) | Projected ServiceAccount Identity | authz | current |
 | 04b-ii | [04b-ii-oidc-trust.md](04b-ii-oidc-trust.md) | OIDC Trust Anchoring Per Cloud | authz | current |
-| 04c | [04c-token-revocation.md](04c-token-revocation.md) | Token Revocation | authz | draft |
+| 04c | [04c-token-revocation.md](04c-token-revocation.md) | Token Revocation | authz | current |
 | 05a | [05a-envoy-ai-gateway-topology.md](05a-envoy-ai-gateway-topology.md) | Envoy AI Gateway Topology | egress | draft |
 | 05b | [05b-credential-injection-patterns.md](05b-credential-injection-patterns.md) | Credential Injection Patterns | egress | draft |
 | 05c | [05c-mcp-policy-enforcement.md](05c-mcp-policy-enforcement.md) | MCP Policy Enforcement | egress | draft |
