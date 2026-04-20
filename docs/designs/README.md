@@ -13,7 +13,7 @@ last_verified: 2026-04-19
 # designs/ — WHY
 
 Design docs explain **why** the project is shaped the way it is.
-All 30 design docs must reach `status: current` and score ≥ 90/100
+All 32 design docs must reach `status: current` and score ≥ 90/100
 before any spec is authored and before any controller code is written.
 
 > **Gate status: CLOSED.** See [../plans/README.md](../plans/README.md).
@@ -54,6 +54,7 @@ before any spec is authored and before any controller code is written.
 | 20b | [20b-api-group-layout.md](20b-api-group-layout.md) | API Group Layout: Trade-offs, Failure Modes, Rollback, Observability | api | current |
 | 21 | [21-opentofu-cloud-deployment.md](21-opentofu-cloud-deployment.md) | OpenTofu Cloud Deployment | deployment | draft |
 | 22 | [22-workflow-composition-examples.md](22-workflow-composition-examples.md) | Workflow Composition Examples | workflow | draft |
+| 23 | [23-agent-supervision.md](23-agent-supervision.md) | Agent Supervision (Patrol Pattern) | reliability | draft |
 
 ## Lifecycle
 

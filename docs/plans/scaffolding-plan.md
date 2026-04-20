@@ -59,6 +59,8 @@ Broken into **nine phases (P0–P8)**. Each scored against `docs/plans/rubric.md
 | D21 | **Signal handling:** controllers + agents must drain on **SIGTERM** (graceful checkpoint to PVC/NATS/ES); SIGKILL (uncatchable) recovery is via durable state + idempotent restart; SIGSTOP is OS/supervisor-controlled and not caught — checkpoint pattern covers the contract | Encoded in `.claude/rules/06-signal-handling.md`; liveness probes tuned to allow drain window. |
 | D22 | **Claude agent model discipline** — opus for architecture/strategy (architect, rebac-modeler, crd-author when designing), sonnet for implementation (implementer, test-engineer, controller-author, infra-bootstrap, guardrail-author, olm-author), haiku for narrow lookup (explorer, debugger-investigations); plan-scorer sonnet | Codified in each agent's frontmatter; enforced by `settings.json` `CLAUDE_CODE_SUBAGENT_MODEL` per dispatch. |
 | D23 | **Compose over replicate** — drop `Tenant`, `AgentIdentity`, `Entitlement`, `EntitlementGrant`, `TelemetryPipeline`, `WorkflowTrigger`, `Constitution`, `GuardrailPolicy`, `ToolAllowList` as separate CRDs | Each has a superior existing primitive (Capsule / OpenFGA tuples / OTEL Collector CR / pluggable trigger field / GuardrailBinding). |
+| D24 | **Agent identity is durable; sessions are ephemeral.** Workspace is the persistent agent identity. Pod churn is expected; state survives via PVC (goose SQLite), NATS JetStream (in-flight), OpenFGA (relations), and `Memory` CRD backends (long-term). | Test obligation: SIGKILL mid-run → resume on a new pod with no duplicate side effects. Added 2026-04-20 after review of Steve Yegge's "Welcome to Gas Town"; prevents conflation of Workspace with agent pod. See `docs/designs/23-agent-supervision.md`. |
+| D25 | **GUPP contract for AgentRuntime SPI.** Every runtime exposes `Resume(ctx, workspace)`; the controller MUST invoke it on observing pending work with no active session. Timeout → event `AgentUnresponsive`; escalation ladder lives in `docs/designs/23-agent-supervision.md`. | "GUPP" = Yegge's *"if there is work on your hook, YOU MUST RUN IT."* Prevents agents sitting idle while work sits on the hook. Added 2026-04-20. |
 
 ---
 
@@ -183,7 +185,7 @@ All 7 agents, 3 commands, 3 hooks, 4 rules, 6 skills; scripts (`agent-dispatch.s
 ### Per-agent keese deltas (append before copying)
 - **explorer** — `rg` scoped to `api/ internal/ config/ docs/ deploy/`; never read `.env.local` or `kubeconfig*`.
 - **implementer** — before commit: `make fmt vet lint manifests generate`; if `internal/controller/**` or `api/**` touched → `make test-integration` mandatory. Hand off to `debugger` instead of stubbing. Never `panic`/`log.Fatal` in controller code. **Use Server-Side Apply** (`client.Apply` with fieldOwner).
-- **architect** (opus) — read `designs/20-api-group-layout.md` + `07-agent-runtime-provider-interface.md` first. D1–D23 load-bearing.
+- **architect** (opus) — read `designs/20-api-group-layout.md` + `07-agent-runtime-provider-interface.md` first. D1–D25 load-bearing.
 - **test-engineer** — unit fakes (`internal/controller/fake/`); integration envtest; e2e kuttl; idempotency test mandatory per reconciler (≥ 3 reconciles stable).
 - **plan-scorer** — cat-3 (security) line-by-line vs `rules/05`; cat-5 (verifiability) requires envtest + kuttl *test names* present.
 - **debugger** — on controller loop: dump status + events + last 100 reconciles; stern logs → `.plan-logs/`; never `time.Sleep` as fix.
@@ -534,7 +536,7 @@ Asserts tenant ready, workspace ready, workflow run succeeded, OpenFGA `check` r
 
 ## Phase 8 — Design-gate freeze enforcement
 
-**Goal:** No implementation lands until all 30 designs AND all 11 specs score ≥ 90 AND architect opens gate.
+**Goal:** No implementation lands until all 32 designs AND all 11 specs score ≥ 90 AND architect opens gate.
 
 ### `scripts/check-design-gate.sh`
 "Stub body" iff file contains `TODO(design-gate)` + ≤ 20 non-blank non-comment LOC. For every non-stub file, find matching design + spec in `docs/designs/` + `docs/specs/`, confirm `status: current` OR `regression_lock: true`, confirm top iter-log score ≥ 90. Exit non-zero with reason list. Additional check: if ANY `docs/specs/*.md` exists with `status != draft` BEFORE all `docs/designs/*.md` reach `current` → fail ("specs cannot be authored until designs complete").
@@ -549,9 +551,9 @@ Triggers on PRs touching `api/**`, `internal/controller/**`, `docs/{designs,spec
 Verifies `open-gate` commit signed by an architect identity (GPG key in org); bats tests at `test/scripts/check-design-gate.bats` run in `lint.yaml`.
 
 ### Exit criteria
-- All 30 designs + 11 specs score ≥ 90.
+- All 32 designs + 11 specs score ≥ 90.
 - `docs/plans/README.md` frontmatter flips `gate_status: open`.
-- Architect-signed commit: `docs(architecture): open design gate — 30 designs + 11 specs ≥ 90/100`.
+- Architect-signed commit: `docs(architecture): open design gate — 32 designs + 11 specs ≥ 90/100`.
 - Required check green on `main`.
 
 ### Iteration log — iter 3 total **91/100** (SHIP)
@@ -595,7 +597,7 @@ Verifies `open-gate` commit signed by an architect identity (GPG key in org); ba
 8. Writing non-stub body to `internal/controller/workspace/workspace_controller.go` → design-gate hook + CI block commit.
 9. `grep -rn 'TODO(design-gate)' api/ internal/` → 26 markers.
 10. SIGTERM drain test on operator pod → clean exit within 30s.
-11. Architect walks 30 designs + 11 specs, scores each ≥ 90, commits gate-open → gate flips to `open`.
+11. Architect walks 32 designs + 11 specs, scores each ≥ 90, commits gate-open → gate flips to `open`.
 
 ---
 
@@ -603,7 +605,7 @@ Verifies `open-gate` commit signed by an architect identity (GPG key in org); ba
 
 | # | Category | Wt | Ratio | Score | Notes |
 |---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | 9 phases + hard gate + 13 kinds + 30 designs + 11 specs explicit. |
+| 1 | Scope clarity | 10 | 1.0 | 10 | 9 phases + hard gate + 13 kinds + 32 designs + 11 specs explicit. |
 | 2 | Architecture fit | 10 | 1.0 | 10 | 23 locked decisions; composition-first; upstream primitives preserved. |
 | 3 | Security posture | 15 | 1.0 | 15 | Zero-trust, three-table credential decomposition, SIGTERM drain, SSA fieldOwner. |
 | 4 | Automatability | 10 | 1.0 | 10 | Every step behind make/script; CI 11-workflow matrix. |

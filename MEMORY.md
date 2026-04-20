@@ -14,12 +14,13 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ### 2026-04-20 — initial scaffolding (P0–P8)
 
-- [Scaffolding plan + 23 decisions](docs/plans/scaffolding-plan.md) —
-  license Apache-2.0; API groups `*.operator.keese.ai`; Capsule direct
+- [Scaffolding plan + 25 decisions](docs/plans/scaffolding-plan.md) —
+  license Apache-2.0; API groups `*.operator.keese.ai`; Capsule opt-in
   (no Tenant CRD); GuardrailBinding composition (not Constitution +
   Policy + ToolAllowList); 13 kinds across 8 groups; Envoy AI Gateway +
   MCPRoute; Argo delegation; OpenTofu cloud; GoLand primary IDE;
-  SIGTERM drain; SSA fieldOwner.
+  SIGTERM drain; SSA fieldOwner; durable agent identity (D24) + GUPP
+  resume contract (D25) added 2026-04-20 after Gas Town review.
 - [Session handoff summary](docs/plans/scaffolding-summary.md) —
   state after P0–P8; next-phase instructions; resume commands after
   clone/move.
