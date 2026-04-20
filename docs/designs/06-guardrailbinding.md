@@ -40,24 +40,10 @@ create; VAP rejects removal on update.
 
 ## Default binding: read access for tenant-admins
 
-Tenant-admins must READ `keese.ai/default` to compute the merge lattice but must
-not write it. The operator installs on P7 bootstrap:
-
-```yaml
-# ClusterRole granting read-only access to the default binding
-kind: ClusterRole
-rules:
-  - apiGroups: [guardrail.operator.keese.ai]
-    resources: [guardrailbindings]
-    resourceNames: [default]
-    verbs: [get, list, watch]
-```
-
-A `ClusterRoleBinding` subjects this role to `system:serviceaccounts:<tenant-ns>`
-for every tenant namespace. The operator reconciles this grant whenever a `Tenant`
-CR is created or updated.
-
-RBAC matrix (full):
+Tenant-admins READ but do NOT write `keese.ai/default`. Operator auto-installs
+a `ClusterRole` on P7 bootstrap granting `get,list,watch` on
+`guardrailbindings/default` (resourceNames-scoped) and a `ClusterRoleBinding`
+to `system:serviceaccounts:<tenant-ns>` per `Tenant` CR.
 
 | Principal | Verb | Resource | Scope |
 |---|---|---|---|
@@ -67,9 +53,8 @@ RBAC matrix (full):
 | `keese-workspace-admin` | `get,list,watch` | `guardrailbindings` | tenant ns |
 | `keese-workspace-admin` | `*` | `guardrailbindings` | workspace ns |
 
-Failure mode: tenant-admin read of default binding fails → merge computation
-cannot proceed → Workspace enters `Degraded` + event reason
-`DefaultBindingReadForbidden`.
+Failure mode: read denied → merge cannot proceed → Workspace `Degraded` +
+event `DefaultBindingReadForbidden`.
 
 ## Merge lattice (strictest-wins)
 
@@ -120,23 +105,10 @@ reconcile loop starvation or leader-election churn.
 ## Recipe hooks: serviceRef (zero-trust)
 
 Per rule 05.4, no arbitrary URL egress. `recipeHooks[].webhookRef` (iter-1 URL
-form) is replaced by `serviceRef`:
-
-```yaml
-recipeHooks:
-  - event: beforeToolCall
-    serviceRef:
-      name: guardrail-webhook
-      namespace: keese-guardrail-hooks
-      port: 8443
-      path: /before-tool-call
-```
-
-VAP rejects any `recipeHooks[]` entry lacking `serviceRef`. The referenced
-Service must be in a namespace the keese operator has explicit `get` permission
-on (documented in the RBAC section above). For external webhook targets (e.g.,
-PagerDuty), tenants deploy an in-cluster Envoy proxy Service that routes through
-the same egress controls as agent pods.
+form) is replaced by `serviceRef: {name, namespace, port, path}` — see
+[06-ii-spec-schema.md](06-ii-spec-schema.md). VAP rejects any entry lacking
+`serviceRef`. External webhook targets (e.g. PagerDuty) require an in-cluster
+proxy Service routing through the same egress controls as agent pods.
 
 ## VAP rules (CEL, rule 04.12)
 
@@ -208,45 +180,13 @@ wraps each admission evaluation.
 
 ## Iteration log
 
-### Iteration 1 — 2026-04-19 (reconstructed; held at draft)
-
-| # | Category | Weight | Ratio | Score | Notes |
-|---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | Goal bounded |
-| 2 | Architecture fit | 10 | 1.0 | 10 | Lattice + role model aligned |
-| 3 | Security posture | 15 | 1.0 | 15 | Zero-trust hook egress noted but URL form still present |
-| 4 | Automatability | 10 | 0.8 | 8 | CEL matrix not enumerated; make target unnamed |
-| 5 | Verifiability | 15 | 0.8 | 12 | VAP weaken-blocking test not named; envtest absent |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Most paths covered |
-| 7 | Context efficiency | 10 | 1.0 | 10 | Split maintained |
-| 8 | Docs quality | 5 | 1.0 | 5 | Headers correct |
-| 9 | Observability | 5 | 1.0 | 5 | Metrics declared |
-| 10 | Operational readiness | 10 | 0.9 | 9 | StaleParentStatus runbook missing; rollback partial |
-| | **Total** | 100 | | **94** | |
-
-Verdict: REVISE. Held at draft pending 5 reviewer concerns.
-
-Top gaps: (1) CEL matrix + make target unnamed; (2) weaken-blocking envtest absent;
-(3) StaleParentStatus runbook missing.
-
-### Iteration 2 — 2026-04-20
-
-| # | Category | Weight | Ratio | Score | Notes |
-|---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | One-sentence goal; bounded inputs/outputs; exit criteria explicit |
-| 2 | Architecture fit | 10 | 1.0 | 10 | Lattice, role model, VAP-first all aligned with rules 04.12, 05.4 |
-| 3 | Security posture | 15 | 1.0 | 15 | serviceRef replaces URL; RBAC matrix explicit; zero-trust compliant |
-| 4 | Automatability | 10 | 0.9 | 9 | `make guardrail-dry-run` named; CEL unit matrix named; projector scaffolding deferred to controller-author |
-| 5 | Verifiability | 15 | 0.9 | 13.5 | merge_test, cel_test, suite_test, e2e named; kuttl test name pending test-engineer |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | TOCTOU path, missing policy, missing binding, Lease expiry all covered |
-| 7 | Context efficiency | 10 | 1.0 | 10 | ≤200 lines; schema in 06-ii; skill pointers in CLAUDE.md |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX + frontmatter; depends complete; links valid |
-| 9 | Observability | 5 | 1.0 | 5 | Metrics, traces, events all named |
-| 10 | Operational readiness | 10 | 0.9 | 9 | Runbook for StaleParentStatus added; rollback documented; projector scaffolding deferred |
-| | **Total** | 100 | | **96.5** | |
-
-Verdict: SHIP. Honest score 96 (rounded down from 96.5 to be conservative on
-Cat 4 partial: projector controller code unscaffolded — deferred to
-`controller-author` agent; Cat 5 partial: kuttl test paths unconfirmed).
-
-Status: current.
+- **Iter-1 2026-04-19** — score 94 REVISE; held at draft per 5 reviewer
+  concerns (URL form in hooks; missing CEL matrix + make target; weaken-blocking
+  envtest absent; missing StaleParentStatus runbook; default-binding RBAC vague).
+- **Iter-2 2026-04-20** — score 96 SHIP. Resolved all 5 concerns. Held at
+  draft (200-line cap exceeded — fixed in iter-2.1 by extracting samples to
+  06-iii).
+- **Iter-2.1 2026-04-20** — content refinement to comply with 200-line cap:
+  06-ii samples extracted to [06-iii-samples.md](06-iii-samples.md);
+  default-binding RBAC compressed; recipe-hook YAML referenced not inlined;
+  iter log collapsed. No architecture changes.
