@@ -14,7 +14,7 @@ depends:
   - 17-credential-broker.md
   - 24-tenant-crd.md
 related_skills: []
-status: current
+status: draft
 last_verified: 2026-04-20
 rollback: |
   Revert helmfile.lock pin of envoy-ai-gateway chart to the prior version;
