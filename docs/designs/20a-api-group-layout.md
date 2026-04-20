@@ -15,43 +15,47 @@ rollback: Revert to prior commit; no migration plan required at v1alpha1 because
 
 # 20a — API Group Layout: Groups, Kinds, Shared Types, Versioning
 
-**Decision:** 13 kinds across 8 sub-groups all under `operator.keese.ai`,
+**Decision:** 14 kinds across 9 sub-groups all under `operator.keese.ai`,
 all at `v1alpha1`. A shared-types package at
 `github.com/keese-ai/keese/api/core/v1alpha1` holds cross-group primitives.
 Promotion to `v1beta1` requires a rubric score ≥ 90, 90-day customer-production
-soak, and architect sign-off via a migration plan doc.
+soak, and architect sign-off via a migration plan doc. (D26, 2026-04-20: added
+`tenancy.operator.keese.ai/Tenant` — the one cluster-scoped kind. See
+`docs/designs/24-tenant-crd.md`.)
 
 ## Context
 
 Keese is a secure multi-tenant K8s operator orchestrating autonomous AI agent
-workflows on pluggable runtimes. Eight API groups under `*.operator.keese.ai`
-host 13 kinds, all at `v1alpha1`. Three concerns drive this design:
+workflows on pluggable runtimes. Nine API groups under `*.operator.keese.ai`
+host 14 kinds, all at `v1alpha1`. Three concerns drive this design:
 (1) group boundaries that map cleanly to controller ownership and RBAC,
 (2) a shared-types package that prevents duplication of conditions and status
 patterns while keeping cross-group imports unidirectional, and
 (3) a versioning policy that is conservative enough to avoid premature v1beta1
 promotion and the conversion webhook overhead that comes with it.
 
-## The 8 Groups and 13 Kinds
+## The 9 Groups and 14 Kinds
 
-| Group | Full API Group | Kinds | Go package path |
-|---|---|---|---|
-| workspace | `workspace.operator.keese.ai` | `Workspace`, `WorkspaceShare` | `api/workspace/v1alpha1` |
-| workflow | `workflow.operator.keese.ai` | `Workflow`, `WorkflowRun` | `api/workflow/v1alpha1` |
-| runtime | `runtime.operator.keese.ai` | `AgentRuntime`, `RuntimeExtension` | `api/runtime/v1alpha1` |
-| memory | `memory.operator.keese.ai` | `Memory`, `SharedMemory` | `api/memory/v1alpha1` |
-| recipe | `recipe.operator.keese.ai` | `Recipe`, `RecipeSource` | `api/recipe/v1alpha1` |
-| guardrail | `guardrail.operator.keese.ai` | `GuardrailBinding` | `api/guardrail/v1alpha1` |
-| observability | `observability.operator.keese.ai` | `TokenBudget` | `api/observability/v1alpha1` |
-| transport | `transport.operator.keese.ai` | `Transport` | `api/transport/v1alpha1` |
+| Group | Full API Group | Kinds | Go package path | Scope |
+|---|---|---|---|---|
+| tenancy | `tenancy.operator.keese.ai` | `Tenant` (D26) | `api/tenancy/v1alpha1` | cluster |
+| workspace | `workspace.operator.keese.ai` | `Workspace`, `WorkspaceShare` | `api/workspace/v1alpha1` | namespace |
+| workflow | `workflow.operator.keese.ai` | `Workflow`, `WorkflowRun` | `api/workflow/v1alpha1` | namespace |
+| runtime | `runtime.operator.keese.ai` | `AgentRuntime`, `RuntimeExtension` | `api/runtime/v1alpha1` | namespace |
+| memory | `memory.operator.keese.ai` | `Memory`, `SharedMemory` | `api/memory/v1alpha1` | namespace |
+| recipe | `recipe.operator.keese.ai` | `Recipe`, `RecipeSource` | `api/recipe/v1alpha1` | namespace |
+| guardrail | `guardrail.operator.keese.ai` | `GuardrailBinding` | `api/guardrail/v1alpha1` | namespace |
+| observability | `observability.operator.keese.ai` | `TokenBudget` | `api/observability/v1alpha1` | namespace |
+| transport | `transport.operator.keese.ai` | `Transport` | `api/transport/v1alpha1` | namespace |
 
-All 13 kinds are namespace-scoped. No cluster-scoped kinds at v1alpha1; if a
-cluster-scoped kind is needed later it requires an ADR in `docs/designs/`.
+The `Tenant` kind is the sole cluster-scoped kind (tenants span namespaces by
+definition). All other 13 kinds are namespace-scoped. Additional cluster-scoped
+kinds require an ADR in `docs/designs/`.
 
 ## Shared-Types Package Layout
 
 **Decision:** A shared package at `github.com/keese-ai/keese/api/core/v1alpha1`
-holds cross-group primitives. All eight group packages import it; it imports nothing
+holds cross-group primitives. All nine group packages import it; it imports nothing
 from the group packages (unidirectional).
 
 The package name `core` is intentional. It does not collide with `k8s.io/api/core/v1`
@@ -60,7 +64,7 @@ because the Go import path is fully qualified; callers use a distinct alias, e.g
 
 | Type | Rationale |
 |---|---|
-| `Condition` (re-export wrapping `metav1.Condition`) | Uniform condition type/reason/message vocabulary across all 13 kinds. |
+| `Condition` (re-export wrapping `metav1.Condition`) | Uniform condition type/reason/message vocabulary across all 14 kinds. |
 | `Phase` (string type + 5 consts: `PhasePending`, `PhaseProvisioning`, `PhaseReady`, `PhaseDegraded`, `PhaseTerminating`) | Shared phase vocabulary; kind-specific extensions declared as additional consts in the kind's own `_types.go`. |
 | `ResourceRef` (`{ Name, Namespace, Group, Kind string }`) | Cross-group references (e.g., `Workspace.spec.runtimeRef`, `GuardrailBinding.spec.workspaceRef`). |
 | `StatusBase` (`ObservedGeneration int64`, `Conditions []metav1.Condition`, `Phase Phase`) | Embedded in every kind's `*Status` struct — enforces rule 04.4 (`observedGeneration` on every status). |
@@ -104,7 +108,7 @@ core value. Hook is not implemented until the design gate opens.
 | Test name | Assertion |
 |---|---|
 | `TestCoreCondition_RoundTrip` | `core.Condition` survives serialize/deserialize with JSON and YAML without field loss. |
-| `TestCorePhase_EnumValidation` | For each of the 13 kinds, creates a CR with each core `Phase` value and asserts admission accepts; creates a CR with an invalid phase (e.g., `"Exploding"`) and asserts admission rejects. |
+| `TestCorePhase_EnumValidation` | For each of the 14 kinds, creates a CR with each core `Phase` value and asserts admission accepts; creates a CR with an invalid phase (e.g., `"Exploding"`) and asserts admission rejects. |
 | `TestCoreResourceRef_ValidateCrossGroup` | Asserts `core.ResourceRef` with `Group == ""` is rejected by the Workspace VAP; group must be specified for cross-group refs. |
 | `TestCoreStatusBase_ObservedGenerationMonotonic` | Asserts `StatusBase.ObservedGeneration` is never set to a value less than `metadata.generation` across any reconcile of any of the 13 controllers. |
 
@@ -123,7 +127,7 @@ gates are cleared:
 | **Architect sign-off** | An architect-signed commit adds `docs/plans/migration-<group>.md` scoring ≥ 90. |
 | **Conversion webhook** | A Hub-spoke conversion webhook is implemented and covered by envtest round-trip tests before the `v1beta1` CRD ships. |
 
-No group promotes before all 13 kinds are deployed at `v1alpha1` and the P8 design
+No group promotes before all 14 kinds are deployed at `v1alpha1` and the P8 design
 gate is open.
 
 At `v1alpha1` there are **no conversion webhooks** (rule 04.13). The only admission

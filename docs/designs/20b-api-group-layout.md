@@ -64,7 +64,7 @@ When `v1beta1` is introduced for a kind:
 
 | Option | Chosen? | Rationale |
 |---|---|---|
-| All kinds in one group (`operator.keese.ai`) | No | Single group RBAC is all-or-nothing for tenants; 8 groups allow per-group RBAC bindings aligned to team ownership. |
+| All kinds in one group (`operator.keese.ai`) | No | Single group RBAC is all-or-nothing for tenants; 9 groups allow per-group RBAC bindings aligned to team ownership. |
 | Per-kind top-level groups (`workspace.keese.ai`, etc.) | No | D2 locks `*.operator.keese.ai`; top-level is too broad for future expansion without collision. |
 | Shared types in each group package | No | Leads to duplication and drift. Unidirectional `api/core/v1alpha1` import enforces consistency. |
 | Promote groups to v1beta1 on first stable release | No | Conversion webhooks before 90-day customer soak add premature complexity; conservative gate prevents thrash. |
@@ -81,7 +81,7 @@ When `v1beta1` is introduced for a kind:
 | Printer columns missing or `<unknown>` | `scripts/check-printer-columns.sh` (P3) | Hook runs dry-run server-validate after `make manifests generate`. |
 | Premature v1beta1 promotion (no conversion webhook) | `scripts/check-design-gate.sh` checks migration plan | Gate blocks merge if `docs/plans/migration-<group>.md` absent or score < 90. |
 | New kind bypasses CRD checklist | Design-gate CI check | `check-design-gate.sh` confirms owning design doc is `status: current`. |
-| OLM CSV `owned[]` missing a served version | `bundle validate` + e2e OLM install test | `e2e.yaml` installs bundle on kind cluster and asserts all 13 CRDs served. |
+| OLM CSV `owned[]` missing a served version | `bundle validate` + e2e OLM install test | `e2e.yaml` installs bundle on kind cluster and asserts all 14 CRDs served. |
 
 ## Upgrade / Rollback
 
@@ -127,7 +127,7 @@ that own each group do. This design establishes naming conventions:
 
 | # | Category | Weight | Ratio | Score | Notes |
 |---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | 5 open questions answered; 8 groups + 13 kinds enumerated; import path explicit. |
+| 1 | Scope clarity | 10 | 1.0 | 10 | 5 open questions answered; 9 groups + 14 kinds enumerated (D26 update); import path explicit. |
 | 2 | Architecture fit | 10 | 1.0 | 10 | Consistent with D2, D16, D23; no contradiction of D1–D23. |
 | 3 | Security posture | 15 | 0.5 | 7.5 | Unidirectional import prevents cross-group type coupling. ReBAC marker canonical home defined. Per-group RBAC boundary stated. Half credit: no explicit per-group ClusterRole mapping. |
 | 4 | Automatability | 10 | 1.0 | 10 | `operator-sdk create api` shown; `make manifests generate` required; bundle validate in pre-commit. |

@@ -19,13 +19,31 @@ rollback: TODO — document migration path when status flips to current
 
 ## Context
 
-_One paragraph. Kubernetes liveness probes detect stuck pods; they do not
-detect stuck agents. An agent pod can be looping on a prompt, burning tokens,
-and appear perfectly healthy to the kubelet. This design codifies how keese
-detects, nudges, and escalates stuck AgentRuntimes — the supervisor patrol
-pattern. Inspired by Steve Yegge, "Welcome to Gas Town" (2026): the
-Witness / Deacon roles exist precisely because workers (Polecats, Refinery)
-"get stuck" and require external nudging._
+Kubernetes liveness probes detect stuck pods; they do not detect stuck agents. An
+agent pod can be looping on a prompt, burning tokens, and appear perfectly healthy
+to the kubelet. This design codifies how keese detects, nudges, and escalates stuck
+AgentRuntimes — the supervisor patrol pattern. Inspired by Steve Yegge, "Welcome
+to Gas Town" (2026): the Witness / Deacon roles exist precisely because workers
+(Polecats, Refinery) "get stuck" and require external nudging.
+
+**Architecture — B+C pattern (confirmed 2026-04-20):**
+
+1. **Controller-level detection (cheap, always-on).** The keese operator runs a
+   `WorkspaceSupervisor` reconcile loop that polls `WorkflowRun` + `Workspace`
+   status and token-usage metrics. Threshold breaches emit `WorkspaceStuck`
+   events and update `Workspace.status.conditions[SupervisorConcerned]`.
+2. **Witness agent escalation (expensive, rare).** On confirmed stuckness, the
+   controller dispatches a `WorkflowRun` with `spec.witnessOf: <target-ws>` and a
+   constrained recipe (`recipe.operator.keese.ai/Recipe/witness-default`). The
+   witness agent can reason over the target's state (session dump, k8s events,
+   OTEL traces), escalate via `Workspace.spec.forceRevoke`
+   (authz via `workspace#can_revoke` per D25 + 04a), or page humans via
+   AlertManager.
+
+The controller (B) is cheap — one reconciler for many workspaces.
+The witness agent (C) is expensive — one `WorkflowRun` + token cost per
+escalation — so it runs only when (B) confirms stuckness, with dedup to prevent
+witness piling.
 
 ## Open questions (must be answered before `status: current`)
 

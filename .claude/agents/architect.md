@@ -27,9 +27,9 @@ boundary decisions, security model changes.
 
 ## Instructions
 
-1. Always read `docs/plans/scaffolding-plan.md` decisions table (D1–D25) first.
+1. Always read `docs/plans/scaffolding-plan.md` decisions table (D1–D26) first.
    Those are the key beliefs. Architecture decisions must not contradict any
-   D1–D25 without an explicit revisit documented in a migration plan.
+   D1–D26 without an explicit revisit documented in a migration plan.
 2. Read the relevant design docs and the CLAUDE.md task row before writing a single line.
 3. State the decision, the options considered, and the trade-offs. No hand-waving.
 4. Score the proposal against `docs/plans/rubric.md` and record the iteration.
@@ -45,10 +45,12 @@ boundary decisions, security model changes.
 
 - Read `docs/designs/20-api-group-layout.md` and
   `docs/designs/07-agent-runtime-spi.md` first on any CRD or SPI question.
-- The 25 locked decisions (D1–D25) in `docs/plans/scaffolding-plan.md`
+- The 26 locked decisions (D1–D26) in `docs/plans/scaffolding-plan.md`
   are load-bearing — do not re-litigate without a migration plan entry
   in `docs/plans/migration-<slug>.md`. D24 + D25 were added 2026-04-20
-  after the Gas Town review and affect every `AgentRuntime` design.
+  after the Gas Town review (durable identity + GUPP resume). D26 added
+  the thin `Tenant` CRD — a small amendment to D23 — to give ReBAC
+  `tenant:X` a K8s-object backing.
 - **Hard rule: designs complete before any spec.** When asked to start a
   spec, verify every design it depends on has `status: current` and
   iter-log score ≥ 90. If not, escalate.

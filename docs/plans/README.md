@@ -14,7 +14,7 @@ last_verified: 2026-04-19
 # plans/ — HOW (phased)
 
 > **Gate status: CLOSED.** No `*_types.go` body, no `*_controller.go` reconcile
-> logic, and no spec promotion may land until all 32 design docs AND all 11 spec
+> logic, and no spec promotion may land until all 33 design docs AND all 11 spec
 > docs score ≥ 90/100 AND an architect-signed commit flips `gate_status: open`.
 > See [../designs/README.md](../designs/README.md) and [rubric.md](rubric.md).
 
@@ -36,7 +36,7 @@ last_verified: 2026-04-19
 
 - **Group A (P0–P3):** sequential foundation; must all ship before Group B.
 - **Group B:** P4 (docs) + P5 (CI/CD) can run in parallel after P3 ships.
-- **Group C:** P6 (scaffold) starts after P4 design gate passes (all 32 designs current).
+- **Group C:** P6 (scaffold) starts after P4 design gate passes (all 33 designs current).
 - **Group D:** P7 (infra) after P6; P8 (gate freeze) after P4 + P6.
 
 ## Gate-check reference
@@ -61,5 +61,5 @@ See [rubric.md](rubric.md).
 
 ## Plan file
 
-Full plan with decisions D1–D25, kind list, and phase details:
+Full plan with decisions D1–D26, kind list, and phase details:
 [/Users/marshallmccain/.claude/plans/you-are-an-expert-iridescent-alpaca.md](/Users/marshallmccain/.claude/plans/you-are-an-expert-iridescent-alpaca.md)
