@@ -1,0 +1,9 @@
+apiVersion: workspace.operator.keese.ai/v1alpha1
+kind: WorkspaceShare
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+  name: workspaceshare-sample
+spec:
+  # TODO(user): Add fields here

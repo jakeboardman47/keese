@@ -1,0 +1,125 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: keese.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: AgentRuntime is the Schema for the agentruntimes API.
+      displayName: Agent Runtime
+      kind: AgentRuntime
+      name: agentruntimes.runtime.operator.keese.ai
+      version: v1alpha1
+    - description: GuardrailBinding is the Schema for the guardrailbindings API.
+      displayName: Guardrail Binding
+      kind: GuardrailBinding
+      name: guardrailbindings.guardrail.operator.keese.ai
+      version: v1alpha1
+    - description: Memory is the Schema for the memories API.
+      displayName: Memory
+      kind: Memory
+      name: memories.memory.operator.keese.ai
+      version: v1alpha1
+    - description: Recipe is the Schema for the recipes API.
+      displayName: Recipe
+      kind: Recipe
+      name: recipes.recipe.operator.keese.ai
+      version: v1alpha1
+    - description: RecipeSource is the Schema for the recipesources API.
+      displayName: Recipe Source
+      kind: RecipeSource
+      name: recipesources.recipe.operator.keese.ai
+      version: v1alpha1
+    - description: RuntimeExtension is the Schema for the runtimeextensions API.
+      displayName: Runtime Extension
+      kind: RuntimeExtension
+      name: runtimeextensions.runtime.operator.keese.ai
+      version: v1alpha1
+    - description: SharedMemory is the Schema for the sharedmemories API.
+      displayName: Shared Memory
+      kind: SharedMemory
+      name: sharedmemories.memory.operator.keese.ai
+      version: v1alpha1
+    - description: TokenBudget is the Schema for the tokenbudgets API.
+      displayName: Token Budget
+      kind: TokenBudget
+      name: tokenbudgets.observability.operator.keese.ai
+      version: v1alpha1
+    - description: Transport is the Schema for the transports API.
+      displayName: Transport
+      kind: Transport
+      name: transports.transport.operator.keese.ai
+      version: v1alpha1
+    - description: WorkflowRun is the Schema for the workflowruns API.
+      displayName: Workflow Run
+      kind: WorkflowRun
+      name: workflowruns.workflow.operator.keese.ai
+      version: v1alpha1
+    - description: Workflow is the Schema for the workflows API.
+      displayName: Workflow
+      kind: Workflow
+      name: workflows.workflow.operator.keese.ai
+      version: v1alpha1
+    - description: Workspace is the Schema for the workspaces API.
+      displayName: Workspace
+      kind: Workspace
+      name: workspaces.workspace.operator.keese.ai
+      version: v1alpha1
+    - description: WorkspaceShare is the Schema for the workspaceshares API.
+      displayName: Workspace Share
+      kind: WorkspaceShare
+      name: workspaceshares.workspace.operator.keese.ai
+      version: v1alpha1
+  description: |
+    keese is a secure multi-tenant, multi-workspace Kubernetes operator
+    orchestrating autonomous AI agent workflows on pluggable agent runtimes
+    (goose first). Namespaces are the tenant boundary. Identity is a
+    projected Kubernetes ServiceAccount token; authorization is ReBAC
+    (OpenFGA); egress flows through Envoy AI Gateway, which terminates
+    the agent's SA token and injects the correct upstream credential per
+    target. See https://github.com/keese-ai/keese for design docs.
+
+    DESIGN GATE: pre-alpha. Controller logic is stub-only until all 30
+    designs + 11 specs score >= 90/100 on docs/plans/rubric.md.
+  displayName: keese
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - keese
+  - agents
+  - ai
+  - multi-tenant
+  - goose
+  - agentic
+  - reBAC
+  - openfga
+  links:
+  - name: Project URL
+    url: https://keese.ai
+  - name: Source
+    url: https://github.com/keese-ai/keese
+  maintainers:
+  - email: security@keese.ai
+    name: keese-ai maintainers
+  maturity: alpha
+  minKubeVersion: 1.30.0
+  provider:
+    name: keese-ai
+    url: https://keese.ai
+  version: 0.0.0

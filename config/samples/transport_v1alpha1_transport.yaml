@@ -1,0 +1,9 @@
+apiVersion: transport.operator.keese.ai/v1alpha1
+kind: Transport
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+  name: transport-sample
+spec:
+  # TODO(user): Add fields here

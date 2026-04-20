@@ -1,0 +1,28 @@
+# This kustomization.yaml is not intended to be run by itself,
+# since it depends on service name and namespace that are out of this kustomize package.
+# It should be run by config/default
+resources:
+- bases/workspace.operator.keese.ai_workspaces.yaml
+- bases/workspace.operator.keese.ai_workspaceshares.yaml
+- bases/workflow.operator.keese.ai_workflows.yaml
+- bases/workflow.operator.keese.ai_workflowruns.yaml
+- bases/runtime.operator.keese.ai_agentruntimes.yaml
+- bases/runtime.operator.keese.ai_runtimeextensions.yaml
+- bases/memory.operator.keese.ai_memories.yaml
+- bases/memory.operator.keese.ai_sharedmemories.yaml
+- bases/recipe.operator.keese.ai_recipes.yaml
+- bases/recipe.operator.keese.ai_recipesources.yaml
+- bases/guardrail.operator.keese.ai_guardrailbindings.yaml
+- bases/observability.operator.keese.ai_tokenbudgets.yaml
+- bases/transport.operator.keese.ai_transports.yaml
+# +kubebuilder:scaffold:crdkustomizeresource
+
+patches:
+# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
+# patches here are for enabling the conversion webhook for each CRD
+# +kubebuilder:scaffold:crdkustomizewebhookpatch
+
+# [WEBHOOK] To enable webhook, uncomment the following section
+# the following config is for teaching kustomize how to do kustomization for CRDs.
+#configurations:
+#- kustomizeconfig.yaml

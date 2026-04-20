@@ -1,0 +1,52 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: transports.transport.operator.keese.ai
+spec:
+  group: transport.operator.keese.ai
+  names:
+    kind: Transport
+    listKind: TransportList
+    plural: transports
+    singular: transport
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Transport is the Schema for the transports API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              TransportSpec is intentionally empty at v1alpha1 until the design
+              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
+              TransportSpec defines the desired state of Transport.
+            type: object
+          status:
+            description: TransportStatus defines the observed state of Transport.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

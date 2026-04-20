@@ -1,0 +1,229 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - guardrail.operator.keese.ai
+  resources:
+  - guardrailbindings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - guardrail.operator.keese.ai
+  resources:
+  - guardrailbindings/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - guardrail.operator.keese.ai
+  resources:
+  - guardrailbindings/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - memory.operator.keese.ai
+  resources:
+  - memories
+  - sharedmemories
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - memory.operator.keese.ai
+  resources:
+  - memories/finalizers
+  - sharedmemories/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - memory.operator.keese.ai
+  resources:
+  - memories/status
+  - sharedmemories/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - observability.operator.keese.ai
+  resources:
+  - tokenbudgets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - observability.operator.keese.ai
+  resources:
+  - tokenbudgets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - observability.operator.keese.ai
+  resources:
+  - tokenbudgets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - recipe.operator.keese.ai
+  resources:
+  - recipes
+  - recipesources
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - recipe.operator.keese.ai
+  resources:
+  - recipes/finalizers
+  - recipesources/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - recipe.operator.keese.ai
+  resources:
+  - recipes/status
+  - recipesources/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - runtime.operator.keese.ai
+  resources:
+  - agentruntimes
+  - runtimeextensions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - runtime.operator.keese.ai
+  resources:
+  - agentruntimes/finalizers
+  - runtimeextensions/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - runtime.operator.keese.ai
+  resources:
+  - agentruntimes/status
+  - runtimeextensions/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - transport.operator.keese.ai
+  resources:
+  - transports
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - transport.operator.keese.ai
+  resources:
+  - transports/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - transport.operator.keese.ai
+  resources:
+  - transports/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - workflow.operator.keese.ai
+  resources:
+  - workflowruns
+  - workflows
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - workflow.operator.keese.ai
+  resources:
+  - workflowruns/finalizers
+  - workflows/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - workflow.operator.keese.ai
+  resources:
+  - workflowruns/status
+  - workflows/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - workspace.operator.keese.ai
+  resources:
+  - workspaces
+  - workspaceshares
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - workspace.operator.keese.ai
+  resources:
+  - workspaces/finalizers
+  - workspaceshares/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - workspace.operator.keese.ai
+  resources:
+  - workspaces/status
+  - workspaceshares/status
+  verbs:
+  - get
+  - patch
+  - update

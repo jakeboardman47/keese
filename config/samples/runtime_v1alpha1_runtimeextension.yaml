@@ -1,0 +1,9 @@
+apiVersion: runtime.operator.keese.ai/v1alpha1
+kind: RuntimeExtension
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+  name: runtimeextension-sample
+spec:
+  # TODO(user): Add fields here
