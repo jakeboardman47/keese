@@ -8,20 +8,20 @@ depends:
   - 01-tenancy-capsule.md
   - 04a-openfga-authz-model.md
   - 04b-projected-sa-identity.md
+  - 04b-ii-oidc-trust.md
   - 04c-token-revocation.md
   - 10b-token-accounting.md
   - 14a-olm-channels-upgrades.md
   - 17-credential-broker.md
   - 24-tenant-crd.md
 related_skills: []
-status: draft
+status: current
 last_verified: 2026-04-20
 rollback: |
   Revert helmfile.lock pin of envoy-ai-gateway chart to the prior version;
-  run `make bootstrap-infra` to redeploy; ext_authz sidecar rebuilds via
-  Deployment rollout. If CRD schema changed, execute the inverse of the
-  upgrade steps in "Upgrade / rollback" below and document the incident in
-  docs/plans/migration-envoy-ai-gw-<version>.md.
+  run `make bootstrap-infra` to redeploy; keese-ext-authz Deployment rebuilds via
+  rolling rollout. If CRD schema changed, execute the inverse of the upgrade steps
+  and document the incident in docs/plans/migration-envoy-ai-gw-<version>.md.
 ---
 
 # 05a — Envoy AI Gateway Topology
@@ -30,171 +30,171 @@ rollback: |
 
 Envoy AI Gateway v0.5.x (Envoy Gateway v1.5+) is the sole egress path for agent pods.
 It provides `MCPRoute`, `AIGatewayRoute`, `BackendSecurityPolicy`, and token-cost rate
-limiting. This design covers deployment topology and how the gateway is wired to OpenFGA
-ext_authz (04a), projected SA identity (04b), and token revocation (04c). 05b owns
+limiting. This design covers: deployment topology, ext_authz Deployment architecture,
+JWT tenant extraction, NATS KV budget signaling, and witness audience. 05b owns
 credential injection; 05c owns MCP policy enforcement.
-
+Iteration log: [05a-ii-iter-log.md](05a-ii-iter-log.md).
 ## Deployment topology
 
 ### Default: per-cluster shared gateway
 
 One Envoy AI Gateway Deployment per cluster. All tenants share it. `BackendSecurityPolicy`
-resources are tenant-scoped; `ReferenceGrant` limits cross-namespace credential
-references so no tenant can claim another's `BackendSecurityPolicy`.
+resources are tenant-scoped; `ReferenceGrant` limits cross-namespace credential references.
 
-**Resource budget (per gateway pod):** 2 vCPU / 4 Gi (request); 4 vCPU / 8 Gi (limit).
+**Resource budget (per gateway pod):** 2 vCPU / 4 Gi request; 4 vCPU / 8 Gi limit.
 HPA on `envoy_upstream_rq_total`. Minimum 2 replicas for HA.
 
 ### Opt-in: per-tenant dedicated gateway
 
-When `Tenant.spec.dedicatedGateway: true` (D26/24), the Tenant controller creates a
-dedicated Envoy AI Gateway Deployment scoped to that tenant's namespaces. Rationale:
-hard isolation for PII/PHI workloads, per-tenant rate limits, per-tenant metrics.
-Each dedicated gateway carries the same ext_authz sidecar and NATS KV watch.
+When `Tenant.spec.dedicatedGateway: true` (D26/24), the Tenant controller provisions a
+dedicated Envoy AI Gateway Deployment in the tenant namespace. Same chart values, separate
+HPA, separate failure domain. Rationale: hard isolation for PII/PHI, per-tenant rate limits,
+per-tenant metrics. Operator auto-provisions when `dedicatedGateway` flips to `true` and
+`status.phase` is `Pending` or `Provisioning`.
 
-**VAP guard:** Toggling `dedicatedGateway` while live `Workspace` objects exist is
-rejected (`CannotToggleDedicatedGatewayWhileLive`). Operators must drain Workspaces
-first. **Assumption for 24:** `dedicatedGateway bool` flagged for `24-tenant-crd.md`.
+## ext_authz — Deployment architecture
 
-## CRD pinning and upgrade
+### Why not a sidecar
 
-Envoy AI Gateway ships `aigateway.envoyproxy.io/v1alpha1` CRDs alongside its Helm
-chart. The keese CSV pins these in `spec.customresourcedefinitions.required[]` via
-chart digest in `helmfile.yaml` (`crds.install=true, crds.keep=true`). OLM dep
-resolution documented in `14b-olm-dependencies.md` (stub; flagged open dependency).
+Iter-1 specified ext_authz as a container sidecar per Envoy pod (127.0.0.1:9191). Reviewer
+rejected on scale grounds: 300+ containers at 100 dedicated tenants; N×M log streams;
+upgrade coupling. Latency delta vs sidecar: +1–3 ms per authz decision. The 04a consistency
+tiers (≤15/25/50 ms p99) absorb this budget. Fail-closed semantics are identical.
 
-**Upgrade path (v0.5.x → v0.6.x):** CRDs are additive at v1alpha1; no conversion
-webhook required. Steps: bump digest in helmfile.lock; `make bootstrap-infra`; verify
-`AIGatewayRoute` and `BackendSecurityPolicy` via dry-run; rolling restart; smoke test.
-Document in `migration-envoy-ai-gw-<ver>.md`.
+### Shared mode (default)
 
-## ext_authz protocol and headers
+One `keese-ext-authz` Deployment in `keese-system`, 3 replicas, PDB `minAvailable: 2`,
+HPA on CPU target 60%. Service: `keese-ext-authz.keese-system.svc.cluster.local:9191`
+(ClusterIP). All shared-gateway Envoy pods reference this Service via `envoy_grpc` cluster
+`keese_ext_authz_v1`. Image: `ghcr.io/keese-ai/keese-ext-authz:<semver>` — keese-owned
+adapter built from `cmd/ext-authz/`. Dependencies: `github.com/openfga/go-sdk`,
+`github.com/nats-io/nats.go`, `go.opentelemetry.io/otel` — all pinned in `go.mod`.
+Build: `Dockerfile.ext-authz`; signed via cosign keyless OIDC through P5 `image.yaml`.
+Failure domain: shared-mode failure = cluster-wide egress blocked. HA (PDB + 3 replicas)
+mitigates; rule 05 fail-closed is the correct behavior.
 
-### Cluster configuration
+### Dedicated mode
 
-Ext_authz is deployed as a sidecar per gateway pod (not a standalone service) to
-eliminate an inter-pod network hop on the critical authz path. Envoy xDS cluster name:
-`keese_ext_authz_v1`. Socket: `127.0.0.1:9191` gRPC, plaintext (in-pod; mTLS
-unnecessary). `failure_mode_allow: false` — fail-closed on sidecar unreachable
-(matches `dev/bootstrap/values/envoy-ai-gateway.yaml`).
+Per-tenant `keese-ext-authz-<tenant>` Deployment in the tenant namespace, 2 replicas
+minimum. Same image, separate Service, separate NATS KV watch, separate PDB.
+Failure domain: per-tenant blast radius only.
 
-### Request headers read by the sidecar
+## JWT Authn filter — tenant extraction
 
-| Header | Source | Purpose |
-|---|---|---|
-| `authorization: Bearer <token>` | Agent pod | Projected SA token; audience `keese-egress-<tenant>` |
-| `x-keese-tenant` | Envoy (extracted from `AIGatewayRoute.spec.tenantRef`) | Tenant name for OpenFGA store routing |
-| `x-keese-workspace` | Envoy (extracted from HTTPRoute match label) | Workspace name for tuple check |
+Envoy AI Gateway v0.5.x has no `AIGatewayRoute.spec.tenantRef` field (verified against
+`aigateway.envoyproxy.io` CRD spec). Tenant identity is extracted from the agent's projected
+SA token `aud` claim via Envoy's native JWT Authn filter, projected to dynamic metadata
+and header `x-keese-tenant`. Zero keese-side Envoy build required.
 
-### ext_authz decision flow
+```yaml
+http_filters:
+  - name: envoy.filters.http.jwt_authn
+    config:
+      providers:
+        keese_sa:
+          issuer: "https://kubernetes.default.svc.cluster.local"
+          audiences: ["keese-egress-*"]
+          payload_in_metadata: "keese.sa_token"
+  - name: envoy.filters.http.ext_authz
+    config:
+      grpc_service: { envoy_grpc: { cluster_name: keese_ext_authz_v1 } }
+      failure_mode_allow: false
+      metadata_context_namespaces: ["keese.sa_token"]
+  - name: envoy.filters.http.router
+```
 
-1. Validate SA token via JWKS (5-min cache; fail-closed on miss).
-2. Derive subject `user:ksa-<workspace-uid>@keese-egress-<tenant>` (04b).
-3. Check NATS KV `keese-revocation-version/workspace/<uid>` (04c); NATS-degraded: skip cache, call OpenFGA directly.
-4. `Check(tool:<name>#can_call@<subject>)` at `HIGHER_CONSISTENCY` (≤ 50 ms, 04a).
-5. Return 200 (allow) or 403 (deny).
+Ext_authz reads dynamic metadata `keese.sa_token.aud` → parses `keese-egress-<tenant>`
+→ stamps header `x-keese-tenant` for downstream `BackendSecurityPolicy` selection (05b).
 
-### Response headers propagated by Envoy
+## JWKS cache fail-open window
 
-| Header | Value | Consumer |
-|---|---|---|
-| `x-keese-authz-decision` | `allow` \| `deny` | Audit log, OTEL span |
-| `x-keese-model-id` | OpenFGA model ID from sidecar ConfigMap | OTEL collector (labels audit event with `model_id`) |
-| `x-keese-deny-reason` | `authz-denied` \| `authz-timeout` \| `token-revoked` | Agent 403 body; alert filtering |
-| `x-keese-tenant` | Tenant name (forwarded) | Backend selection in BSP (05b) |
+Default: 300 s. Floor: 30 s (below this, kube-apiserver load dominates). Ceiling: 600 s.
+Configurable via `Tenant.spec.jwksCacheFailOpenSeconds` — **flagged residual: 24 iter-2
+must carry this field**. For `dedicatedGateway: true` tenants, the default drops to 60 s
+automatically.
+
+## TokenBudget 429 signaling via NATS KV
+
+`TokenBudget` controller (D10b) writes budget-exceeded state to NATS JetStream KV bucket
+`keese-budget-exceeded` under keys `tenant/<name>` or `workspace/<uid>`.
+`keese-ext-authz` Deployment watches the same NATS KV bucket — reusing the infrastructure
+already required for 04c revocation (same NATS server, same Go client). On match,
+ext_authz sets response header `x-keese-budget-exceeded: true`. Envoy's `local_reply_config`
+matches on that header → returns HTTP 429 with `Retry-After: <seconds-to-budget-reset>`.
+Metric: `keese_extauthz_budget_429_total{tenant, workspace, budget_key}`.
+This is the definitive answer; 10b iter-1 inherits.
+
+## Witness gateway audience
+
+Witness agents (design 23) carry a separate SA token audience `keese-egress-supervisor-<tenant>`.
+Separate IAM trust policy per cloud: witness can invoke diagnostic tools but cannot
+impersonate workspace upstream-model calls. Cross-ref: 23 iter-1 must honor this audience;
+04b iter-2 may add a supervisor SA projection row.
+
+## ext_authz decision flow
+
+1. JWT Authn filter validates SA token via JWKS; projects `aud` to dynamic metadata.
+2. Ext_authz reads `keese.sa_token.aud` → stamps `x-keese-tenant`.
+3. Derives subject `user:ksa-<workspace-uid>@keese-egress-<tenant>` (04b).
+4. Checks NATS KV `keese-revocation-version/workspace/<uid>` (04c); NATS-degraded: skip cache.
+5. Checks NATS KV `keese-budget-exceeded/workspace/<uid>` → sets `x-keese-budget-exceeded`.
+6. `Check(tool:<name>#can_call@<subject>)` at `HIGHER_CONSISTENCY` (≤ 50 ms, 04a).
+7. Returns 200 (allow) or 403 (deny); 429 via Envoy `local_reply_config` on budget flag.
+
+## VAP gate for `dedicatedGateway` toggle
+
+CEL: toggle allowed only when `status.phase in ['Pending', 'Terminating']` — blocks while
+`Ready`, `Degraded`, or `Provisioning`. Drain procedure: set all tenant Workspaces to
+`spec.suspended: true`; wait for `status.phase → Pending`; toggle `dedicatedGateway`;
+resume workspaces. Runbook: `docs/plans/runbook-dedicated-gateway-toggle.md` — **flagged
+residual gap**.
 
 ## Rate limiting authority
 
-Two independent layers; both fail-closed on exhaustion. They do not share state.
+| Layer | Mechanism | Window | On exhaustion |
+|---|---|---|---|
+| Short-window | Envoy `BackendTrafficPolicy` token-cost filter | Per-sec / per-min | HTTP 429; `x-keese-limit-source: gateway-token-rate` |
+| Long-window | `TokenBudget` CR (D10b) via NATS KV | Per-day / per-month | HTTP 429; `x-keese-limit-source: token-budget` |
 
-| Layer | Mechanism | Window | Authority | On exhaustion |
-|---|---|---|---|---|
-| Short-window | Envoy `BackendTrafficPolicy` token-cost filter | Per-second / per-minute | Protects against runaway agents | HTTP 429; `x-keese-limit-source: gateway-token-rate` |
-| Long-window | `TokenBudget` CR (10b stub) | Per-day / per-month | Protects against cost overruns | HTTP 429; `x-keese-limit-source: token-budget` |
+## CRD pinning and upgrade
 
-Agent receives `x-keese-limit-source` to disambiguate layers. Unified Redis limiter
-rejected (iter-1: ops cost, failure coupling; deferred to 10b). **Assumption for 10b:**
-`TokenBudget` reconciler watches `credential.can_use` accounting events from 04a.
+Keese CSV pins `aigateway.envoyproxy.io/v1alpha1` CRDs via digest in `helmfile.yaml`
+(`crds.install=true, crds.keep=true`). **14b gap:** CSV pinning manual until 14b `current`.
 
 ## Observability
 
-OTEL spans (sidecar → collector): `gateway.authz` (`tenant`, `workspace`, `decision`,
-`latency_ms`, `model_id`); `gateway.backend.select` (`route`, `backend`, `tenant`);
-`gateway.credential.inject` (`tenant`, `upstream`, `cache_hit`);
-`gateway.upstream.request` (`model`, `tenant`, `status_code`, `tokens_in`, `tokens_out`).
+OTEL spans: `gateway.authz` (`tenant`, `workspace`, `decision`, `latency_ms`, `model_id`);
+`gateway.backend.select` (`route`, `backend`, `tenant`); `gateway.upstream.request`
+(`model`, `tenant`, `status_code`, `tokens_in`, `tokens_out`).
 
-Prometheus (ServiceMonitor): `envoy_ai_gateway_requests_total{route,tenant,decision}`,
-`envoy_ai_gateway_request_duration_seconds{route,tenant}`,
-`envoy_ai_gateway_token_cost_total{model,tenant}`,
-`envoy_ai_gateway_authz_latency_seconds{check_type}` (feeds 04a p99 budget).
-
-Collector fans out per 10a: traces → APM; metrics → Prometheus; logs → Loki.
-OpenFGA audit labeled with `model_id` from `x-keese-model-id` header.
-
-## Trade-offs
-
-| Option | Chosen | Rationale |
-|---|---|---|
-| Per-cluster shared gateway | Default | Operationally simpler; BSP + ReferenceGrant sufficient isolation |
-| Per-tenant dedicated gateway | Opt-in on `dedicatedGateway: true` | Hard isolation for PII/PHI; per-tenant rate limits + metrics |
-| ext_authz as sidecar | Yes | Eliminates inter-pod hop; in-pod plaintext safe |
-| Unified Redis rate limiter | No | Extra ops; failure coupling; deferred to 10b |
+Prometheus: `envoy_ai_gateway_requests_total{route,tenant,decision}`,
+`envoy_ai_gateway_token_cost_total{model,tenant}`, `keese_extauthz_budget_429_total{tenant,workspace,budget_key}`,
+`keese_extauthz_degraded_seconds_total`.
 
 ## Failure modes
 
 | Failure | Detection | Mitigation |
 |---|---|---|
-| ext_authz sidecar crash | Gateway 503; liveness probe | Pod restarts; NATS KV resubscribes on boot |
-| JWKS endpoint unreachable | Gateway 401 after cache miss | 5-min cache window; then fail-closed; `JWKSFetchFailed` event |
-| OpenFGA unreachable | ext_authz 503 → Envoy 403 | Deny all; `AuthzFullyDegraded` alert per 04c |
-| NATS KV watch lost | Degraded mode (04c) | Skip cache; call OpenFGA directly; `AuthzKVWatchDegraded` event |
-| `BackendTrafficPolicy` exhausted | HTTP 429 | `x-keese-limit-source: gateway-token-rate`; agent backs off |
-| `TokenBudget` exhausted | HTTP 429 (from 10b reconciler signal) | `x-keese-limit-source: token-budget`; workspace `Degraded` |
-| Gateway pod restart mid-request | Envoy drain (preStop sleep 30s + `/healthcheck/fail`) | HPA keeps ≥ 2 replicas; LB routes around draining pod |
-| Dedicated gateway toggle on live tenant | VAP deny | `CannotToggleDedicatedGatewayWhileLive`; operator drains first |
-
-## Upgrade / rollback
-
-**Rollback:** restore prior digest in `helmfile.lock`; `make bootstrap-infra`
-(`crds.keep: true` preserves objects); verify via `kubectl rollout status`; re-run
-`scripts/dev/gateway-smoke-test.sh`; document in `migration-envoy-ai-gw-<ver>.md`.
-
-**14b gap:** CSV CRD pinning entry is manual until `14b-olm-dependencies.md` is
-`current`. **23 assumption:** witness agents use the shared/dedicated gateway with the
-same SA token shape; no separate egress path — flagged for `23-agent-supervision.md`.
+| keese-ext-authz pod crash | Gateway 503; PDB | Pod restarts; NATS KV resubscribes on boot |
+| JWKS endpoint unreachable | 401 after cache miss | Fail-open window (30–600 s); then fail-closed |
+| OpenFGA unreachable | ext_authz 503 → 403 | Deny all; `AuthzFullyDegraded` alert (04c) |
+| NATS KV watch lost | Degraded mode (04c) | Skip cache; direct OpenFGA call |
+| `BackendTrafficPolicy` exhausted | HTTP 429 | `x-keese-limit-source: gateway-token-rate` |
+| `TokenBudget` exhausted | NATS KV → 429 | `x-keese-limit-source: token-budget` |
+| Gateway pod restart | Envoy drain (preStop 30 s) | HPA ≥ 2 replicas; LB routes around draining pod |
+| Shared ext_authz down | Cluster-wide egress blocked | PDB + HPA; alert fires; HA mitigates |
+| `dedicatedGateway` toggle on Ready | VAP deny | Drain procedure; runbook |
 
 ## Refs
 
 - [04a](04a-openfga-authz-model.md) — Check semantics, latency tiers, model_id
-- [04b](04b-projected-sa-identity.md) — SA token format, subject string, TTL
-- [04c](04c-token-revocation.md) — NATS KV watch, version-tag scheme, degraded mode
+- [04b](04b-projected-sa-identity.md) · [04b-ii](04b-ii-oidc-trust.md) — SA token, subject, OIDC trust
+- [04c](04c-token-revocation.md) — NATS KV watch, version-tag, NATS-degraded mode
 - [05b](05b-credential-injection-patterns.md) · [05c](05c-mcp-policy-enforcement.md) — downstream stubs
-- [10b](10b-token-accounting.md) — TokenBudget long-window authority (stub)
+- [05a-ii-iter-log.md](05a-ii-iter-log.md) — iteration log (split for line ceiling)
+- [10b](10b-token-accounting.md) — TokenBudget NATS KV signaling (inherits this decision)
 - [14a](14a-olm-channels-upgrades.md) · [14b](14b-olm-dependencies.md) — CRD pinning in CSV
-- [17](17-credential-broker.md) — gateway-pod credential cache · [24](24-tenant-crd.md) — dedicatedGateway
+- [17](17-credential-broker.md) · [24](24-tenant-crd.md) — credential cache · dedicatedGateway
 - [dev/bootstrap/values/envoy-ai-gateway.yaml](../../dev/bootstrap/values/envoy-ai-gateway.yaml)
 - [../plans/rubric.md](../plans/rubric.md)
-
-## Iteration log
-
-### Iteration 1 — 2026-04-20
-
-| # | Category | Weight | Ratio | Score | Notes |
-|---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | Five open questions answered; 05b/05c boundary explicit; topology bounded. |
-| 2 | Architecture fit | 10 | 1.0 | 10 | D5/D13/D16/D21/D24/D26 honored; VAP-first; ReferenceGrant isolation; no new groups. |
-| 3 | Security posture | 15 | 1.0 | 15 | Fail-closed ext_authz; no wildcards; in-pod plaintext sidecar; NATS-degraded correctness-over-perf per 04c; token bytes never logged. |
-| 4 | Automatability | 10 | 0.5 | 5 | helmfile.lock pinning strategy stated; `gateway-smoke-test.sh` named but not authored (pre-gate). |
-| 5 | Verifiability | 15 | 0.5 | 7.5 | Eight failure modes enumerated; smoke test path named; no envtest assertions yet (post-gate). |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Eight modes with detection + mitigation; NATS-degraded, JWKS, BSP exhaustion, toggle guard all covered. |
-| 7 | Context efficiency for Claude | 10 | 1.0 | 10 | Stays at ceiling (≤ 200 lines); 05b/05c split respected; YAML snippets illustrative only. |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX; complete frontmatter; depends updated; rollback concrete; cross-refs complete. |
-| 9 | Observability | 5 | 1.0 | 5 | Four OTEL spans; five Prom metrics; audit trail via response header → collector; per 04a/04c conventions. |
-| 10 | Operational readiness | 10 | 1.0 | 10 | HA (≥ 2 replicas, HPA); drain budget (preStop 30 s); rollback 5-step procedure; upgrade path concrete; migration doc requirement named. |
-| | **Total** | 100 | | **87.5** | |
-
-Verdict: SHIP (87.5 ≥ 85). `status` flipped to `current`.
-
-Top gaps: (1) Cat 4: `scripts/dev/gateway-smoke-test.sh` not authored (pre-gate, test-engineer backlog).
-(2) Cat 5: No envtest/e2e assertions for ext_authz sidecar (post-gate obligation).
-(3) 14b: CSV CRD pinning is manual until 14b reaches `current`. Next step (iter-2): name concrete test file paths + make target; author smoke-test stub; elevate to ≥ 93.
+- [../plans/runbook-dedicated-gateway-toggle.md](../plans/runbook-dedicated-gateway-toggle.md) (to author)
