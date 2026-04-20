@@ -64,14 +64,14 @@ declare -A KINDS_TOUCHED
 if [ -d api ] || [ -d internal/controller ]; then
   while IFS= read -r -d '' f; do
     case "$(basename "${f}")" in
-      zz_generated*|*_test.go|suite_test.go|groupversion_info.go|main.go) continue ;;
+      zz_generated* | *_test.go | suite_test.go | groupversion_info.go | main.go) continue ;;
     esac
     if is_stub "${f}"; then
       continue
     fi
     base="$(basename "${f}")"
     case "${base}" in
-      *_types.go)      kind="${base%_types.go}" ;;
+      *_types.go) kind="${base%_types.go}" ;;
       *_controller.go) kind="${base%_controller.go}" ;;
       *) continue ;;
     esac

@@ -12,15 +12,50 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
-- No entries yet.
+### 2026-04-20 — initial scaffolding (P0–P8)
+
+- [Scaffolding plan + 23 decisions](docs/plans/scaffolding-plan.md) —
+  license Apache-2.0; API groups `*.operator.keese.ai`; Capsule direct
+  (no Tenant CRD); GuardrailBinding composition (not Constitution +
+  Policy + ToolAllowList); 13 kinds across 8 groups; Envoy AI Gateway +
+  MCPRoute; Argo delegation; OpenTofu cloud; GoLand primary IDE;
+  SIGTERM drain; SSA fieldOwner.
+- [Session handoff summary](docs/plans/scaffolding-summary.md) —
+  state after P0–P8; next-phase instructions; resume commands after
+  clone/move.
 
 ## Gotchas
 
-- No entries yet.
+### 2026-04-20 — scaffolding cycle
+
+- [markdownlint relaxations](.markdownlint.json) — MD003/MD004/MD007/
+  MD010/MD022/MD029/MD031/MD032/MD034/MD040/MD049/MD050 disabled;
+  template + operator-sdk outputs collide with frontmatter and mixed
+  marker styles. Re-enable case-by-case once project style stabilizes.
+- [shellcheck -S error](.pre-commit-config.yaml) — only errors block
+  commits; warnings/info/style are review concerns. Keep until
+  `.envrc`/template scripts land dedicated fixes.
+- [gitleaks removed from pre-commit](.pre-commit-config.yaml) —
+  collided with detect-secrets baseline's own hashed fingerprints.
+  Re-add behind `.gitleaks.toml` allowlist if wanted in CI.
+- [operator-sdk not in nixpkgs (unverified 2026-04)](flake.nix) — use
+  `go install github.com/operator-framework/operator-sdk/cmd/operator-sdk@latest`
+  as fallback; `bin/operator-sdk` is gitignored.
+- [design-gate LOC_LIMIT=35](scripts/check-design-gate.sh) —
+  operator-sdk scaffold lands ~27 non-blank non-comment LOC per
+  controller; limit set to accept the stub and trip any real
+  implementation.
 
 ## Open questions (being tracked)
 
-- No entries yet.
+- Chart versions in `dev/bootstrap/helmfile.yaml` need verifying
+  against 2026-Q2 releases. Flagged `# unverified-2026` where relevant.
+- Whether `kuttl`, `setup-envtest`, `controller-gen`, `ctlptl`,
+  `cmctl`, `tflint` are available in current nixpkgs stable under the
+  expected attr names — commented in `flake.nix` with `unverified`.
+- OpenBao PVC-backed init sequencing vs `-dev` mode trade-off; current
+  seed script assumes non-dev but initial unseal flow not fully
+  exercised.
 
 ## Format rules
 

@@ -11,23 +11,23 @@ setup() {
   pushd "${TMPDIR}" >/dev/null
   git init -q
   git config user.email test@keese.ai
-  git config user.name  test
+  git config user.name test
 
   # Stub types + controller (has the sentinel + ≤20 LOC -> stub).
-  cat > api/workspace/v1alpha1/workspace_types.go <<'EOF'
+  cat >api/workspace/v1alpha1/workspace_types.go <<'EOF'
 package v1alpha1
 // TODO(design-gate): schema defined elsewhere
 type WorkspaceSpec struct{}
 type WorkspaceStatus struct{}
 EOF
 
-  cat > internal/controller/workspace/workspace_controller.go <<'EOF'
+  cat >internal/controller/workspace/workspace_controller.go <<'EOF'
 package workspace
 // TODO(design-gate): see docs/designs
 func Reconcile() error { return nil }
 EOF
 
-  cat > docs/plans/README.md <<'EOF'
+  cat >docs/plans/README.md <<'EOF'
 ---
 gate_status: closed
 ---
@@ -48,7 +48,7 @@ teardown() {
 
 @test "non-stub controller without supporting design fails gate" {
   # Replace controller with a fat body lacking the sentinel.
-  cat > internal/controller/workspace/workspace_controller.go <<'EOF'
+  cat >internal/controller/workspace/workspace_controller.go <<'EOF'
 package workspace
 
 import (
