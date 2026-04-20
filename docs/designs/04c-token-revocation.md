@@ -6,7 +6,7 @@ scope: design
 category: authz
 depends: [04a-openfga-authz-model.md, 04b-projected-sa-identity.md, 17-credential-broker.md, 18-process-lifecycle.md, 23-agent-supervision.md]
 related_skills: []
-status: current
+status: draft
 last_verified: 2026-04-20
 rollback: |
   If revocation SLO regresses (p95 > 60s), raise the OTEL alert threshold via

@@ -6,7 +6,7 @@ scope: design
 category: authz
 depends: [01-tenancy-capsule.md, 02-workspace-model.md, 20a-api-group-layout.md]
 related_skills: []
-status: current
+status: draft
 last_verified: 2026-04-20
 rollback: |
   Revert model.fga to the prior git-tagged version. Replay tuple writes from ES
