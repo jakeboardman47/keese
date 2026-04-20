@@ -1,37 +1,46 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 #
-# OpenFGA DSL authorization model for keese (schema 1.1).
+# OpenFGA DSL authorization model for keese.
 # Loaded by the seed Job (seed.yaml) after store creation.
 #
-# Types map to keese entities defined in docs/designs/04a-openfga-authz-model.md.
-# Every relation that a CRD field touches carries:
-#   // +keese:rebac-tuple=<relation>   (rule 04.14)
+# Types defined here map to the key entities in the system:
+#   tenant          → top-level isolation boundary (tenancy.operator.keese.ai/v1alpha1/Tenant)
+#   workspace       → agent execution scope (keese Workspace CR)
+#   tool            → callable function/extension exposed to agents
+#   extension       → RuntimeExtension provider (tool set)
+#   credential      → BackendSecurityPolicy-referenced secret
+#   memory          → Memory / SharedMemory CR backends
+#   service_account → projected Kubernetes SA per workspace
+#   user            → human operator or CI identity
+#   witness         → supervision agent dispatched by agent-supervision controller (D23)
 #
-# TODO(design-gate): tests/openfga/*.yaml positive + negative assertions
-# must be authored before the design gate opens (per rebac-modeler instructions).
+# Relations encode the ReBAC model described in docs/designs/04a-openfga-authz-model.md.
+# Design 04a iter-2 status: current (2026-04-20).
+#
+# Key changes vs iter-1:
+#   - workspace.tenant_member: computed relation (member from owner) replaces per-tuple member grants
+#   - tool.can_call: uses tenant_member from allowed_in (single Check; not dual-Check)
+#   - workspace.can_revoke: automation-only (witness, service_account); not for user subjects
+#   - workspace.supervised_by: [witness] added
+#   - witness type added
 
 model
   schema 1.1
 
-# Human operator, CI identity, or any K8s RBAC subject.
 type user
 
-# Per-workspace projected ServiceAccount.
-# Audience form: keese-egress-<tenant>  (04b owns canonical form).
 type service_account
   relations
     define member_of: [tenant]
 
-# Capsule Tenant (capsule.clastix.io/v1beta2/Tenant). No keese Tenant CRD (D23).
+type witness
+
 type tenant
   relations
     define admin: [user]
     define member: [user, service_account] or admin
-    define viewer: [user] or member
 
-# Agent execution scope (workspace.operator.keese.ai/Workspace).
-# Tuples survive pod churn (D24); deleted only on CR deletion via finalizer.
 type workspace
   relations
     define owner: [tenant]
@@ -42,45 +51,40 @@ type workspace
     define can_run: editor
     define can_read_memory: viewer
     define can_write_memory: editor
+    # tenant_member: propagates tenant.member down to this workspace via the owner tenant.
+    # Used by tool.can_call to avoid per-workspace tuple explosion.
+    define tenant_member: member from owner
+    # can_revoke: automation-only. Written by:
+    #   - operator install Job: workspace:*#can_revoke@service_account:keese-supervisor
+    #   - supervision controller (D23): workspace:<name>#can_revoke@witness:<id>
+    # NOT granted to user:* — humans use Workspace.spec.suspended for graceful suspension.
+    define can_revoke: [witness, service_account]
 
-# Cross-tenant access grant (workspace.operator.keese.ai/WorkspaceShare).
-# Written after ReferenceGrant validation; requires grantee membership check.
-type workspace_share
-  relations
-    define grantor: [workspace]
-    define grantee: [tenant]
-    define can_access: [service_account]
-
-# Callable MCP function exposed by a RuntimeExtension.
-# can_call is resolved in ext_authz as: allowed_in ∩ tenant member.
-# (Intersection expressed at check time via contextual tuples or ext_authz logic
-# because OpenFGA 1.1 does not support multi-type intersection natively.)
 type tool
   relations
-    define owner: [workspace]
+    define owner: [extension]
     define allowed_in: [workspace]
-    define can_call: [service_account, user]
+    # can_call resolves via computed relation:
+    #   tool → allowed_in → workspace → tenant_member → owner → tenant → member
+    # Single Check(tool:X#can_call@service_account:SA) replaces dual-Check pattern.
+    # Fallback: --openfga-check-mode=dual in ext_authz sidecar (incident mitigation only).
+    define can_call: tenant_member from allowed_in
 
-# Upstream model allow/deny scope. Deny wins over allow.
-# Check logic: allowed AND NOT denied (evaluated in ext_authz).
-type model_gate
+type extension
   relations
-    define allows: [workspace]
-    define denies: [workspace]
+    define owner: [tenant]
+    define enabled_in: [workspace]
 
-# Memory / SharedMemory backend (memory.operator.keese.ai).
-# For SharedMemory, writer uses workspace-level reader grants.
+type credential
+  relations
+    define owner: [tenant]
+    define bound_to: [workspace]
+    define can_use: [service_account] and bound_to
+
 type memory
   relations
     define owner: [workspace]
-    define reader: [user, service_account, workspace] or can_read_memory from owner
-    define writer: [user, service_account] or can_write_memory from owner
+    define reader: [user, service_account] or owner from owner
+    define writer: [user, service_account] or owner from owner
     define can_read: reader
     define can_write: writer
-
-# Supervision agent (D23 — forward-compatible placeholder).
-# Details and escalation ladder deferred to 23-agent-supervision.md.
-# Witness SA is write-scoped to witness:* objects only.
-type witness
-  relations
-    define can_read: [workspace]
