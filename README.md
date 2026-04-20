@@ -4,7 +4,7 @@
 # keese
 
 > **Status: pre-alpha · DESIGN GATE: CLOSED** — no operator/controller
-> implementation code lands until all 22 designs and 9 specs score ≥ 90/100
+> implementation code lands until all 30 designs and 11 specs score ≥ 90/100
 > against [docs/plans/rubric.md](docs/plans/rubric.md).
 
 Secure multi-tenant, multi-workspace Kubernetes operator orchestrating
@@ -59,7 +59,7 @@ Authoring specs before their owning designs reach `status: current` is
 non-stub bodies to `api/**/*_types.go` or `internal/controller/**/*.go`
 is **blocked** until the gate opens. See
 [docs/plans/README.md](docs/plans/README.md#gate-status) for the current
-state of the 22 designs and 9 specs.
+state of the 30 designs and 11 specs.
 
 ## Quickstart
 
