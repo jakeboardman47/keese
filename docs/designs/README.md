@@ -57,7 +57,8 @@ before any spec is authored and before any controller code is written.
 | 21 | [21-opentofu-cloud-deployment.md](21-opentofu-cloud-deployment.md) | OpenTofu Cloud Deployment | deployment | draft |
 | 22 | [22-workflow-composition-examples.md](22-workflow-composition-examples.md) | Workflow Composition Examples | workflow | draft |
 | 23 | [23-agent-supervision.md](23-agent-supervision.md) | Agent Supervision (Patrol Pattern) | reliability | draft |
-| 24 | [24-tenant-crd.md](24-tenant-crd.md) | Keese Tenant CRD | tenancy | draft |
+| 24 | [24-tenant-crd.md](24-tenant-crd.md) | Keese Tenant CRD: Spec, Reconcile, Admission, Migration | tenancy | current |
+| 24b | [24b-tenant-crd.md](24b-tenant-crd.md) | Keese Tenant CRD: Trade-offs, Failure Modes, Upgrade, Observability | tenancy | current |
 
 ## Lifecycle
 
