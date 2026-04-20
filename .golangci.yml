@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+
+run:
+  timeout: 5m
+  go: "1.24"
+
+linters:
+  disable-all: true
+  enable:
+    # Correctness
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - nilerr
+    - errorlint
+    - copyloopvar        # Go 1.22+ loop-var hygiene; replaces exportloopref
+    - contextcheck       # wrong ctx passed downstream (big deal in controllers)
+    - bodyclose          # HTTP response.Body leaks (OpenFGA, goose ACP clients)
+    - rowserrcheck       # sql rows err check (for SQLite session-store use)
+
+    # Formatting
+    - gofumpt
+    - goimports
+
+    # Style / readability
+    - revive
+    - gocritic
+    - prealloc
+    - unparam
+    - tparallel
+
+    # Security
+    - gosec
+
+    # Operator-specific
+    - forbidigo          # no fmt.Print*, no panic, no time.Sleep
+    - noctx              # HTTP calls without ctx — bad in reconcilers
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+      - name: error-return
+      - name: unused-parameter
+        disabled: true          # noisy in Reconcile stubs
+
+  gosec:
+    excludes:
+      - G104                    # handled by errcheck/errorlint
+
+  forbidigo:
+    forbid:
+      - 'fmt\.Print.*'
+      - '^panic$'
+      - 'time\.Sleep'           # use wait.PollUntilContextCancel
+
+  gocritic:
+    enabled-tags: [diagnostic, performance]
+
+  goimports:
+    local-prefixes: github.com/keese-ai/keese
+
+issues:
+  exclude-rules:
+    - path: zz_generated.*\.go
+      linters: [revive, staticcheck, gosec, unused, gocritic, prealloc]
+    - path: _test\.go
+      linters: [gosec, forbidigo, noctx]
+    - path: cmd/.*/main\.go
+      linters: [forbidigo]      # main.go may use fmt.Print for startup banners

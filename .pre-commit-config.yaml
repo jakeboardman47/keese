@@ -115,17 +115,139 @@ repos:
     hooks:
       - id: gitleaks
 
-  # ==================== Language-specific (uncomment as needed) ====================
-  # - repo: local
-  #   hooks:
-  #     - id: go-fmt
-  #       name: gofmt
-  #       entry: gofmt -s -w
-  #       language: system
-  #       types: [go]
-  #     - id: golangci-lint
-  #       name: golangci-lint
-  #       entry: bash -c 'command -v golangci-lint >/dev/null && golangci-lint run --fix ./... || echo "golangci-lint not installed; skipping"'
-  #       language: system
-  #       pass_filenames: false
-  #       files: \.go$
+  # ==================== Go (fast) ====================
+  - repo: local
+    hooks:
+      - id: gofumpt
+        name: gofumpt
+        entry: bash -c 'command -v gofumpt >/dev/null && gofumpt -w "$@" || true' --
+        language: system
+        types: [go]
+      - id: goimports
+        name: goimports (local=keese)
+        entry: bash -c 'command -v goimports >/dev/null && goimports -w -local github.com/keese-ai/keese "$@" || true' --
+        language: system
+        types: [go]
+      - id: go-mod-tidy
+        name: go mod tidy (drift check)
+        entry: bash -c 'test -f go.mod && go mod tidy -diff || true'
+        language: system
+        pass_filenames: false
+        files: (go\.mod|go\.sum|\.go)$
+
+  # ==================== Go (slow; diff-scoped) ====================
+  - repo: local
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint (diff-scoped)
+        entry: bash -c 'test -f go.mod && command -v golangci-lint >/dev/null && golangci-lint run --new-from-rev=HEAD~1 || true'
+        language: system
+        pass_filenames: false
+        files: \.go$
+      - id: govulncheck
+        name: govulncheck (pre-push)
+        entry: bash -c 'test -f go.mod && command -v govulncheck >/dev/null && govulncheck ./... || true'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+  # ==================== Kubernetes manifests ====================
+  - repo: local
+    hooks:
+      - id: controller-gen-freshness
+        name: controller-gen freshness (no drift after make manifests generate)
+        entry: scripts/check-controller-gen.sh
+        language: system
+        pass_filenames: false
+        files: ^(api/|PROJECT|go\.mod)$
+      - id: kubeconform
+        name: kubeconform (config/ + bundle/)
+        entry: scripts/check-kubeconform.sh
+        language: system
+        pass_filenames: false
+        files: ^(config/|bundle/manifests/)
+      - id: pluto
+        name: pluto (deprecated K8s APIs)
+        entry: bash -c 'command -v pluto >/dev/null && test -d config && pluto detect-files -d config/ --target-versions k8s=v1.30.0,k8s=v1.31.0 || true'
+        language: system
+        pass_filenames: false
+        files: ^config/
+      - id: kustomize-overlays
+        name: kustomize build (dry-run every overlay)
+        entry: scripts/check-kustomize-overlays.sh
+        language: system
+        pass_filenames: false
+        files: ^config/
+      - id: crd-validation
+        name: CRD sample validation (envtest --dry-run=server)
+        entry: scripts/check-crd-validation.sh
+        language: system
+        pass_filenames: false
+        files: ^(config/crd/|config/samples/|api/)
+      - id: rebac-markers
+        name: ReBAC tuple marker presence on authz-affecting CRD fields
+        entry: scripts/check-rebac-markers.sh
+        language: system
+        pass_filenames: false
+        files: ^api/.*_types\.go$
+      - id: netpol-wildcards
+        name: NetworkPolicy wildcard check
+        entry: scripts/check-netpol-wildcards.sh
+        language: system
+        pass_filenames: false
+        files: (NetworkPolicy|networking\.k8s\.io).*\.ya?ml$
+      - id: signal-handling
+        name: SIGTERM handler present in every cmd/** binary
+        entry: scripts/check-signal-handling.sh
+        language: system
+        pass_filenames: false
+        files: ^cmd/
+
+  # ==================== OLM bundle ====================
+  - repo: local
+    hooks:
+      - id: bundle-validate
+        name: operator-sdk bundle validate
+        entry: bash -c 'test -d bundle && command -v operator-sdk >/dev/null && operator-sdk bundle validate ./bundle --select-optional suite=operatorframework || true'
+        language: system
+        pass_filenames: false
+        files: ^bundle/
+
+  # ==================== OpenTofu (cloud deploy) ====================
+  - repo: local
+    hooks:
+      - id: tofu-fmt
+        name: tofu fmt -check -recursive
+        entry: bash -c 'test -d deploy/opentofu && command -v tofu >/dev/null && tofu fmt -check -recursive deploy/opentofu || true'
+        language: system
+        pass_filenames: false
+        files: ^deploy/opentofu/.*\.(tf|tofu)$
+      - id: tofu-validate
+        name: tofu validate each module
+        entry: scripts/check-tofu-validate.sh
+        language: system
+        pass_filenames: false
+        files: ^deploy/opentofu/.*\.(tf|tofu)$
+      - id: conftest-tofu
+        name: conftest test (OPA rego policy)
+        entry: bash -c 'test -d policy/opentofu && command -v conftest >/dev/null && conftest test deploy/opentofu -p policy/opentofu || true'
+        language: system
+        pass_filenames: false
+        files: ^(deploy/opentofu/|policy/opentofu/).*\.(tf|tofu|rego)$
+
+  # ==================== YAML ====================
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: ["-c", ".yamllint.yaml"]
+        files: ^(config/|bundle/|dev/|deploy/)
+
+  # ==================== Placeholder verification ====================
+  - repo: local
+    hooks:
+      - id: verify-placeholders
+        name: verify no template placeholders remain
+        entry: scripts/verify-placeholders.sh
+        language: system
+        pass_filenames: false
