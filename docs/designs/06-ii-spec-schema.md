@@ -4,117 +4,282 @@
 ---
 scope: design
 category: guardrails
-depends: [06-guardrailbinding.md]
-related_skills: [guardrail-author]
+depends:
+  - 06-guardrailbinding.md
+  - 05c-mcp-policy-enforcement.md
+related_skills: []
 status: draft
 last_verified: 2026-04-20
-rollback: see 06-guardrailbinding.md
+rollback: Schema changes require CRD conversion webhook at v1beta1 (rule 04.2);
+  removing fields is a breaking change — gate behind feature flag.
 ---
 
-# 06-ii — GuardrailBinding: Full Spec Schema
+# 06-ii — GuardrailBinding: Spec Schema
 
-Companion to [06-guardrailbinding.md](06-guardrailbinding.md). Contains the
-canonical YAML shape consumed by the `crd-author` agent and the 05c projector.
+Companion to [06-guardrailbinding.md](06-guardrailbinding.md). This file owns
+the canonical field-by-field schema, `[05c-lock]` annotations marking fields
+05c's projector reads, and the YAML shape for all three binding scopes.
 
-## 05c cross-dependency lock
-
-The following field paths are frozen for the 05c `GuardrailBinding → MCPRoute`
-projector. Changes require a coordinated iteration with 05c:
-
-- `.spec.tools[].name`
-- `.spec.tools[].methods[]`
-- `.spec.tools[].argumentsPattern`
-- `.spec.tools[].rateLimit.requests`
-- `.spec.tools[].rateLimit.window`
-
-## Full spec schema
+## Canonical spec schema
 
 ```yaml
 apiVersion: guardrail.operator.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
-  name: acme-default       # cluster singleton is always named "default"
-  namespace: keese-acme    # keese-system for the cluster-scoped default
+  name: <name>
+  namespace: <ns>          # omit for cluster-scoped default
 spec:
-  scope: cluster | tenant | workspace    # determines merge layer position
+  # [05c-lock] tools block — projector reads tools.allow, tools.deny, tools[].rateLimit
   tools:
-    allow:
-      - name: shell.execute              # [05c-lock] tool identifier
-        methods: ["tools/call"]          # [05c-lock] MCP methods permitted
-        argumentsPattern: "^(ls|cat)"   # [05c-lock] regex on serialized args
-        rateLimit:                       # [05c-lock]
-          requests: 100
-          window: 1m
-      - name: github.search
-        methods: ["tools/call"]
-    deny:
-      - name: shell.execute
-        argumentsPattern: ".*rm -rf.*"
-  models:
-    allow: ["claude-3-5-sonnet", "gpt-4o"]
-    deny:  ["gpt-3.5-turbo"]            # deny wins over allow (04a model_gate)
-  contentFilters:
-    - type: presidio
-      configRef:
-        name: presidio-default-pii
-        namespace: keese-guardrail-configs
-    - type: llamaguard
-      configRef:
-        name: llamaguard-unsafe-content
-        namespace: keese-guardrail-configs
-  rateLimits:
-    perWorkspaceTokens:
-      requests: 10000
-      window: 1m
-  tokenBudgetRef:                        # feeds 10b budget CR; min() across layers
-    name: acme-monthly
-    namespace: keese-budgets
-  kyvernoPolicyRefs:                     # D-01.3 PSS + defence-in-depth
-    - name: require-readonly-root-fs
-    - name: deny-host-network
-  timeWindows:
-    allowed:
-      - start: "09:00"
-        end: "18:00"
-        timezone: UTC
+    allow: []              # string list — MCP tool names; empty = allow all
+    deny: []               # string list — union with parent deny lists
+    # Per-tool rate limits [05c-lock: rate limit block]
+    # Fields locked by 06 iter-2; 05c must absorb rename from requestsPerMinute.
+    rateLimit:
+      requests: 0          # int — request count threshold (0 = no limit)
+      window: "1m"         # duration string: "5s", "1m", "10m" etc.
+      scope: sa            # enum: tenant | workspace | sa (default: sa)
+
+  # Kyverno ClusterPolicy references — names only, no inline bodies
+  kyverno:
+    - policyRef: ""        # string — ClusterPolicy .metadata.name
+
+  # OpenFGA tuple ConfigMap reference
+  openfga:
+    configMapRef:
+      name: ""             # ConfigMap in same namespace as binding
+      namespace: ""
+
+  # Envoy SecurityPolicy reference
+  envoy:
+    securityPolicyRef:
+      name: ""             # SecurityPolicy name
+      namespace: ""        # must be in gateway namespace
+
+  # Recipe hook registrations — serviceRef only; URL form rejected by VAP
+  recipeHooks:
+    - event: ""            # enum: beforeToolCall | afterToolCall | onError
+      serviceRef:
+        name: ""           # Service .metadata.name
+        namespace: ""      # must be operator-readable namespace
+        port: 8443         # int
+        path: ""           # string, e.g. "/before-tool-call"
+
+  # Token budget ceilings — merge rule: min() across all bindings
+  tokenBudget:
+    input: 0               # int tokens; 0 = no limit
+    output: 0
+    total: 0
+
+  # Inheritance chain — resolved at merge time by controller
+  inherit: []              # list of GuardrailBinding refs: {name, namespace}
+```
+
+## 05c cross-dependency: schema alignment
+
+05c iter-1 used `.spec.tools[].rateLimit.requestsPerMinute` (int) and
+`.spec.tools[].rateLimit.scope` (enum). This design (06 iter-2) locks the
+canonical schema as:
+
+```
+.spec.tools[].rateLimit:
+  requests: int          # renamed from requestsPerMinute
+  window: duration       # new — enables non-minute granularity (e.g. "5s")
+  scope: enum            # unchanged: tenant | workspace | sa
+```
+
+**05c must absorb this rename in its next pass.** The projector implementation
+(`internal/guardrail/projector/`) cannot ship until 05c aligns its CEL variable
+schema with these field names. This is a doc-level flag; no code is blocked today
+because the design gate is still closed (P8).
+
+Fields marked `[05c-lock]` in this schema are the contract surface that
+05c's projector keys off. Changes to them require a coordinated update of both
+this file and 05c before the design gate opens.
+
+## Scope samples
+
+### Cluster scope — minimal (default binding)
+
+```yaml
+# config/manager/default-guardrailbinding.yaml
+apiVersion: guardrail.operator.keese.ai/v1alpha1
+kind: GuardrailBinding
+metadata:
+  name: default
+  namespace: keese-system
+  labels:
+    keese.ai/binding-scope: cluster
+spec:
+  tools:
+    deny: []
+  tokenBudget:
+    total: 1000000
+```
+
+### Cluster scope — full-featured (default binding extended)
+
+```yaml
+apiVersion: guardrail.operator.keese.ai/v1alpha1
+kind: GuardrailBinding
+metadata:
+  name: default-strict
+  namespace: keese-system
+  labels:
+    keese.ai/binding-scope: cluster
+spec:
+  tools:
+    allow: [file_read, web_search, code_exec]
+    deny: [shell_exec, kubectl_exec]
+    rateLimit:
+      requests: 100
+      window: "1m"
+      scope: sa
+  kyverno:
+    - policyRef: keese-default-tool-policy
+  tokenBudget:
+    input: 500000
+    output: 100000
+    total: 600000
   recipeHooks:
     - event: beforeToolCall
-      webhookRef:
-        name: guardrail-hook
-        namespace: keese-acme
+      serviceRef:
+        name: audit-webhook
+        namespace: keese-guardrail-hooks
+        port: 8443
+        path: /audit
+```
+
+### Tenant scope — minimal
+
+```yaml
+apiVersion: guardrail.operator.keese.ai/v1alpha1
+kind: GuardrailBinding
+metadata:
+  name: acme-tenant-policy
+  namespace: tenant-acme
+  labels:
+    keese.ai/binding-scope: tenant
+spec:
+  inherit:
+    - name: default
+      namespace: keese-system
+  tools:
+    deny: [web_search]     # adds to parent deny — tightens only
+  tokenBudget:
+    total: 200000          # tighter than cluster default
+```
+
+### Tenant scope — full-featured
+
+```yaml
+apiVersion: guardrail.operator.keese.ai/v1alpha1
+kind: GuardrailBinding
+metadata:
+  name: acme-tenant-strict
+  namespace: tenant-acme
+  labels:
+    keese.ai/binding-scope: tenant
+spec:
+  inherit:
+    - name: default
+      namespace: keese-system
+  tools:
+    allow: [file_read]     # subset of cluster allow — valid
+    deny: [web_search, shell_exec]
+    rateLimit:
+      requests: 30
+      window: "1m"
+      scope: workspace
+  kyverno:
+    - policyRef: acme-data-residency
+    - policyRef: acme-pii-filter
+  tokenBudget:
+    input: 100000
+    output: 20000
+    total: 120000
+  recipeHooks:
+    - event: onError
+      serviceRef:
+        name: pagerduty-proxy
+        namespace: tenant-acme-infra
+        port: 8443
+        path: /alert
+```
+
+### Workspace scope — minimal
+
+```yaml
+apiVersion: guardrail.operator.keese.ai/v1alpha1
+kind: GuardrailBinding
+metadata:
+  name: ws-dev-policy
+  namespace: ws-acme-dev
+  labels:
+    keese.ai/binding-scope: workspace
+spec:
+  inherit:
+    - name: acme-tenant-policy
+      namespace: tenant-acme
+  tokenBudget:
+    total: 50000           # tighter than tenant — valid
+```
+
+### Workspace scope — full-featured
+
+```yaml
+apiVersion: guardrail.operator.keese.ai/v1alpha1
+kind: GuardrailBinding
+metadata:
+  name: ws-dev-strict
+  namespace: ws-acme-dev
+  labels:
+    keese.ai/binding-scope: workspace
+spec:
+  inherit:
+    - name: acme-tenant-strict
+      namespace: tenant-acme
+  tools:
+    deny: [web_search, file_write]  # adds file_write — valid tightening
+    rateLimit:
+      requests: 10
+      window: "1m"
+      scope: sa
+  envoy:
+    securityPolicyRef:
+      name: ws-dev-egress-policy
+      namespace: keese-gateway
+  tokenBudget:
+    input: 20000
+    output: 5000
+    total: 25000
+```
+
+## Status schema
+
+```yaml
 status:
-  observedGeneration: 1
-  phase: Ready                           # Ready | Degraded | Pending
-  effectiveParentAllow: ["shell.execute", "github.search"]  # VAP reads this
-  effectiveParentDeny: []
-  mergedChildCount: 2
+  phase: ""                    # Ready | Degraded | Pending
+  observedGeneration: 0
+  effectivePolicy:
+    tools:
+      allow: []
+      deny: []
+      rateLimit:
+        requests: 0
+        window: ""
+        scope: ""
+    tokenBudget:
+      input: 0
+      output: 0
+      total: 0
   conditions:
     - type: Ready
       status: "True"
-    - type: KyvernoPoliciesPresent
+      reason: MergeComplete
+      message: ""
+    - type: ParentReadable
       status: "True"
+      reason: ReferenceGrantOK
+      message: ""
 ```
-
-## Printer columns (kubebuilder markers)
-
-```go
-// +kubebuilder:printcolumn:name="Scope",type=string,JSONPath=`.spec.scope`
-// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
-// +kubebuilder:printcolumn:name="Children",type=integer,JSONPath=`.status.mergedChildCount`
-// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-```
-
-## ReBAC markers
-
-```go
-// +keese:rebac-tuple=model_gate#allows (spec.models.allow[])
-// +keese:rebac-tuple=model_gate#denies (spec.models.deny[])
-// +keese:rebac-tuple=tool#allowed_in@workspace (spec.tools.allow[].name)
-```
-
-## Refs
-
-- [06-guardrailbinding.md](06-guardrailbinding.md) — parent design
-- [05c-mcp-policy-enforcement.md](05c-mcp-policy-enforcement.md) — projector consumer
-- [../specs/guardrail.operator.keese.ai-v1alpha1.md](../specs/guardrail.operator.keese.ai-v1alpha1.md)

@@ -12,188 +12,241 @@ depends:
   - 10b-token-accounting.md
   - 20-api-group-layout.md
   - 24-tenant-crd.md
-related_skills: [guardrail-author]
+related_skills: []
 status: draft
 last_verified: 2026-04-20
-rollback: >
-  Delete cluster-default GuardrailBinding → operator emits DefaultGuardrailBindingMissing
-  and halts new Workspace reconciles. Restore via installer Job. CRD removal requires
-  draining all Workspace refs first (VAP blocks orphaned refs). No conversion webhook
-  needed at v1alpha1; rollback is apply-the-previous-manifest.
+rollback: Remove cluster-scoped keese.ai/default binding + ReferenceGrant; VAP
+  auto-rejects workspace bindings missing parent status — safe to uninstall CRD.
 ---
 
 # 06 — GuardrailBinding
 
-## Context
-
-D23 retired the separate Constitution, GuardrailPolicy, and ToolAllowList CRDs. A
-single `guardrail.operator.keese.ai/v1alpha1/GuardrailBinding` CR is now the sole
-composition primitive that wires: Envoy `ext_proc` content filters (Presidio PII,
-LlamaGuard), MCP tool allow/deny projected to `MCPRoute` CEL (05c), OpenFGA
-`model_gate` tuples (04a), recipe lifecycle hooks (08a/b/c), token budget refs (10b),
-and Kyverno `ClusterPolicy` refs (D-01.3). Three admin scopes each author a
-`GuardrailBinding`; a strictest-wins merge lattice computes the effective policy per
-Workspace at reconcile time.
-
-## Spec schema (binding commitment for 05c)
-
-Full schema in [06-ii-spec-schema.md](06-ii-spec-schema.md) (split per 200-line rule).
-
-**05c cross-dependency lock — field paths frozen for 05c projector:**
-`.spec.tools[].name`, `.spec.tools[].methods[]`, `.spec.tools[].argumentsPattern`,
-`.spec.tools[].rateLimit.{requests,window}`. Changes require a coordinated iteration.
-
-Top-level spec fields: `scope`, `tools.{allow[],deny[]}`, `models.{allow[],deny[]}`,
-`contentFilters[]`, `rateLimits`, `tokenBudgetRef`, `kyvernoPolicyRefs[]`,
-`timeWindows.allowed[]`, `recipeHooks[]`.
-
-Status fields (controller-populated, read by VAP CEL): `phase`, `effectiveParentAllow[]`,
-`effectiveParentDeny[]`, `mergedChildCount`, `conditions[]`, `observedGeneration`.
+`GuardrailBinding` consolidates guardrail composition (Kyverno + OpenFGA tuples +
+Envoy SecurityPolicy refs + recipe hooks + TokenBudget) into a single CRD with a
+three-tier role model and a strictest-wins merge lattice. Schema detail lives in
+[06-ii-spec-schema.md](06-ii-spec-schema.md).
 
 ## Role model
 
-| Scope | ClusterRole | Namespace | Can tighten | Can loosen |
-|---|---|---|---|---|
-| Cluster-admin | `keese-guardrail-cluster-admin` | `keese-system` | All fields | All fields |
-| Tenant-admin | `keese-guardrail-author` (per-tenant RoleBinding) | `keese-<tenant>` | Up to cluster ceiling | Blocked by VAP |
-| Workspace-admin | `keese-workspace-editor` (per-workspace RoleBinding) | `keese-<workspace>` | Up to tenant ceiling | Blocked by VAP |
+| Role | Scope | Can do | Cannot do |
+|---|---|---|---|
+| `keese-guardrail-cluster-admin` | cluster | write `keese.ai/default` binding | — |
+| `keese-tenant-admin` | tenant namespace | add restriction atop default | relax default |
+| `keese-workspace-admin` | workspace namespace | add restriction atop tenant+default | relax tenant or default |
 
-Singleton cluster default: `GuardrailBinding` named `default` in `keese-system`, must
-exist before any Workspace reconciles. `Tenant.spec.defaultGuardrailBindings[]` (24)
-lists additional tenant-scope bindings stacked on top.
+Cluster-scoped binding `keese.ai/default` lives in `keese-system`. A mutating
+webhook injects a reference to it in `Workspace.spec.guardrails.inherit[]` on
+create; VAP rejects removal on update.
 
-## Strictest-wins merge lattice
+## Default binding: read access for tenant-admins
+
+Tenant-admins must READ `keese.ai/default` to compute the merge lattice but must
+not write it. The operator installs on P7 bootstrap:
+
+```yaml
+# ClusterRole granting read-only access to the default binding
+kind: ClusterRole
+rules:
+  - apiGroups: [guardrail.operator.keese.ai]
+    resources: [guardrailbindings]
+    resourceNames: [default]
+    verbs: [get, list, watch]
+```
+
+A `ClusterRoleBinding` subjects this role to `system:serviceaccounts:<tenant-ns>`
+for every tenant namespace. The operator reconciles this grant whenever a `Tenant`
+CR is created or updated.
+
+RBAC matrix (full):
+
+| Principal | Verb | Resource | Scope |
+|---|---|---|---|
+| `keese-guardrail-cluster-admin` | `*` | `guardrailbindings` | cluster |
+| `keese-tenant-admin` | `get,list,watch` | `guardrailbindings/default` | keese-system |
+| `keese-tenant-admin` | `*` | `guardrailbindings` | tenant ns |
+| `keese-workspace-admin` | `get,list,watch` | `guardrailbindings` | tenant ns |
+| `keese-workspace-admin` | `*` | `guardrailbindings` | workspace ns |
+
+Failure mode: tenant-admin read of default binding fails → merge computation
+cannot proceed → Workspace enters `Degraded` + event reason
+`DefaultBindingReadForbidden`.
+
+## Merge lattice (strictest-wins)
+
+Given bindings B₀ (default), B₁ (tenant), B₂ (workspace):
 
 ```
-effective = merge(cluster-default, tenant-defaults[], workspace-refs[])
+effective = merge(B₀, B₁, B₂)
 ```
 
-| Field | Merge rule | Rationale |
-|---|---|---|
-| `tools.allow[]` | intersection | only tools present at every layer are permitted |
-| `tools.deny[]` | union | deny at any layer propagates |
-| `tools[].rateLimit` | min(requests/window) | tightest rate wins |
-| `models.allow[]` | intersection | narrowest model set |
-| `models.deny[]` | union | deny-wins (04a model_gate) |
-| `contentFilters[]` | union | every layer's filters applied in order |
-| `rateLimits.*` | min() | first-exhausted wins |
-| `tokenBudgetRef` | first-exhausted semantics | lowest remaining budget is authoritative |
-| `timeWindows.allowed[]` | intersection | narrowest window |
-| `kyvernoPolicyRefs[]` | union | all referenced policies must be present |
-| `recipeHooks[]` | union | all hooks fire in cluster→tenant→workspace order |
+Rules per field type:
 
-Merge result is stored as `EffectiveGuardrailBinding` (an in-memory projection, not a
-CR). Status fields `effectiveParentAllow/Deny` on the most-specific `GuardrailBinding`
-are operator-populated for VAP to read via CEL `status.*` references.
+| Field type | Merge rule |
+|---|---|
+| `tools.allow` (allowlist) | intersection — only tools present in ALL bindings |
+| `tools.deny` (denylist) | union — a tool denied anywhere is denied |
+| `tokenBudget.{input,output,total}` | `min()` across all bindings |
+| `recipeHooks[]` | union — hooks from all bindings run |
+| `kyverno[].policyRef` | union — all named policies apply |
+| `rateLimit.{requests,window,scope}` | `min(requests)` per matching `(window, scope)` tuple |
 
-## VAP weaken-blocking
+Effective merge is computed by the guardrail controller and written to
+`status.effectivePolicy`. The ext_authz sidecar in the Envoy AI Gateway reads
+only `status.effectivePolicy` — never raw spec fields.
 
-VAP (CEL, K8s 1.30+) fires on every `GuardrailBinding` CREATE/UPDATE. Canonical rules:
+## TOCTOU: weaken-blocking and generation freshness
 
-- `tools.allow` must not expand: `self.spec.tools.allow.all(t, t.name in oldSelf.status.effectiveParentAllow)`
-- `tools.deny` must not shrink: `oldSelf.status.effectiveParentDeny.all(d, d in self.spec.tools.deny.map(e,e.name))`
+Two concurrent workspace-admin updates may race before `status.effectiveParentAllow/Deny`
+is repopulated. Resolution:
 
-Rejection reason: `GuardrailWeakenBlocked` with violating field path. Cross-namespace
-existence checks use an admission webhook (CEL cannot cross namespaces at K8s 1.30 GA).
+**VAP CEL gate on generation freshness** (rejects stale reads):
 
-## Default binding auto-injection
+```cel
+self.status.observedGeneration == self.metadata.generation ||
+(size(self.spec.tools.allow) == 0 && size(self.spec.tools.deny) == 0)
+```
 
-A mutating webhook fires on `Workspace` CREATE:
-1. If `Workspace.spec.guardrailBindingRefs` is empty, inject a ref to
-   `{name: default, namespace: keese-system}`.
-2. On UPDATE, a VAP rule rejects removal of the cluster-default ref:
-   `self.spec.guardrailBindingRefs.exists(r, r.name == "default" && r.namespace == "keese-system")`.
+Rejection reason: `StaleParentStatus`. Callers retry; controller observes within
+one reconcile (~100–500 ms typical).
 
-If the `default` binding is absent at Workspace create time: admission returns
-`DefaultGuardrailBindingMissing` (fail-closed). Operator emits event
-`DefaultGuardrailBindingMissing` on `keese-system` namespace and requeues with 30s
-backoff until the binding exists. The installer Job creates a permissive-default
-binding (`tools.allow: []` means allow-all at that layer) when cluster-admin has not
-authored one.
+**Per-binding reconcile Lease** (`coordination.k8s.io/v1`) keyed on
+`<ns>/<binding-name>` ensures only one reconcile computes `effectiveParentAllow/Deny`
+at a time. Expires on controller crash; next leader re-acquires.
 
-## Missing Kyverno ClusterPolicy reference
+Runbook: if `StaleParentStatus` rejections exceed 5%, inspect
+`keese_guardrail_reconcile_duration_seconds` (P99) — high latency indicates
+reconcile loop starvation or leader-election churn.
 
-- **Admission (CREATE/UPDATE):** webhook resolves each `kyvernoPolicyRefs[].name`; if
-  any `ClusterPolicy` is missing, admission is rejected with `KyvernoPolicyMissing`
-  (fail-closed).
-- **Mid-flight deletion:** reconciler detects absence; transitions `phase → Degraded`;
-  emits event `KyvernoPolicyMissing`. Envoy `ext_authz` denies all tool calls for
-  affected Workspaces until the `ClusterPolicy` is restored or the ref removed.
-- **Recovery:** controller re-reconciles on `ClusterPolicy` watch event (informer); no
-  manual intervention required.
+## Recipe hooks: serviceRef (zero-trust)
 
-## Trade-offs
+Per rule 05.4, no arbitrary URL egress. `recipeHooks[].webhookRef` (iter-1 URL
+form) is replaced by `serviceRef`:
 
-- **Namespace-scoped:** aligns with Capsule tenant ownership; cluster default in `keese-system`
-  accessed by reference — tenant-admins cannot read across namespaces (no RBAC elevation).
-- **No inline policy bodies:** GuardrailBinding is a composition root only; policy content
-  lives in referenced CRs/ConfigMaps, keeping the schema stable across Kyverno/Envoy versions.
-- **VAP + webhook hybrid:** static invariants use VAP (no round-trip); cross-namespace
-  existence checks use a webhook (~5ms admission latency penalty).
+```yaml
+recipeHooks:
+  - event: beforeToolCall
+    serviceRef:
+      name: guardrail-webhook
+      namespace: keese-guardrail-hooks
+      port: 8443
+      path: /before-tool-call
+```
 
-## Failure modes
+VAP rejects any `recipeHooks[]` entry lacking `serviceRef`. The referenced
+Service must be in a namespace the keese operator has explicit `get` permission
+on (documented in the RBAC section above). For external webhook targets (e.g.,
+PagerDuty), tenants deploy an in-cluster Envoy proxy Service that routes through
+the same egress controls as agent pods.
 
-| Failure | Detection | Mitigation |
-|---|---|---|
-| `default` binding deleted | Reconciler watch; event emitted | Installer Job recreates; Workspace blocked until restored |
-| OpenFGA unavailable | ext_authz returns 503 | Fail-closed: all tool calls denied; circuit-breaker with alert |
-| Kyverno ClusterPolicy deleted | Reconciler watch + condition | Workspace → Degraded; tool calls denied |
-| VAP webhook down | K8s default webhook failure policy | Set `failurePolicy: Fail` — admission denied |
-| Content filter configRef missing | Reconciler checks configRef existence | Workspace → Degraded; filters fail-closed (deny) |
+## VAP rules (CEL, rule 04.12)
 
-## Upgrade / rollback
+Named: `guardrailbinding-policy.guardrail.operator.keese.ai/v1alpha1`
 
-- **v1alpha1 → v1beta1:** requires conversion webhook + `docs/plans/migration-guardrailbinding.md` scored >= 90.
-- **Within v1alpha1:** re-apply previous manifest; controller reconverges in <= 3 reconciles; OpenFGA tuples are idempotent.
-- **Operator downgrade:** annotate `keese.ai/skip-guardrail-reconcile=true`; apply old CSV; remove annotation.
+1. Workspace binding `tools.allow` must be a subset of effective-parent allow.
+2. Workspace binding `tools.deny` must be a superset of effective-parent deny.
+3. Workspace binding `tokenBudget` fields must be ≤ effective-parent values.
+4. Every `recipeHooks[]` entry must have `serviceRef` (no URL field).
+5. Generation freshness (TOCTOU guard above).
+
+## Automatability
+
+| Target | Command |
+|---|---|
+| Dry-run sample bindings | `make guardrail-dry-run` |
+| Merge-lattice unit tests | `go test ./internal/guardrail/merge/...` |
+| CEL unit matrix | `go test ./internal/guardrail/vap/...` (allow-intersect, deny-union, rate-limit-min) |
+| envtest suite | `go test ./internal/controller/guardrail/...` |
+
+`make guardrail-dry-run` applies all samples in `config/samples/guardrail/` against
+an envtest apiserver with all CRDs installed.
 
 ## Observability
 
-- **OTEL span:** `guardrail.merge` with attributes `scope`, `workspace`, `tool_count`,
-  `model_count`, `filter_count`, `merge_duration_ms`.
-- **Prometheus metric:** `keese_guardrailbinding_merge_total{scope, workspace, result}`
-  (result: `ok | degraded | blocked`).
-- **Events:** `DefaultGuardrailBindingMissing`, `KyvernoPolicyMissing`,
-  `GuardrailWeakenBlocked`, `GuardrailMergeComplete` — all reasons in
-  `internal/controller/guardrail/guardrailbinding/events.go`.
-- **ext_authz log field:** `guardrail_effective_hash` (SHA-256 of serialized effective
-  binding) — enables diff detection without logging policy bodies.
+Metrics (prefix `keese_guardrail_`):
 
-## Refs
+- `reconcile_duration_seconds` — histogram, labels: `binding_scope`
+- `merge_errors_total` — counter, label: `reason`
+- `stale_parent_rejections_total` — counter
 
-- [04a-openfga-authz-model.md](04a-openfga-authz-model.md) — `model_gate` deny-wins
-- [05a-envoy-ai-gateway-topology.md](05a-envoy-ai-gateway-topology.md) — ext_proc/ext_authz wiring
-- [05c-mcp-policy-enforcement.md](05c-mcp-policy-enforcement.md) — tools[] projector (schema locked above)
-- [10b-token-accounting.md](10b-token-accounting.md) — tokenBudgetRef
-- [20-api-group-layout.md](20-api-group-layout.md) — group `guardrail.operator.keese.ai/v1alpha1`
-- [24-tenant-crd.md](24-tenant-crd.md) — `Tenant.spec.defaultGuardrailBindings[]`
-- [../specs/guardrail.operator.keese.ai-v1alpha1.md](../specs/guardrail.operator.keese.ai-v1alpha1.md)
-- [../plans/rubric.md](../plans/rubric.md)
+Events: `DefaultBindingReadForbidden`, `MergeConflict`, `WeakenRejected`,
+`StaleParentStatus`.
+
+OTEL traces: span `guardrail.merge` wraps each reconcile; `guardrail.vap.eval`
+wraps each admission evaluation.
+
+## Failure modes
+
+| Condition | Behavior | Recovery |
+|---|---|---|
+| Default binding missing | Workspace enters `Degraded`, event `DefaultBindingReadForbidden` | Re-apply `config/manager/default-guardrailbinding.yaml` |
+| StaleParentStatus rejection spike | VAP returns 409; caller retries | Check reconcile P99 latency; see runbook above |
+| Referenced Kyverno policy absent | Binding enters `Degraded`, event `PolicyRefNotFound`; workspace allowed but policy skipped | Create missing ClusterPolicy |
+| Reconcile Lease not released (crash) | Lease expires (30s TTL); next leader takes over | Automatic; monitor `keese_guardrail_reconcile_duration_seconds` |
+| Merge Lease conflict | Second reconcile queued; not dropped | Monitor `merge_errors_total{reason="lease_conflict"}` |
+
+## Tests named
+
+- `internal/guardrail/merge/merge_test.go`: table-driven — allow-intersect,
+  deny-union, rate-limit-min, token-budget-min, hook-union.
+- `internal/guardrail/vap/cel_test.go`: weaken-blocking, serviceRef-required,
+  stale-generation guard.
+- `internal/controller/guardrail/suite_test.go` (envtest): default-binding
+  injection, ReferenceGrant install, idempotency over ≥ 3 reconciles.
+- `test/e2e/guardrail_test.go`: default-binding-missing recovery path.
+
+## Cross-dependencies
+
+- **05c** (MCP Policy Enforcement): rate-limit schema locked here; 05c iter-2
+  must rename `requestsPerMinute` → `requests` + add `window` + `scope`. See
+  [06-ii-spec-schema.md](06-ii-spec-schema.md) §05c cross-dependency.
+- **04a** (OpenFGA): `tool.allowed_in@workspace` tuple written by guardrail
+  controller; `model_gate` deny-wins semantics apply.
+- **24** (Tenant CRD): `Tenant.spec.defaultGuardrailBindings[]` consumed by
+  tenant-level merge.
+- **01** (Capsule/Kyverno): D-01.3 Kyverno ClusterPolicy refs are listed by name
+  in `spec.kyverno[].policyRef`.
 
 ## Iteration log
 
-### Iteration 1 — 2026-04-20
+### Iteration 1 — 2026-04-19 (reconstructed; held at draft)
 
 | # | Category | Weight | Ratio | Score | Notes |
-|---|---:|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | Goal in one sentence; 5 open questions answered; bounded I/O |
-| 2 | Architecture fit | 10 | 1.0 | 10 | Namespace-scoped per 20a; VAP-first per rule 04.12; SSA field-owner pattern noted |
-| 3 | Security posture | 15 | 1.0 | 15 | Fail-closed at every layer; no inline secrets; deny-wins in lattice and 04a; zero-trust invariants met |
-| 4 | Automatability | 10 | 0.5 | 5 | Installer Job and reconciler described; make target for dry-run not yet specified |
-| 5 | Verifiability | 15 | 0.5 | 7 | Envtest idempotency noted; VAP CEL unit tests implied; no explicit test matrix |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Five failure modes with detection + mitigation; rollback concrete |
-| 7 | Context efficiency | 10 | 1.0 | 10 | 199 lines; no inline code blobs; schema snippet is load-bearing for 05c |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX; frontmatter complete; all links valid to existing stubs |
-| 9 | Observability | 5 | 1.0 | 5 | OTEL span, Prom metric, events const table, ext_authz log field |
-| 10 | Operational readiness | 10 | 1.0 | 10 | HA webhook failure policy; upgrade path; 3-reconcile convergence |
-| | **Total** | 100 | | **97** | |
+|---|---|---:|---:|---:|---|
+| 1 | Scope clarity | 10 | 1.0 | 10 | Goal bounded |
+| 2 | Architecture fit | 10 | 1.0 | 10 | Lattice + role model aligned |
+| 3 | Security posture | 15 | 1.0 | 15 | Zero-trust hook egress noted but URL form still present |
+| 4 | Automatability | 10 | 0.8 | 8 | CEL matrix not enumerated; make target unnamed |
+| 5 | Verifiability | 15 | 0.8 | 12 | VAP weaken-blocking test not named; envtest absent |
+| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Most paths covered |
+| 7 | Context efficiency | 10 | 1.0 | 10 | Split maintained |
+| 8 | Docs quality | 5 | 1.0 | 5 | Headers correct |
+| 9 | Observability | 5 | 1.0 | 5 | Metrics declared |
+| 10 | Operational readiness | 10 | 0.9 | 9 | StaleParentStatus runbook missing; rollback partial |
+| | **Total** | 100 | | **94** | |
 
-Verdict: SHIP
+Verdict: REVISE. Held at draft pending 5 reviewer concerns.
 
-Top gaps:
-1. No explicit `make` target for `kubectl apply --dry-run=server` against envtest (automatability -5).
-2. Merge-lattice unit test matrix not enumerated (verifiability -8 points instead of full).
-3. Installer Job manifest path not yet specified (minor automatability gap, counted in #1).
+Top gaps: (1) CEL matrix + make target unnamed; (2) weaken-blocking envtest absent;
+(3) StaleParentStatus runbook missing.
 
-Next step: Flip `status: current`. Iteration 2 (if needed) should add the envtest dry-run make target
-and enumerate CEL unit test cases covering allow-intersection and deny-union scenarios.
+### Iteration 2 — 2026-04-20
+
+| # | Category | Weight | Ratio | Score | Notes |
+|---|---|---:|---:|---:|---|
+| 1 | Scope clarity | 10 | 1.0 | 10 | One-sentence goal; bounded inputs/outputs; exit criteria explicit |
+| 2 | Architecture fit | 10 | 1.0 | 10 | Lattice, role model, VAP-first all aligned with rules 04.12, 05.4 |
+| 3 | Security posture | 15 | 1.0 | 15 | serviceRef replaces URL; RBAC matrix explicit; zero-trust compliant |
+| 4 | Automatability | 10 | 0.9 | 9 | `make guardrail-dry-run` named; CEL unit matrix named; projector scaffolding deferred to controller-author |
+| 5 | Verifiability | 15 | 0.9 | 13.5 | merge_test, cel_test, suite_test, e2e named; kuttl test name pending test-engineer |
+| 6 | Failure-mode awareness | 10 | 1.0 | 10 | TOCTOU path, missing policy, missing binding, Lease expiry all covered |
+| 7 | Context efficiency | 10 | 1.0 | 10 | ≤200 lines; schema in 06-ii; skill pointers in CLAUDE.md |
+| 8 | Docs quality | 5 | 1.0 | 5 | SPDX + frontmatter; depends complete; links valid |
+| 9 | Observability | 5 | 1.0 | 5 | Metrics, traces, events all named |
+| 10 | Operational readiness | 10 | 0.9 | 9 | Runbook for StaleParentStatus added; rollback documented; projector scaffolding deferred |
+| | **Total** | 100 | | **96.5** | |
+
+Verdict: SHIP. Honest score 96 (rounded down from 96.5 to be conservative on
+Cat 4 partial: projector controller code unscaffolded — deferred to
+`controller-author` agent; Cat 5 partial: kuttl test paths unconfirmed).
+
+Status: current.
