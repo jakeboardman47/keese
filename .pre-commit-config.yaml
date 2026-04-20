@@ -39,7 +39,12 @@ repos:
     rev: v0.10.0.1
     hooks:
       - id: shellcheck
-        args: ["-x"]
+        # -S error: only fail on errors; warnings/info/style surface via
+        # code review and the P3 hardened-hooks phase. -x: follow sourced
+        # files. Exclude .envrc — it's a direnv file, not a stand-alone
+        # script, and shellcheck can't detect shell without a shebang.
+        args: ["-x", "-S", "error"]
+        exclude: ^\.envrc$
 
   - repo: https://github.com/scop/pre-commit-shfmt
     rev: v3.10.0-2

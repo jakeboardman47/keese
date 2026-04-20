@@ -21,7 +21,7 @@ cd "${REPO_ROOT}"
 # placeholder examples when documenting template conventions).
 pattern='\{\{[A-Z_]+\}\}'
 
-if grep -rn --exclude-dir=.git --exclude-dir=docs/plans "${pattern}" . > /tmp/keese-placeholder-hits.txt 2>/dev/null; then
+if grep -rn --exclude-dir=.git --exclude-dir=docs/plans "${pattern}" . >/tmp/keese-placeholder-hits.txt 2>/dev/null; then
   log::err "template placeholders still present:"
   sed 's/^/  /' /tmp/keese-placeholder-hits.txt >&2
   exit 1

@@ -21,16 +21,17 @@ else
 fi
 
 log::info() { printf '%s[info]%s %s\n' "${__LOG_BLU}" "${__LOG_RST}" "$*"; }
-log::ok()   { printf '%s[ ok ]%s %s\n' "${__LOG_GRN}" "${__LOG_RST}" "$*"; }
+log::ok() { printf '%s[ ok ]%s %s\n' "${__LOG_GRN}" "${__LOG_RST}" "$*"; }
 log::warn() { printf '%s[warn]%s %s\n' "${__LOG_YEL}" "${__LOG_RST}" "$*" >&2; }
-log::err()  { printf '%s[err ]%s %s\n' "${__LOG_RED}" "${__LOG_RST}" "$*" >&2; }
-log::dim()  { printf '%s%s%s\n' "${__LOG_DIM}" "$*" "${__LOG_RST}"; }
+log::err() { printf '%s[err ]%s %s\n' "${__LOG_RED}" "${__LOG_RST}" "$*" >&2; }
+log::dim() { printf '%s%s%s\n' "${__LOG_DIM}" "$*" "${__LOG_RST}"; }
 
 # run::step <id> <desc> <fn> [args...]
 # Wraps a function call with start/end logging, duration, and a breadcrumb in
 # .plan-logs/state.json. Resume-friendly: --from / --to can skip steps by id.
 run::step() {
-  local id="$1" desc="$2" fn="$3"; shift 3
+  local id="$1" desc="$2" fn="$3"
+  shift 3
   local from="${RUN_FROM:-}" to="${RUN_TO:-}"
 
   # Resume gating.
@@ -44,15 +45,16 @@ run::step() {
   fi
 
   log::info "step ${id} — ${desc}"
-  local start; start="$(date +%s)"
+  local start
+  start="$(date +%s)"
 
   if "${fn}" "$@"; then
-    local elapsed=$(( $(date +%s) - start ))
+    local elapsed=$(($(date +%s) - start))
     log::ok "step ${id} — ${desc} (${elapsed}s)"
     run::_breadcrumb "${id}" "ok"
   else
     local rc=$?
-    local elapsed=$(( $(date +%s) - start ))
+    local elapsed=$(($(date +%s) - start))
     log::err "step ${id} — ${desc} failed (rc=${rc}, ${elapsed}s)"
     run::_breadcrumb "${id}" "fail"
     return "${rc}"
@@ -64,9 +66,9 @@ run::_breadcrumb() {
   local state="${PLAN_LOGS:-/tmp}/state.json"
   if command -v jq >/dev/null 2>&1 && [[ -f "${state}" ]]; then
     jq --arg id "${id}" --arg s "${status}" \
-      '.last_step = $id | .steps[$id] = $s' "${state}" > "${state}.tmp" \
+      '.last_step = $id | .steps[$id] = $s' "${state}" >"${state}.tmp" \
       && mv "${state}.tmp" "${state}"
   else
-    printf '{"last_step":"%s","steps":{"%s":"%s"}}\n' "${id}" "${id}" "${status}" > "${state}"
+    printf '{"last_step":"%s","steps":{"%s":"%s"}}\n' "${id}" "${id}" "${status}" >"${state}"
   fi
 }

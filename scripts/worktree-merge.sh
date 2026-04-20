@@ -15,22 +15,26 @@ source "${HERE}/lib/paths.sh"
 # shellcheck source=scripts/lib/log.sh
 source "${HERE}/lib/log.sh"
 
-if (( $# < 1 )); then
+if (($# < 1)); then
   log::err "usage: $(basename "$0") <branch> [--squash] [--keep-worktree] [--no-verify-green]"
   exit 2
 fi
 
-branch="$1"; shift
+branch="$1"
+shift
 squash=0
 keep_worktree=0
 verify_green=1
 
 for arg in "$@"; do
   case "${arg}" in
-    --squash)           squash=1 ;;
-    --keep-worktree)    keep_worktree=1 ;;
-    --no-verify-green)  verify_green=0 ;;
-    *) log::err "unknown flag: ${arg}"; exit 2 ;;
+    --squash) squash=1 ;;
+    --keep-worktree) keep_worktree=1 ;;
+    --no-verify-green) verify_green=0 ;;
+    *)
+      log::err "unknown flag: ${arg}"
+      exit 2
+      ;;
   esac
 done
 
@@ -48,8 +52,8 @@ fi
 log::info "worktree: ${wt_path}"
 
 # Refuse to merge a branch that touches protected paths without explicit override.
-protected_hits="$(git -C "${wt_path}" diff --name-only "main...${branch}" | \
-  grep -E '^(CLAUDE\.md|MEMORY\.md|\.claude/rules/|\.claude/settings\.json)$' || true)"
+protected_hits="$(git -C "${wt_path}" diff --name-only "main...${branch}" \
+  | grep -E '^(CLAUDE\.md|MEMORY\.md|\.claude/rules/|\.claude/settings\.json)$' || true)"
 if [[ -n "${protected_hits}" ]]; then
   log::err "branch ${branch} touches protected paths (edit on main instead):"
   echo "${protected_hits}" | sed 's/^/  /'
@@ -57,10 +61,13 @@ if [[ -n "${protected_hits}" ]]; then
 fi
 
 # Verify green.
-if (( verify_green )); then
+if ((verify_green)); then
   log::info "verifying green in worktree (lint + test)"
-  ( cd "${wt_path}" && make lint && make test ) \
-    || { log::err "verification failed; aborting merge"; exit 1; }
+  (cd "${wt_path}" && make lint && make test) \
+    || {
+      log::err "verification failed; aborting merge"
+      exit 1
+    }
 fi
 
 # Sync origin, rebase, fast-forward or squash.
@@ -69,10 +76,13 @@ git fetch origin main
 git checkout main
 git pull --ff-only origin main
 
-if (( squash )); then
+if ((squash)); then
   log::info "squash-merging ${branch}"
   git merge --squash "${branch}"
-  git diff --cached --quiet && { log::warn "nothing to commit after squash"; exit 0; }
+  git diff --cached --quiet && {
+    log::warn "nothing to commit after squash"
+    exit 0
+  }
 
   msg="$(git -C "${wt_path}" log --pretty=%B "main..${branch}" | head -1)"
   [[ -z "${msg}" ]] && msg="chore(${branch}): squash merge"
@@ -88,7 +98,7 @@ else
 fi
 
 # Cleanup unless asked to keep.
-if (( ! keep_worktree )); then
+if ((!keep_worktree)); then
   log::info "removing worktree ${wt_path}"
   git worktree remove "${wt_path}" --force
   log::info "deleting branch ${branch}"

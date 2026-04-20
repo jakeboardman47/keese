@@ -13,7 +13,9 @@ env::load_local() {
   local path="${1:-${REPO_ROOT:-.}/.env.local}"
   if [[ -f "${path}" ]]; then
     # shellcheck disable=SC1090
-    set -a; source "${path}"; set +a
+    set -a
+    source "${path}"
+    set +a
     return 0
   fi
   return 1

@@ -19,23 +19,26 @@ if [[ ! -f "$file_path" ]]; then exit 0; fi
 
 # Skip file types that do not need the header.
 case "$file_path" in
-  */zz_generated*.go|*.pb.go) exit 0 ;;
-  */LICENSE|*/CODEOWNERS) exit 0 ;;
-  */go.sum|*/go.mod|*/flake.lock) exit 0 ;;
-  */.secrets.baseline|*/.commitlintrc.json) exit 0 ;;
-  *.json|*.toml|*.svg|*.png|*.jpg|*.jpeg|*.gif|*.pdf|*.ico) exit 0 ;;
-  */book/site/*|*/.plan-logs/*|*/vendor/*|*/.go/*|*/node_modules/*) exit 0 ;;
+  */zz_generated*.go | *.pb.go) exit 0 ;;
+  */LICENSE | */CODEOWNERS) exit 0 ;;
+  */go.sum | */go.mod | */flake.lock) exit 0 ;;
+  */.secrets.baseline | */.commitlintrc.json) exit 0 ;;
+  *.json | *.toml | *.svg | *.png | *.jpg | *.jpeg | *.gif | *.pdf | *.ico) exit 0 ;;
+  */book/site/* | */.plan-logs/* | */vendor/* | */.go/* | */node_modules/*) exit 0 ;;
 esac
 
 # Target extensions / basenames that should have a header.
 should_check=false
 case "$file_path" in
-  *.go|*.sh|*.bash|*.py|*.yaml|*.yml|*.nix|*.tf|*.hcl|*.mk|*.proto|*.ts|*.js)
-    should_check=true ;;
-  */Makefile|*.Makefile|*/Dockerfile|*.Dockerfile|*/Containerfile)
-    should_check=true ;;
-  *.md|*.markdown)
-    should_check=true ;;
+  *.go | *.sh | *.bash | *.py | *.yaml | *.yml | *.nix | *.tf | *.hcl | *.mk | *.proto | *.ts | *.js)
+    should_check=true
+    ;;
+  */Makefile | *.Makefile | */Dockerfile | *.Dockerfile | */Containerfile)
+    should_check=true
+    ;;
+  *.md | *.markdown)
+    should_check=true
+    ;;
 esac
 
 if [[ "$should_check" != true ]]; then exit 0; fi

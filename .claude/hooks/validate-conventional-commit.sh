@@ -46,7 +46,7 @@ fi
 
 # Subject length
 subject="${msg#*: }"
-if (( ${#subject} > 72 )); then
+if ((${#subject} > 72)); then
   jq -n --arg reason "commit subject is ${#subject} chars; keep it ≤ 72" '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

@@ -35,7 +35,7 @@ check_one() {
   fi
 
   if grep -q '^[[:space:]]*#.*status:[[:space:]]*stale' "$src" \
-     || grep -q '^[[:space:]]*%%.*status:[[:space:]]*stale' "$src"; then
+    || grep -q '^[[:space:]]*%%.*status:[[:space:]]*stale' "$src"; then
     log::warn "stale (skipped): $src"
     return
   fi
@@ -45,15 +45,31 @@ check_one() {
   trap 'rm -f "$tmp"' RETURN
 
   case "$renderer" in
-    d2)   d2   "$src" "$tmp" >/dev/null 2>&1 || { log::err "d2 render failed: $src";   fail=1; return; } ;;
-    mmdc) mmdc -i "$src" -o "$tmp" -q       >/dev/null 2>&1 || { log::err "mmdc render failed: $src"; fail=1; return; } ;;
-    dot)  dot -Tsvg "$src" -o "$tmp"        >/dev/null 2>&1 || { log::err "dot render failed: $src";  fail=1; return; } ;;
-    *)    log::err "unknown renderer: $renderer"; fail=1; return ;;
+    d2) d2 "$src" "$tmp" >/dev/null 2>&1 || {
+      log::err "d2 render failed: $src"
+      fail=1
+      return
+    } ;;
+    mmdc) mmdc -i "$src" -o "$tmp" -q >/dev/null 2>&1 || {
+      log::err "mmdc render failed: $src"
+      fail=1
+      return
+    } ;;
+    dot) dot -Tsvg "$src" -o "$tmp" >/dev/null 2>&1 || {
+      log::err "dot render failed: $src"
+      fail=1
+      return
+    } ;;
+    *)
+      log::err "unknown renderer: $renderer"
+      fail=1
+      return
+      ;;
   esac
 
   # Normalize whitespace-only differences so timestamps/comments don't trip drift.
   if ! diff -q <(sed -E 's/[[:space:]]+/ /g' "$tmp") \
-              <(sed -E 's/[[:space:]]+/ /g' "$out") >/dev/null 2>&1; then
+    <(sed -E 's/[[:space:]]+/ /g' "$out") >/dev/null 2>&1; then
     log::err "drift: $out — source has changed since render"
     log::dim "  re-render: ${renderer} ${src} ${out}"
     fail=1
@@ -75,7 +91,7 @@ scan d2 d2
 scan mmd mmdc
 scan dot dot
 
-if (( fail )); then
+if ((fail)); then
   log::err "diagram freshness check FAILED — re-render and re-stage"
   exit 1
 fi

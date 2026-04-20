@@ -12,12 +12,14 @@ __signals_stage=0
 __signals_child_pid=
 
 __signals_on_signal() {
-  if (( __signals_stage == 0 )); then
+  if ((__signals_stage == 0)); then
     __signals_stage=1
     log::warn "graceful shutdown (SIGTERM -> pid ${__signals_child_pid})"
     kill -TERM "${__signals_child_pid}" 2>/dev/null || true
-    ( sleep "${SIGNALS_GRACE_SECONDS}"
-      kill -KILL "${__signals_child_pid}" 2>/dev/null || true ) &
+    (
+      sleep "${SIGNALS_GRACE_SECONDS}"
+      kill -KILL "${__signals_child_pid}" 2>/dev/null || true
+    ) &
   else
     log::err "force quit (SIGKILL -> pid ${__signals_child_pid})"
     kill -KILL "${__signals_child_pid}" 2>/dev/null || true

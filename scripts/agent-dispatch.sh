@@ -19,21 +19,26 @@ source "${HERE}/lib/paths.sh"
 # shellcheck source=scripts/lib/log.sh
 source "${HERE}/lib/log.sh"
 
-if (( $# < 2 )); then
+if (($# < 2)); then
   log::err "usage: $(basename "$0") <phase-id> <agent-name> [--branch=<name>] [--base=<ref>]"
   exit 2
 fi
 
-phase_id="$1"; shift
-agent_name="$1"; shift
+phase_id="$1"
+shift
+agent_name="$1"
+shift
 
 branch=""
 base="main"
 for arg in "$@"; do
   case "${arg}" in
     --branch=*) branch="${arg#--branch=}" ;;
-    --base=*)   base="${arg#--base=}" ;;
-    *) log::err "unknown flag: ${arg}"; exit 2 ;;
+    --base=*) base="${arg#--base=}" ;;
+    *)
+      log::err "unknown flag: ${arg}"
+      exit 2
+      ;;
   esac
 done
 
@@ -47,7 +52,8 @@ wt_path="${wt_base}/${slug}-${agent_name}"
 
 # Preconditions
 git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
-  log::err "not inside a git repo"; exit 1
+  log::err "not inside a git repo"
+  exit 1
 }
 
 # Validate agent name against known agents.
@@ -77,7 +83,7 @@ fi
 
 # Seed the worktree's .plan-logs/ with a prompt file for the agent.
 mkdir -p "${wt_path}/.plan-logs"
-cat > "${wt_path}/.plan-logs/prompt.md" <<EOF
+cat >"${wt_path}/.plan-logs/prompt.md" <<EOF
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright (c) 2026 keese-ai -->
 
