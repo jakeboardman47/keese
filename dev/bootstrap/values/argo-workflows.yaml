@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Argo Workflows values for local dev — single-replica controller + server,
+# auth disabled in dev for frictionless access.
+#
+# In production: enable SSO (OIDC via Dex) and RBAC.
+# keese Workflow CRs project to Argo WorkflowTemplates (see D20).
+#
+# Refs: docs/designs/03-workflow-argo-delegation.md
+
+workflow:
+  # Namespace where workflow CRDs and RBAC are installed.
+  namespace: argo
+  serviceAccount:
+    create: true
+    name: argo-workflow
+
+controller:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+server:
+  enabled: true
+  replicaCount: 1
+  # Disable auth in dev — anyone with cluster access can use the UI.
+  authModes:
+    - server
+  extraArgs:
+    - "--auth-mode=server"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# Use the in-cluster executor (emissary) — safer than docker socket.
+executor:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi

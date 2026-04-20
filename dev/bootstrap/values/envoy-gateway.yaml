@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Envoy Gateway values for local dev (single GatewayClass, info logging).
+# The AI Gateway release layered on top references this GatewayClass name.
+
+config:
+  envoyGateway:
+    logging:
+      level:
+        default: info
+    gateway:
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+
+# Create the GatewayClass so the AI Gateway can reference it immediately.
+extraObjects:
+  - apiVersion: gateway.networking.k8s.io/v1
+    kind: GatewayClass
+    metadata:
+      name: keese-gateway
+    spec:
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+      description: "keese local dev gateway class"

@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Envoy AI Gateway values for local dev.
+# - Installs MCPRoute + AIGatewayRoute CRDs.
+# - Enables BackendSecurityPolicy for per-tenant credential injection.
+# - Wires ext_authz to openfga-authz service for ReBAC enforcement (D4/D5a).
+#
+# Refs: docs/designs/05a-envoy-ai-gateway-topology.md
+#       docs/designs/05b-credential-injection-patterns.md
+
+# Install AI-Gateway-specific CRDs alongside the chart.
+crds:
+  install: true
+  keep: true
+
+# Enable BackendSecurityPolicy controller for three-table credential
+# decomposition (Route → BackendSecurityPolicy → OpenFGA tuple).
+backendSecurityPolicy:
+  enabled: true
+
+# Ext_authz cluster pointing at the OpenFGA authz sidecar/service.
+# The service is created by the keese operator or a stand-alone
+# authz adapter (see design 05a).
+extAuthz:
+  cluster: openfga-authz
+  service: openfga-authz.openfga.svc.cluster.local
+  port: 9191
+  failureModeAllow: false  # fail-closed on authz service unavailability
+
+# AI Gateway controller log level.
+logging:
+  level: info

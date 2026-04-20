@@ -18,10 +18,17 @@ fi
 
 failed=0
 while IFS= read -r -d '' f; do
-  if ! grep -qE 'signal\.(Notify|NotifyContext)[^)]*SIGTERM' "${f}"; then
-    echo "check-signal-handling: ${f} is missing signal.Notify(...)/signal.NotifyContext(...) SIGTERM handler" >&2
-    failed=1
+  # Accept any of:
+  #   signal.Notify(*, syscall.SIGTERM)
+  #   signal.NotifyContext(*, syscall.SIGTERM)
+  #   ctrl.SetupSignalHandler()            # controller-runtime: installs SIGTERM+SIGINT
+  #   signals.SetupSignalHandler()         # alternate import alias
+  if grep -qE 'signal\.(Notify|NotifyContext)[^)]*SIGTERM' "${f}" \
+    || grep -qE '(ctrl|signals)\.SetupSignalHandler\(\)' "${f}"; then
+    continue
   fi
+  echo "check-signal-handling: ${f} is missing a SIGTERM handler (signal.Notify or ctrl.SetupSignalHandler)" >&2
+  failed=1
 done < <(find cmd -name 'main.go' -print0)
 
 exit "${failed}"

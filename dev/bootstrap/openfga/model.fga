@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# OpenFGA DSL authorization model for keese.
+# Loaded by the seed Job (seed.yaml) after store creation.
+#
+# Types defined here map to the key entities in the system:
+#   tenant        → top-level isolation boundary (Capsule Tenant)
+#   workspace     → agent execution scope (keese Workspace CR)
+#   tool          → callable function/extension exposed to agents
+#   extension     → RuntimeExtension provider (tool set)
+#   credential    → BackendSecurityPolicy-referenced secret
+#   memory        → Memory / SharedMemory CR backends
+#   service_account → projected Kubernetes SA per workspace
+#   user          → human operator or CI identity
+#
+# Relations encode the ReBAC model described in design 04a-openfga-authz-model.md.
+# TODO(design-gate): finalize tuple shapes once design 04a reaches status: current.
+
+model
+  schema 1.1
+
+type user
+
+type service_account
+  relations
+    define member_of: [tenant]
+
+type tenant
+  relations
+    define admin: [user]
+    define member: [user, service_account] or admin
+    define viewer: [user] or member
+
+type workspace
+  relations
+    define owner: [tenant]
+    define admin: [user] or admin from owner
+    define editor: [user] or admin
+    define viewer: [user] or editor
+    define can_run: editor
+    define can_read_memory: viewer
+    define can_write_memory: editor
+
+type tool
+  relations
+    define owner: [extension]
+    define allowed_in: [workspace]
+    define can_call: [service_account, user] and allowed_in
+
+type extension
+  relations
+    define owner: [tenant]
+    define enabled_in: [workspace]
+
+type credential
+  relations
+    define owner: [tenant]
+    define bound_to: [workspace]
+    define can_use: [service_account] and bound_to
+
+type memory
+  relations
+    define owner: [workspace]
+    define reader: [user, service_account] or owner from owner
+    define writer: [user, service_account] or owner from owner
+    define can_read: reader
+    define can_write: writer

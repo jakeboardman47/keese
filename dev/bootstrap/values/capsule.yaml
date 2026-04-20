@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Capsule values for local dev — single replica, dev resource limits.
+# Capsule directly manages keese tenants (D3: no keese Tenant CRD).
+#
+# Refs: docs/designs/01-tenancy-capsule.md
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+manager:
+  options:
+    # Enforce PodSecurity labels on tenant namespaces at restricted baseline.
+    forceTenantPrefix: false
+    # Allow tenant admins to create namespaces without prefix in dev.
+    protectedNamespaceRegex: ""
+
+# Disable webhook TLS for dev simplicity (cert-manager TLS optional here).
+webhookOptions:
+  service:
+    port: 9443

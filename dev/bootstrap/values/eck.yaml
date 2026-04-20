@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# ECK Operator values for local dev. The operator manages Elasticsearch,
+# Kibana, and APM Server CRs defined in dev/bootstrap/values/eck-stack.yaml
+# (applied as post-install extraObjects here for single-release simplicity).
+#
+# Refs: docs/designs/10a-otel-topology.md
+
+# ECK operator itself — lightweight, single replica.
+replicaCount: 1
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Post-install ECK stack: 1-node ES, Kibana, APM Server.
+# Memory mapped files disabled (vm.max_map_count override not required in kind).
+extraObjects:
+  # ── Elasticsearch ──────────────────────────────────────────────────────
+  - apiVersion: elasticsearch.k8s.elastic.co/v1
+    kind: Elasticsearch
+    metadata:
+      name: keese-es
+      namespace: elastic-system
+    spec:
+      version: "8.14.0" # unverified-2026
+      nodeSets:
+        - name: default
+          count: 1
+          config:
+            node.store.allow_mmap: false
+          podTemplate:
+            spec:
+              containers:
+                - name: elasticsearch
+                  resources:
+                    limits:
+                      memory: 1Gi
+                      cpu: 500m
+                    requests:
+                      memory: 1Gi
+                      cpu: 100m
+                  env:
+                    - name: ES_JAVA_OPTS
+                      value: "-Xms512m -Xmx512m"
+          volumeClaimTemplates:
+            - metadata:
+                name: elasticsearch-data
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 5Gi
+
+  # ── Kibana ────────────────────────────────────────────────────────────
+  - apiVersion: kibana.k8s.elastic.co/v1
+    kind: Kibana
+    metadata:
+      name: keese-kibana
+      namespace: elastic-system
+    spec:
+      version: "8.14.0" # unverified-2026
+      count: 1
+      elasticsearchRef:
+        name: keese-es
+
+  # ── APM Server ────────────────────────────────────────────────────────
+  - apiVersion: apm.k8s.elastic.co/v1
+    kind: ApmServer
+    metadata:
+      name: keese-apm
+      namespace: elastic-system
+    spec:
+      version: "8.14.0" # unverified-2026
+      count: 1
+      elasticsearchRef:
+        name: keese-es

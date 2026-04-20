@@ -28,7 +28,6 @@ import (
 // gate opens. See .claude/rules/04-kubernetes.md and the plan file.
 // WorkflowRunSpec defines the desired state of WorkflowRun.
 type WorkflowRunSpec struct {
-
 }
 
 // WorkflowRunStatus defines the observed state of WorkflowRun.

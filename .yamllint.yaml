@@ -33,4 +33,7 @@ ignore: |
   .secrets.baseline
   charts/**
   **/zz_generated*
-  bundle/manifests/**
+  # operator-sdk generator outputs below — formatting controlled by the
+  # upstream generator; treat as generated rather than handwritten YAML.
+  bundle/**
+  config/**

@@ -28,7 +28,6 @@ import (
 // gate opens. See .claude/rules/04-kubernetes.md and the plan file.
 // WorkspaceShareSpec defines the desired state of WorkspaceShare.
 type WorkspaceShareSpec struct {
-
 }
 
 // WorkspaceShareStatus defines the observed state of WorkspaceShare.

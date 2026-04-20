@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Qdrant values for local dev — single node, 5Gi PVC, OTEL metrics export.
+# Used as the default vector backend for Memory CRs with
+# spec.provider.qdrant (see docs/designs/15-memory-management.md).
+
+replicaCount: 1
+
+persistence:
+  # Use a PVC so vector collections survive pod restarts.
+  enabled: true
+  size: 5Gi
+  accessModes:
+    - ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+config:
+  telemetry_disabled: false
+
+# OTEL metrics export to the collector.
+metrics:
+  serviceMonitor:
+    enabled: false  # dev stack uses OTEL, not Prom SM
+  otel:
+    enabled: true
+    endpoint: "otel-collector.observability.svc.cluster.local:4317"

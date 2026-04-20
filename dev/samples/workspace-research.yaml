@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Sample keese Workspace CR for tenant-a — "research" workspace.
+# References an AgentRuntime, Memory backends, and a GuardrailBinding.
+# Fields marked FIXME(design-gate) depend on schema finalization in P4 specs.
+#
+# Refs: docs/designs/02-workspace-model.md
+#       docs/designs/07-agent-runtime-spi.md
+#       docs/designs/15-memory-management.md
+
+apiVersion: workspace.operator.keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: research
+  namespace: tenant-a-default
+  labels:
+    keese.ai/tenant: tenant-a
+    keese.ai/purpose: research
+    keese.ai/env: dev
+spec:
+  # FIXME(design-gate): tenant binding field name from workspace spec doc
+  tenantRef:
+    name: tenant-alpha
+    kind: Tenant
+    apiGroup: capsule.clastix.io
+
+  # Agent runtime — goose headless via recipe execution.
+  # FIXME(design-gate): runtimeRef schema from design 07 / runtime spec
+  runtimeRef:
+    name: goose-default
+    kind: AgentRuntime
+    apiGroup: runtime.operator.keese.ai
+
+  # Memory backends — SQLite session store + Qdrant knowledge vector DB.
+  # FIXME(design-gate): memoryRefs schema from design 15 / memory spec
+  memoryRefs:
+    - name: ws-sessions-sqlite
+      kind: Memory
+      apiGroup: memory.operator.keese.ai
+    - name: tenant-knowledge-qdrant
+      kind: SharedMemory
+      apiGroup: memory.operator.keese.ai
+
+  # Guardrail binding — inherits tenant-alpha-strict policy.
+  # FIXME(design-gate): guardrailBindingRef schema from design 06 / guardrail spec
+  guardrailBindingRef:
+    name: tenant-alpha-strict
+    kind: GuardrailBinding
+    apiGroup: guardrail.operator.keese.ai
+
+  # Resource sizing for the agent pod.
+  # FIXME(design-gate): resources field from design 02 / workspace spec
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # Idle eviction — reclaim resources if no active sessions for 30m.
+  # FIXME(design-gate): idleEviction field from design 02
+  idleEviction:
+    after: 30m

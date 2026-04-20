@@ -1,0 +1,158 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Kubernetes Job that seeds the OpenFGA store with the keese authorization
+# model. Steps (all idempotent via ConfigMap guard):
+#   1. fga store create  → store ID written to ConfigMap openfga-config
+#   2. fga model write   → model loaded from /model.fga
+#   3. ConfigMap updated with authorization model ID
+#
+# The Job is triggered by Tilt via kustomize('dev/bootstrap/openfga/seed').
+# Re-running is safe: the Job checks for the ConfigMap before creating a
+# new store.
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openfga-config
+  namespace: openfga
+  labels:
+    app.kubernetes.io/managed-by: keese-infra-bootstrap
+data:
+  # Populated by the seed Job; empty until seeded.
+  store_id: ""
+  authorization_model_id: ""
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openfga-seed
+  namespace: openfga
+  labels:
+    app.kubernetes.io/managed-by: keese-infra-bootstrap
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openfga-seed
+  namespace: openfga
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [openfga-config]
+    verbs: [get, patch, update]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openfga-seed
+  namespace: openfga
+subjects:
+  - kind: ServiceAccount
+    name: openfga-seed
+    namespace: openfga
+roleRef:
+  kind: Role
+  name: openfga-seed
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openfga-seed
+  namespace: openfga
+  labels:
+    app.kubernetes.io/managed-by: keese-infra-bootstrap
+  annotations:
+    # Tilt will re-apply this Job when the model.fga file changes.
+    tilt.dev/restart-on: "dev/bootstrap/openfga/model.fga"
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openfga-seed
+    spec:
+      serviceAccountName: openfga-seed
+      restartPolicy: OnFailure
+      volumes:
+        - name: model
+          configMap:
+            name: openfga-model-fga
+      initContainers:
+        # Load model.fga into a ConfigMap-mounted volume.
+        []
+      containers:
+        - name: seed
+          # fga CLI image — pin by digest in production.
+          image: ghcr.io/openfga/cli:v0.6.2 # unverified-2026
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+
+              FGA_API_URL="${FGA_API_URL:-http://openfga.openfga.svc.cluster.local:8080}"
+              CM_NAMESPACE="openfga"
+              CM_NAME="openfga-config"
+
+              # Check if store already seeded by inspecting the ConfigMap.
+              existing_store=$(kubectl get configmap "${CM_NAME}" -n "${CM_NAMESPACE}" \
+                -o jsonpath='{.data.store_id}' 2>/dev/null || echo "")
+
+              if [[ -n "${existing_store}" && "${existing_store}" != "\"\"" ]]; then
+                echo "OpenFGA already seeded (store_id=${existing_store}); skipping."
+                exit 0
+              fi
+
+              # Step 1: Create store.
+              echo "Creating OpenFGA store..."
+              store_id=$(fga store create --api-url "${FGA_API_URL}" \
+                --name keese-dev | jq -r '.store.id')
+              echo "Store created: ${store_id}"
+
+              # Step 2: Write authorization model.
+              echo "Writing authorization model..."
+              model_id=$(fga model write --api-url "${FGA_API_URL}" \
+                --store-id "${store_id}" \
+                --file /model/model.fga | jq -r '.authorization_model_id')
+              echo "Model written: ${model_id}"
+
+              # Step 3: Update ConfigMap with store + model IDs.
+              kubectl patch configmap "${CM_NAME}" -n "${CM_NAMESPACE}" \
+                --type merge \
+                -p "{\"data\":{\"store_id\":\"${store_id}\",\"authorization_model_id\":\"${model_id}\"}}"
+
+              echo "OpenFGA seeding complete."
+          env:
+            - name: FGA_API_URL
+              value: "http://openfga.openfga.svc.cluster.local:8080"
+          volumeMounts:
+            - name: model
+              mountPath: /model
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+
+---
+# ConfigMap holding the raw model.fga content, mounted into the seed Job.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openfga-model-fga
+  namespace: openfga
+  labels:
+    app.kubernetes.io/managed-by: keese-infra-bootstrap
+binaryData: {}
+# NOTE: The Tiltfile loads this ConfigMap via kustomize which reads
+# model.fga from disk. The kustomization.yaml in this directory uses
+# a configMapGenerator to embed the file.

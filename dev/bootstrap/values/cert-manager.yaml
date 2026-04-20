@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# cert-manager values for local dev. CRDs installed via the chart
+# (installCRDs: true). A self-signed ClusterIssuer is seeded after
+# cert-manager is healthy; downstream issuers (openfga, openbao, etc.)
+# are created by their respective helmfile releases.
+
+installCRDs: true
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+webhook:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+cainjector:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# Prometheus ServiceMonitor (disabled — dev stack uses ECK, not Prom)
+prometheus:
+  enabled: false
+
+# Self-signed bootstrap ClusterIssuer — created post-install via
+# an extraObject so cert-manager CRDs are present first.
+extraObjects:
+  - apiVersion: cert-manager.io/v1
+    kind: ClusterIssuer
+    metadata:
+      name: selfsigned-cluster-issuer
+    spec:
+      selfSigned: {}

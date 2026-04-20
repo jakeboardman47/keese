@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# ctlptl Cluster spec — creates a kind cluster named keese-dev with a local
+# registry (ctlptl-registry) on host port 5005. ctlptl is idempotent: re-running
+# `ctlptl apply -f dev/kind/ctlptl.yaml` is safe.
+#
+# Prerequisites: kind, ctlptl, docker (or podman)
+# Usage (via Makefile): make kind-up
+#          Direct:      ctlptl apply -f dev/kind/ctlptl.yaml
+
+apiVersion: ctlptl.dev/v1alpha1
+kind: Registry
+metadata:
+  name: ctlptl-registry
+spec:
+  # Expose the local registry on host port 5005. ctlptl auto-wires
+  # containerd registry mirrors inside the kind nodes.
+  port: 5005
+
+---
+apiVersion: ctlptl.dev/v1alpha1
+kind: Cluster
+metadata:
+  name: kind-keese-dev
+spec:
+  product: kind
+  # ctlptl passes this file as `--config` to `kind create cluster`.
+  # The file defines node topology, labels, taints, port mappings,
+  # featureGates, podSubnet, serviceSubnet, and containerd mounts.
+  kindV1Alpha4Cluster:
+    name: keese-dev
+  # Wire the local registry created above.
+  registry: ctlptl-registry

@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Kyverno values for local dev — admission controller + background controller.
+# Used as the Kyverno-side component of GuardrailBinding composition (D14).
+#
+# Refs: docs/designs/06-guardrailbinding.md
+
+admissionController:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+backgroundController:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+cleanupController:
+  enabled: false  # not needed in dev
+
+reportsController:
+  enabled: false  # not needed in dev
+
+features:
+  policyExceptions:
+    enabled: true
+  logging:
+    verbosity: 2

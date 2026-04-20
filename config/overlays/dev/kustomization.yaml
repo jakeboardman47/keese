@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Kustomize overlay for local dev.
+# Extends config/default with dev-mode image tag and labels.
+# Applied by Tilt after bootstrap-infra completes.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../default
+
+# Swap the controller image to the locally-built dev tag pushed to
+# the ctlptl-managed local registry (localhost:5005).
+images:
+  - name: controller
+    newName: keese-ai/keese-operator
+    newTag: dev
+
+# Dev-specific labels for easy filtering.
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: tilt
+      keese.ai/env: dev
+    includeSelectors: false
+
+# Patch the manager Deployment to enable dlv debug port and reduce
+# resource limits for local node capacity.
+patches:
+  - target:
+      kind: Deployment
+      name: keese-controller-manager
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/ports/-
+        value:
+          name: dlv
+          containerPort: 2345
+          protocol: TCP
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "256Mi"

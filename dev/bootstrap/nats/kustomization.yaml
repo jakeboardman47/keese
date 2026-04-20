@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Kustomize overlay for NATS Stream + Consumer resources.
+# Used by the Tiltfile: k8s_yaml(kustomize('dev/bootstrap/nats/streams'))
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: nats
+
+resources:
+  - streams.yaml

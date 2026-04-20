@@ -28,7 +28,6 @@ import (
 // gate opens. See .claude/rules/04-kubernetes.md and the plan file.
 // TokenBudgetSpec defines the desired state of TokenBudget.
 type TokenBudgetSpec struct {
-
 }
 
 // TokenBudgetStatus defines the observed state of TokenBudget.

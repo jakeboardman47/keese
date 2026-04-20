@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# OpenFGA values for local dev — in-memory store (no Postgres dependency),
+# playground UI enabled, OTEL export to the collector.
+#
+# NOTE: in-memory store does not survive pod restarts. For dev parity with
+# prod persistence, swap datastore.engine to postgres and provision a PG instance.
+#
+# Refs: docs/designs/04a-openfga-authz-model.md
+
+replicaCount: 1
+
+datastore:
+  engine: memory
+
+playground:
+  enabled: true
+  port: 3000
+
+grpc:
+  addr: "0.0.0.0:8081"
+
+http:
+  addr: "0.0.0.0:8080"
+
+telemetry:
+  metrics:
+    enabled: true
+  traces:
+    otlp:
+      endpoint: "otel-collector.observability.svc.cluster.local:4317"
+      tls:
+        enabled: false
+
+# Expose port 8080 (HTTP) and 8081 (gRPC) for seed Job and ext_authz access.
+service:
+  httpPort: 8080
+  grpcPort: 8081

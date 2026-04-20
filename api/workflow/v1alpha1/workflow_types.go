@@ -28,7 +28,6 @@ import (
 // gate opens. See .claude/rules/04-kubernetes.md and the plan file.
 // WorkflowSpec defines the desired state of Workflow.
 type WorkflowSpec struct {
-
 }
 
 // WorkflowStatus defines the observed state of Workflow.

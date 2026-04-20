@@ -28,7 +28,6 @@ import (
 // gate opens. See .claude/rules/04-kubernetes.md and the plan file.
 // GuardrailBindingSpec defines the desired state of GuardrailBinding.
 type GuardrailBindingSpec struct {
-
 }
 
 // GuardrailBindingStatus defines the observed state of GuardrailBinding.

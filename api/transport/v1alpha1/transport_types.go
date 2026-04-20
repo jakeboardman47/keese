@@ -28,7 +28,6 @@ import (
 // gate opens. See .claude/rules/04-kubernetes.md and the plan file.
 // TransportSpec defines the desired state of Transport.
 type TransportSpec struct {
-
 }
 
 // TransportStatus defines the observed state of Transport.

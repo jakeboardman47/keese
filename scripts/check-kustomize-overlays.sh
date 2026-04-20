@@ -29,6 +29,6 @@ while IFS= read -r -d '' dir; do
     kustomize build "${dir}" 2>&1 | sed 's/^/  /' >&2 || true
     failed=1
   fi
-done < <(find config \( -name kustomization.yaml -o -name kustomization.yml \) -print0)
+done < <(find config \( -name kustomization.yaml -o -name kustomization.yml \) -exec dirname {} \; | tr '\n' '\0')
 
 exit "${failed}"

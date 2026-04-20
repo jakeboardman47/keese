@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# NACK Stream and Consumer CRs for the keese messaging layer.
+# Applied by Tilt via kustomize('dev/bootstrap/nats/streams').
+#
+# Stream AGENT_MSG:
+#   subjects: agent.> and workspace.*.msg.>
+#   Retention: 24h (limits), storage: file
+#
+# Consumer workflow-runner:
+#   Durable, explicit ack, pull-based — consumed by Argo workflow steps
+#   and the keese Workflow controller.
+#
+# Refs: docs/designs/09-transport-crd.md
+
+---
+apiVersion: jetstream.nats.io/v1beta2
+kind: Stream
+metadata:
+  name: agent-msg
+  namespace: nats
+  labels:
+    app.kubernetes.io/managed-by: keese-infra-bootstrap
+spec:
+  name: AGENT_MSG
+  subjects:
+    - "agent.>"
+    - "workspace.*.msg.>"
+  storage: file
+  # 24h retention by age; also capped at 1GiB for dev.
+  maxAge: 86400s
+  maxBytes: 1073741824  # 1 GiB
+  retention: limits
+  discard: old
+  maxMsgs: 100000
+  maxMsgSize: 1048576  # 1 MiB per message
+  replicas: 1
+  description: "keese agent and workspace messaging stream"
+
+---
+apiVersion: jetstream.nats.io/v1beta2
+kind: Consumer
+metadata:
+  name: workflow-runner
+  namespace: nats
+  labels:
+    app.kubernetes.io/managed-by: keese-infra-bootstrap
+spec:
+  streamName: AGENT_MSG
+  durableName: workflow-runner
+  deliverPolicy: all
+  ackPolicy: explicit
+  ackWait: 30s
+  maxDeliver: 5
+  filterSubject: "agent.>"
+  description: "durable pull consumer for keese workflow runner"

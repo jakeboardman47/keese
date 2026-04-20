@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kind Cluster config — 1 control-plane + 3 workers with per-tenant labels/taints.
+# Node layout:
+#   worker-1 → system infra (tainted NoSchedule)
+#   worker-2 → tenant-a workloads (standard tier)
+#   worker-3 → tenant-b workloads (isolated tier, tainted NoSchedule)
+#
+# Port mappings expose cluster services on the host for local dev convenience.
+# PodSubnet / ServiceSubnet chosen to avoid common 192.168/10.0 conflicts.
+# extraMounts persists containerd layer cache to survive cluster recreation.
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+name: keese-dev
+
+networking:
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/16"
+  kubeProxyMode: iptables
+
+featureGates:
+  # GA in K8s 1.25; keep explicit for clarity and documentation purposes.
+  PodSecurity: true
+
+nodes:
+  # ── Control plane ──────────────────────────────────────────────────────
+  - role: control-plane
+
+  # ── Worker 1 — system / infra ──────────────────────────────────────────
+  - role: worker
+    labels:
+      keese.ai/tenant: system
+      keese.ai/purpose: infra
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          taints:
+            - key: keese.ai/system
+              value: "true"
+              effect: NoSchedule
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+        listenAddress: "127.0.0.1"
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+        listenAddress: "127.0.0.1"
+      - containerPort: 9200
+        hostPort: 9200
+        protocol: TCP
+        listenAddress: "127.0.0.1"
+      - containerPort: 5601
+        hostPort: 5601
+        protocol: TCP
+        listenAddress: "127.0.0.1"
+      - containerPort: 8200
+        hostPort: 8200
+        protocol: TCP
+        listenAddress: "127.0.0.1"
+      - containerPort: 8080
+        hostPort: 8080
+        protocol: TCP
+        listenAddress: "127.0.0.1"
+      - containerPort: 4318
+        hostPort: 4318
+        protocol: TCP
+        listenAddress: "127.0.0.1"
+    extraMounts:
+      # Persist containerd image layers so cluster re-creation skips pulls.
+      - hostPath: /tmp/keese-containerd-worker1
+        containerPath: /var/lib/containerd
+
+  # ── Worker 2 — tenant-a / standard tier ───────────────────────────────
+  - role: worker
+    labels:
+      keese.ai/tenant: tenant-a
+      keese.ai/tier: standard
+    extraMounts:
+      - hostPath: /tmp/keese-containerd-worker2
+        containerPath: /var/lib/containerd
+
+  # ── Worker 3 — tenant-b / isolated tier ───────────────────────────────
+  - role: worker
+    labels:
+      keese.ai/tenant: tenant-b
+      keese.ai/tier: isolated
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          taints:
+            - key: keese.ai/isolated
+              value: "true"
+              effect: NoSchedule
+    extraMounts:
+      - hostPath: /tmp/keese-containerd-worker3
+        containerPath: /var/lib/containerd

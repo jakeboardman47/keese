@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Wrapper around dev/bootstrap/openbao/seed.sh.
+# Adds a cluster context guard (must be pointed at kind-keese-dev) before
+# delegating to the seed script so we never accidentally seed a prod vault.
+#
+# Usage: scripts/dev/seed-openbao.sh
+#        BAO_ADDR=http://localhost:8200 BAO_TOKEN=<root> scripts/dev/seed-openbao.sh
+
+set -euo pipefail
+IFS=$'\n\t'
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# shellcheck source=../lib/log.sh
+source "${REPO_ROOT}/scripts/lib/log.sh"
+
+# ── Cluster context guard ──────────────────────────────────────────────────────
+
+CURRENT_CONTEXT="$(kubectl config current-context 2>/dev/null || echo "")"
+EXPECTED_CONTEXT="kind-keese-dev"
+
+if [[ "${CURRENT_CONTEXT}" != "${EXPECTED_CONTEXT}" ]]; then
+  log::err "Refusing to seed: current kubectl context is '${CURRENT_CONTEXT}'."
+  log::err "Expected '${EXPECTED_CONTEXT}' for local dev seeding."
+  log::err "Switch context: kubectl config use-context ${EXPECTED_CONTEXT}"
+  exit 1
+fi
+
+log::info "Context check passed: ${CURRENT_CONTEXT}"
+
+# ── Delegate to the seed script ───────────────────────────────────────────────
+
+exec "${REPO_ROOT}/dev/bootstrap/openbao/seed.sh" "$@"

@@ -1,0 +1,194 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Declarative helmfile for the keese local-dev infra bootstrap stack.
+# Install order is enforced via `needs:` — helmfile syncs releases in dependency
+# order when `--concurrency 1` is used or when dependencies are declared.
+#
+# Usage: helmfile -f dev/bootstrap/helmfile.yaml sync
+#        helmfile -f dev/bootstrap/helmfile.yaml diff
+#        helmfile -f dev/bootstrap/helmfile.yaml template
+#
+# Chart versions are pinned. Versions marked "# unverified-2026" were selected
+# from best available information as of 2026-04-19; verify before production use.
+
+environments:
+  dev:
+    values:
+      - env/dev.yaml.gotmpl
+
+---
+repositories:
+  - name: jetstack
+    url: https://charts.jetstack.io
+  - name: projectcapsule
+    url: https://projectcapsule.github.io/charts
+  - name: envoyproxy
+    url: https://charts.envoyproxy.io
+  - name: openfga
+    url: https://openfga.github.io/helm-charts
+  - name: nats
+    url: https://nats-io.github.io/k8s/helm/charts
+  - name: elastic
+    url: https://helm.elastic.co
+  - name: kyverno
+    url: https://kyverno.github.io/kyverno
+  - name: openbao
+    url: https://openbao.github.io/openbao-helm # unverified-2026
+  - name: external-secrets
+    url: https://charts.external-secrets.io
+  - name: argo
+    url: https://argoproj.github.io/argo-helm
+  - name: qdrant
+    url: https://qdrant.github.io/qdrant-helm
+  - name: open-telemetry
+    url: https://open-telemetry.github.io/opentelemetry-helm-charts
+
+releases:
+  # ── Layer 0: TLS foundation ────────────────────────────────────────────
+  - name: cert-manager
+    namespace: cert-manager
+    createNamespace: true
+    chart: jetstack/cert-manager
+    version: v1.15.3
+    values:
+      - values/cert-manager.yaml
+
+  # ── Layer 1: Tenant isolation ──────────────────────────────────────────
+  - name: capsule
+    namespace: capsule-system
+    createNamespace: true
+    chart: projectcapsule/capsule
+    version: 0.7.2 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - values/capsule.yaml
+
+  # ── Layer 1: Egress gateway ────────────────────────────────────────────
+  - name: envoy-gateway
+    namespace: envoy-gateway-system
+    createNamespace: true
+    chart: envoyproxy/gateway-helm
+    version: v1.3.2 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - values/envoy-gateway.yaml
+
+  - name: envoy-ai-gateway
+    namespace: envoy-gateway-system
+    createNamespace: false
+    chart: envoyproxy/ai-gateway-helm
+    version: v0.2.0 # unverified-2026
+    needs:
+      - envoy-gateway-system/envoy-gateway
+    values:
+      - values/envoy-ai-gateway.yaml
+
+  # ── Layer 1: Authorization ─────────────────────────────────────────────
+  - name: openfga
+    namespace: openfga
+    createNamespace: true
+    chart: openfga/openfga
+    version: 0.2.27 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - values/openfga.yaml
+
+  # ── Layer 1: Policy engine ─────────────────────────────────────────────
+  - name: kyverno
+    namespace: kyverno
+    createNamespace: true
+    chart: kyverno/kyverno
+    version: 3.2.6 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - values/kyverno.yaml
+
+  # ── Layer 1: Messaging ─────────────────────────────────────────────────
+  - name: nack
+    namespace: nats
+    createNamespace: true
+    chart: nats/nack
+    version: 0.26.0 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+
+  - name: nats
+    namespace: nats
+    createNamespace: false
+    chart: nats/nats
+    version: 1.2.6 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - values/nats.yaml
+
+  # ── Layer 1: Logging / observability backend ───────────────────────────
+  - name: eck-operator
+    namespace: elastic-system
+    createNamespace: true
+    chart: elastic/eck-operator
+    version: 2.13.0 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - values/eck.yaml
+
+  # ── Layer 1: Secrets store ─────────────────────────────────────────────
+  - name: openbao
+    namespace: openbao
+    createNamespace: true
+    chart: openbao/openbao
+    version: 0.4.0 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - values/openbao.yaml
+
+  - name: external-secrets
+    namespace: external-secrets
+    createNamespace: true
+    chart: external-secrets/external-secrets
+    version: 0.10.5 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+      - openbao/openbao
+    values:
+      - values/external-secrets.yaml
+
+  # ── Layer 1: Workflow engine ───────────────────────────────────────────
+  - name: argo-workflows
+    namespace: argo
+    createNamespace: true
+    chart: argo/argo-workflows
+    version: 0.42.5 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - values/argo-workflows.yaml
+
+  # ── Layer 1: Vector memory ─────────────────────────────────────────────
+  - name: qdrant
+    namespace: qdrant
+    createNamespace: true
+    chart: qdrant/qdrant
+    version: 1.13.0 # unverified-2026
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - values/qdrant.yaml
+
+  # ── Layer 2: Telemetry (depends on ECK for ES endpoint) ───────────────
+  - name: otel-collector
+    namespace: observability
+    createNamespace: true
+    chart: open-telemetry/opentelemetry-collector
+    version: 0.112.0 # unverified-2026
+    needs:
+      - elastic-system/eck-operator
+    values:
+      - values/otel-collector.yaml

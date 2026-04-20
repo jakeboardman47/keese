@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# OpenTelemetry Collector values for local dev — Deployment mode.
+# Receives OTLP (gRPC :4317 / HTTP :4318), processes via batch + resource
+# attributes + tail-sampling, exports to Elasticsearch and Elastic APM.
+#
+# Refs: docs/designs/10a-otel-topology.md
+
+mode: deployment
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+  processors:
+    batch:
+      send_batch_size: 512
+      timeout: 5s
+
+    resource:
+      attributes:
+        - action: upsert
+          key: deployment.environment
+          value: kind-dev
+
+    tail_sampling:
+      decision_wait: 10s
+      num_traces: 100
+      policies:
+        - name: sample-errors
+          type: status_code
+          status_code: { status_codes: [ERROR] }
+        - name: probabilistic-sample
+          type: probabilistic
+          probabilistic: { sampling_percentage: 10 }
+
+    memory_limiter:
+      check_interval: 1s
+      limit_mib: 200
+
+  exporters:
+    # Elasticsearch logs exporter — points at ECK-managed ES.
+    elasticsearch:
+      endpoints:
+        - "https://keese-es-es-http.elastic-system.svc.cluster.local:9200"
+      tls:
+        insecure_skip_verify: true  # dev only — ECK self-signed cert
+      user: elastic
+      password: "${ELASTIC_PASSWORD}"
+      logs_index: keese-logs-dev
+
+    # Elastic APM exporter for traces.
+    otlp/apm:
+      endpoint: "keese-apm-apm-http.elastic-system.svc.cluster.local:8200"
+      tls:
+        insecure_skip_verify: true  # dev only
+      headers:
+        Authorization: "Bearer ${APM_TOKEN}"
+
+    # Debug exporter for local troubleshooting (verbose in dev).
+    debug:
+      verbosity: normal
+
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, resource, tail_sampling, batch]
+        exporters: [otlp/apm, debug]
+
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, resource, batch]
+        exporters: [debug]
+
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, resource, batch]
+        exporters: [elasticsearch, debug]
+
+# Expose collector ports to the cluster.
+ports:
+  otlp:
+    enabled: true
+    containerPort: 4317
+    servicePort: 4317
+    protocol: TCP
+  otlp-http:
+    enabled: true
+    containerPort: 4318
+    servicePort: 4318
+    protocol: TCP

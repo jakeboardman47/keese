@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# NATS values for local dev — JetStream enabled, single replica, emptyDir
+# (no PVC) for dev simplicity. NACK CRDs (Stream/Consumer) are installed
+# by the nack release in helmfile.yaml.
+#
+# Refs: docs/designs/09-transport-crd.md
+
+config:
+  jetstream:
+    enabled: true
+    # emptyDir: use ephemeral storage in dev. Swap to fileStore.pvc for
+    # persistence across pod restarts.
+    memoryStore: false
+    fileStore:
+      enabled: true
+      dir: /data
+      # No PVC in dev — use emptyDir via the pod template patch below.
+
+container:
+  env:
+    JS_DEFAULT_MAX_MEMORY: "128Mi"
+
+replicaCount: 1
+
+# Override storage to emptyDir for dev (no PVC provisioner required).
+nats:
+  jetstream:
+    fileStorage:
+      enabled: true
+      storageDirectory: /data
+      size: 1Gi
+      # pvc disabled → emptyDir fallback
+      pvc:
+        enabled: false

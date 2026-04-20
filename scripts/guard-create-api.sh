@@ -25,8 +25,8 @@ if [ ! -f PROJECT ]; then
   exit 0
 fi
 
-if grep -qE "^[[:space:]]+group:[[:space:]]+${group}$" PROJECT &&
-   grep -qE "^[[:space:]]+kind:[[:space:]]+${kind}$" PROJECT; then
+if grep -qE "^[[:space:]]+group:[[:space:]]+${group}$" PROJECT \
+  && grep -qE "^[[:space:]]+kind:[[:space:]]+${kind}$" PROJECT; then
   # Both must appear in the same resource block.
   # Quick check: verify the kind line is within ~10 lines of its group line.
   awk -v g="${group}" -v k="${kind}" '
