@@ -64,14 +64,51 @@
             curl
             wget
 
-            # ===== Add your language toolchain here =====
-            # Examples — uncomment what you need:
-            # go
-            # golangci-lint
-            # gopls
-            # nodejs_20
-            # python312
-            # rustup
+            # ===== Go toolchain =====
+            # Some of these may lag in nixpkgs stable; if a build fails,
+            # see nix/overlays/operator-tools.nix for the `go install`
+            # fallback. Unverified-in-nixpkgs packages are marked below.
+            go                 # 1.24+ expected from nixos-unstable
+            gopls
+            delve
+            golangci-lint
+            gotools            # goimports, stringer, etc.
+            govulncheck
+            gofumpt
+
+            # ===== Kubernetes / Operator SDK tooling =====
+            kubectl
+            kubernetes-helm
+            helmfile
+            kustomize
+            kubebuilder
+            kind
+            tilt
+            stern
+            k9s
+            kubeconform
+            pluto
+            # kuttl              # unverified nixpkgs naming
+            # operator-sdk       # unverified; overlay fallback
+            # setup-envtest      # unverified; go-install fallback
+            # controller-gen     # unverified nixpkgs naming
+            # ctlptl             # unverified nixpkgs naming
+            cfssl
+            # cmctl              # unverified nixpkgs naming
+
+            # ===== OpenTofu / policy =====
+            opentofu
+            # tflint             # unverified naming in nixpkgs
+            # terraform-ls       # works with tofu; verify naming
+            conftest
+            opa
+
+            # ===== Container tooling =====
+            crane
+            skopeo
+
+            # ===== Argo Workflows CLI =====
+            # argo               # unverified nixpkgs name (may be argo-workflows-cli)
           ]
           ++ pkgs.lib.optionals isLinux [
             iproute2
