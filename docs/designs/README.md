@@ -12,26 +12,52 @@ last_verified: 2026-04-19
 
 # designs/ — WHY
 
-Design docs explain **why** the project is shaped the way it is. Each doc answers a
-single architectural question. Together they form a coherent position.
+Design docs explain **why** the project is shaped the way it is.
+All 30 design docs must reach `status: current` and score ≥ 90/100
+before any spec is authored and before any controller code is written.
 
-A design doc:
+> **Gate status: CLOSED.** See [../plans/README.md](../plans/README.md).
 
-- Starts with a clear question or thesis.
-- Lists options considered and their trade-offs.
-- Records a decision and the constraints that forced it.
-- References the specs that will implement it.
-- Does **not** include implementation details — those belong in specs, plans, or references.
+## Index
 
-## Contents
-
-| # | Doc | Topic |
-|---|---|---|
-| 00 | _add your first design doc here (e.g. 00-why.md)_ | — |
+| # | Doc | Title | Category | Status |
+|---|---|---|---|---|
+| 01 | [01-tenancy-capsule.md](01-tenancy-capsule.md) | Tenancy via Capsule | tenancy | draft |
+| 02 | [02-workspace-model.md](02-workspace-model.md) | Workspace Model | workspace | draft |
+| 03 | [03-workflow-argo-delegation.md](03-workflow-argo-delegation.md) | Workflow Argo Delegation | workflow | draft |
+| 04a | [04a-openfga-authz-model.md](04a-openfga-authz-model.md) | OpenFGA Authorization Model | authz | draft |
+| 04b | [04b-projected-sa-identity.md](04b-projected-sa-identity.md) | Projected ServiceAccount Identity | authz | draft |
+| 04c | [04c-token-revocation.md](04c-token-revocation.md) | Token Revocation | authz | draft |
+| 05a | [05a-envoy-ai-gateway-topology.md](05a-envoy-ai-gateway-topology.md) | Envoy AI Gateway Topology | egress | draft |
+| 05b | [05b-credential-injection-patterns.md](05b-credential-injection-patterns.md) | Credential Injection Patterns | egress | draft |
+| 05c | [05c-mcp-policy-enforcement.md](05c-mcp-policy-enforcement.md) | MCP Policy Enforcement | egress | draft |
+| 06 | [06-guardrailbinding.md](06-guardrailbinding.md) | GuardrailBinding | guardrails | draft |
+| 07 | [07-agent-runtime-spi.md](07-agent-runtime-spi.md) | Agent Runtime SPI | runtime | draft |
+| 08a | [08a-goose-headless-modes.md](08a-goose-headless-modes.md) | Goose Headless Modes | runtime | draft |
+| 08b | [08b-goose-acp-stdio-k8s.md](08b-goose-acp-stdio-k8s.md) | Goose ACP stdio over K8s | runtime | draft |
+| 08c | [08c-goose-subagents-limits.md](08c-goose-subagents-limits.md) | Goose Sub-Agents and Limits | runtime | draft |
+| 09 | [09-transport-crd.md](09-transport-crd.md) | Transport CRD | transport | draft |
+| 10a | [10a-otel-topology.md](10a-otel-topology.md) | OTEL Topology | observability | draft |
+| 10b | [10b-token-accounting.md](10b-token-accounting.md) | Token Accounting | observability | draft |
+| 11 | [11-secrets-pluggable-vault.md](11-secrets-pluggable-vault.md) | Secrets Pluggable Vault | secrets | draft |
+| 12 | [12-network-isolation.md](12-network-isolation.md) | Network Isolation | security | draft |
+| 13 | [13-cli-tunnel-wireguard.md](13-cli-tunnel-wireguard.md) | CLI Tunnel (WireGuard) | developer-experience | draft |
+| 14a | [14a-olm-channels-upgrades.md](14a-olm-channels-upgrades.md) | OLM Channels and Upgrades | packaging | draft |
+| 14b | [14b-olm-dependencies.md](14b-olm-dependencies.md) | OLM Dependencies | packaging | draft |
+| 15 | [15-memory-management.md](15-memory-management.md) | Memory Management | memory | draft |
+| 16 | [16-recipe-distribution.md](16-recipe-distribution.md) | Recipe Distribution | recipes | draft |
+| 17 | [17-credential-broker.md](17-credential-broker.md) | Credential Broker | egress | draft |
+| 18 | [18-process-lifecycle.md](18-process-lifecycle.md) | Process Lifecycle | reliability | draft |
+| 19 | [19-ide-and-debugging.md](19-ide-and-debugging.md) | IDE and Debugging | developer-experience | draft |
+| 20 | [20-api-group-layout.md](20-api-group-layout.md) | API Group Layout | api | draft |
+| 21 | [21-opentofu-cloud-deployment.md](21-opentofu-cloud-deployment.md) | OpenTofu Cloud Deployment | deployment | draft |
+| 22 | [22-workflow-composition-examples.md](22-workflow-composition-examples.md) | Workflow Composition Examples | workflow | draft |
 
 ## Lifecycle
 
-- Stable. Changes must be discussed in a plan iteration before landing.
-- `last_verified` is bumped whenever the doc is re-read against current code and
-  found accurate.
-- Conflicting documents are a bug; resolve by retiring one (status: `superseded`).
+- All docs start at `status: draft`.
+- Architect agent fills each doc through 3 rubric iterations (target ≥ 90/100).
+- A doc reaches `status: current` only after it scores ≥ 90 on iteration 3.
+- `last_verified` is bumped whenever the doc is re-read against current code.
+- Conflicting documents are a bug; resolve by retiring one (`status: superseded`).
+- Changes to a `current` doc require a new plan iteration before landing.
