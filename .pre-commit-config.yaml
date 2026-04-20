@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) {{YEAR}} {{ORG_NAME}}
+
+# Fail fast; run in sensible order. Install with:
+#   pre-commit install --install-hooks
+#   pre-commit install --hook-type commit-msg
+
+repos:
+  # ==================== General checks ====================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^\.secrets\.baseline$
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ["--allow-multiple-documents", "--unsafe"]
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+        exclude: ^\.plan-logs/
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-json
+      - id: check-toml
+      - id: detect-private-key
+        exclude: (_test\.|^test/)
+      - id: mixed-line-ending
+
+  # ==================== Secrets scan ====================
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: (^\.secrets\.baseline$|^go\.sum$|^\.gitignore$|^flake\.lock$|^\.plan-logs/)
+
+  # ==================== Shell ====================
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: ["-x"]
+
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.10.0-2
+    hooks:
+      - id: shfmt
+        args: ["-i", "2", "-ci", "-bn", "-w"]
+
+  # ==================== Markdown ====================
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.42.0
+    hooks:
+      - id: markdownlint
+        args: ["--config", ".markdownlint.json"]
+
+  # ==================== Diagram freshness ====================
+  # Re-renders every committed diagram source and blocks commits where the
+  # rendered SVG has drifted from the source. Sources supported: *.d2, *.mmd, *.dot.
+  - repo: local
+    hooks:
+      - id: diagram-freshness
+        name: Diagram freshness (source ↔ render)
+        entry: scripts/check-diagram-freshness.sh
+        language: system
+        pass_filenames: false
+        files: ^(docs|book)/.*\.(d2|mmd|dot|svg)$
+
+  # ==================== License / SPDX headers ====================
+  - repo: https://github.com/google/addlicense
+    rev: v1.2.0
+    hooks:
+      - id: addlicense
+        name: Verify SPDX + copyright headers
+        args:
+          - "-check"
+          - "-c"
+          - "{{ORG_NAME}}"
+          - "-l"
+          - "apache"
+          - "-ignore"
+          - "**/*.md"
+          - "-ignore"
+          - "**/*.json"
+          - "-ignore"
+          - "**/go.sum"
+          - "-ignore"
+          - "LICENSE"
+          - "-ignore"
+          - "CODEOWNERS"
+          - "-ignore"
+          - "book/**"
+          - "-ignore"
+          - ".plan-logs/**"
+          - "-ignore"
+          - "**/*.toml"
+          - "-ignore"
+          - "flake.lock"
+
+  # ==================== Commit message (Conventional Commits) ====================
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.1.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  # ==================== Optional: gitleaks as a belt-and-suspenders check ====================
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # ==================== Language-specific (uncomment as needed) ====================
+  # - repo: local
+  #   hooks:
+  #     - id: go-fmt
+  #       name: gofmt
+  #       entry: gofmt -s -w
+  #       language: system
+  #       types: [go]
+  #     - id: golangci-lint
+  #       name: golangci-lint
+  #       entry: bash -c 'command -v golangci-lint >/dev/null && golangci-lint run --fix ./... || echo "golangci-lint not installed; skipping"'
+  #       language: system
+  #       pass_filenames: false
+  #       files: \.go$

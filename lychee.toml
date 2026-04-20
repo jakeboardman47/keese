@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) {{YEAR}} {{ORG_NAME}}
+
+max_retries = 3
+retry_wait_time = 2
+timeout = 20
+max_concurrency = 8
+accept = [200, 206, 429]
+
+exclude = [
+    "^https?://localhost",
+    "^https?://127\\.0\\.0\\.1",
+    "^https?://example\\.com",
+    "^https?://(.*\\.)?example\\.(com|org|net)",
+]
+
+exclude_path = [
+    ".git",
+    ".direnv",
+    ".plan-logs",
+    "node_modules",
+    "book/site",
+    "vendor",
+]
+
+cache = true
+max_cache_age = "1d"

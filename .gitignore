@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) {{YEAR}} {{ORG_NAME}}
+
+# ===== Secrets / environment =====
+.env
+.env.*
+!.env.local.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+credentials.json
+serviceaccount.json
+kubeconfig
+kubeconfig-*
+*.kubeconfig
+# Age / SOPS
+*.age
+keys.txt
+
+# ===== Go (delete if not a Go project) =====
+bin/
+vendor/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+coverage.txt
+go.work.sum
+
+# ===== Node (delete if not a Node project) =====
+node_modules/
+package-lock.json
+
+# ===== Python (delete if not a Python project) =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ===== Container / OCI =====
+.docker/
+
+# ===== Nix =====
+.direnv/
+.go/
+result
+result-*
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+*.tmp
+
+# ===== Local artifacts =====
+dist/
+out/
+tmp/
+*.tar.gz
+*.tar.xz
+*.zip
+checksums.txt
+*.sig
+
+# ===== Logs =====
+*.log
+.plan-logs/
+
+# ===== Docs / mkdocs =====
+book/site/
+.mkdocs_cache/
+.lycheecache
+
+# ===== Pre-commit =====
+.pre-commit-cache/
+
+# ===== SBOMs / security artifacts =====
+sbom-*.spdx.json
+*.sarif
+
+# ===== Agent worktrees (sibling directories) =====
+# Worktrees live outside this tree; nothing to ignore here, but keep
+# this comment as a pointer: see scripts/agent-dispatch.sh

@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) {{YEAR}} {{ORG_NAME}}
+
+version: 2
+updates:
+  # Uncomment the ecosystems used by this project.
+  # - package-ecosystem: gomod
+  #   directory: "/"
+  #   schedule:
+  #     interval: weekly
+  #   open-pull-requests-limit: 10
+  #   commit-message:
+  #     prefix: "chore"
+  #     include: "scope"
+  # - package-ecosystem: npm
+  #   directory: "/"
+  #   schedule:
+  #     interval: weekly
+  #   commit-message:
+  #     prefix: "chore"
+  #     include: "scope"
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+  # - package-ecosystem: docker
+  #   directory: "/"
+  #   schedule:
+  #     interval: weekly
+  #   commit-message:
+  #     prefix: "chore"
+  #     include: "scope"

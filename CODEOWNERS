@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) {{YEAR}} {{ORG_NAME}}
+
+# Add your team handle or maintainer usernames below.
+# Example:
+# * @{{ORG_NAME}}/maintainers
+* @{{GITHUB_USER_OR_TEAM}}
