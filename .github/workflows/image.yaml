@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Decision refs: D17 cosign keyless, D19 SBOM syft attestation, D20 multi-arch
+
+name: Image
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  build-push-sign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: check Dockerfile exists
+        id: df
+        run: |
+          if [ -f Dockerfile ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - name: set up QEMU
+        if: steps.df.outputs.present == 'true'
+        uses: docker/setup-qemu-action@v3
+      - name: set up buildx
+        if: steps.df.outputs.present == 'true'
+        uses: docker/setup-buildx-action@v3
+      - name: log in to ghcr.io
+        if: steps.df.outputs.present == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build + push image
+        if: steps.df.outputs.present == 'true'
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: true
+          sbom: true
+          tags: ghcr.io/keese-ai/keese:${{ github.ref_name }}
+      - name: install cosign
+        if: steps.df.outputs.present == 'true'
+        uses: sigstore/cosign-installer@v3
+      - name: cosign sign (keyless OIDC)
+        if: steps.df.outputs.present == 'true'
+        run: |
+          cosign sign --yes \
+            ghcr.io/keese-ai/keese@${{ steps.push.outputs.digest }}
+      - name: install syft
+        if: steps.df.outputs.present == 'true'
+        uses: anchore/sbom-action/download-syft@v0
+      - name: generate SBOM + attest
+        if: steps.df.outputs.present == 'true'
+        run: |
+          syft ghcr.io/keese-ai/keese@${{ steps.push.outputs.digest }} \
+            -o spdx-json=sbom.spdx.json
+          cosign attest --yes --type spdxjson \
+            --predicate sbom.spdx.json \
+            ghcr.io/keese-ai/keese@${{ steps.push.outputs.digest }}
+      - name: skip (no Dockerfile)
+        if: steps.df.outputs.present == 'false'
+        run: echo "Dockerfile not present — skipping image build"

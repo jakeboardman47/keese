@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Decision refs: D10 controller-runtime envtest, D11 matrix k8s versions
+
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        go: ['1.24']
+    steps:
+      - uses: actions/checkout@v4
+      - name: check go.mod exists
+        id: gomod
+        run: |
+          if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-go@v5
+        if: steps.gomod.outputs.present == 'true'
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - name: make test-unit
+        if: steps.gomod.outputs.present == 'true'
+        run: make test-unit
+      - name: skip (no go.mod)
+        if: steps.gomod.outputs.present == 'false'
+        run: echo "go.mod not present — skipping unit tests"
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        go: ['1.24']
+        k8s: ['1.29.x', '1.30.x', '1.31.x']
+    steps:
+      - uses: actions/checkout@v4
+      - name: check go.mod exists
+        id: gomod
+        run: |
+          if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-go@v5
+        if: steps.gomod.outputs.present == 'true'
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - name: cache envtest binaries
+        if: steps.gomod.outputs.present == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/kubebuilder-envtest
+          key: envtest-${{ runner.os }}-${{ matrix.k8s }}
+      - name: setup envtest
+        if: steps.gomod.outputs.present == 'true'
+        run: |
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+          setup-envtest use ${{ matrix.k8s }} --bin-dir ~/.local/share/kubebuilder-envtest
+      - name: make test-integration
+        if: steps.gomod.outputs.present == 'true'
+        run: make test-integration
+      - name: skip (no go.mod)
+        if: steps.gomod.outputs.present == 'false'
+        run: echo "go.mod not present — skipping integration tests"

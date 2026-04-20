@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Decision refs: D09 pre-commit-all, D12 kubeconform, D14 pluto
+
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pre-commit-all:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v15
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: pre-commit-${{ runner.os }}-
+      - name: pre-commit run --all-files
+        run: nix develop --command pre-commit run --all-files
+
+  golangci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: check go.mod exists
+        id: gomod
+        run: |
+          if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-go@v5
+        if: steps.gomod.outputs.present == 'true'
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: golangci-lint
+        if: steps.gomod.outputs.present == 'true'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+      - name: skip (no go.mod)
+        if: steps.gomod.outputs.present == 'false'
+        run: echo "go.mod not present — skipping golangci-lint"
+
+  kubeconform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: check config/ exists
+        id: cfg
+        run: |
+          if [ -d config ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - name: install kubeconform
+        if: steps.cfg.outputs.present == 'true'
+        run: |
+          curl -sSfL \
+            https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /tmp
+          chmod +x /tmp/kubeconform
+          sudo mv /tmp/kubeconform /usr/local/bin/
+      - name: run kubeconform
+        if: steps.cfg.outputs.present == 'true'
+        run: bash scripts/check-kubeconform.sh
+      - name: skip (no config/)
+        if: steps.cfg.outputs.present == 'false'
+        run: echo "config/ not present — skipping kubeconform"
+
+  pluto:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: check config/ exists
+        id: cfg
+        run: |
+          if [ -d config ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - name: install pluto
+        if: steps.cfg.outputs.present == 'true'
+        uses: FairwindsOps/pluto/contrib/github-action@v5
+      - name: pluto detect-files (k8s 1.30)
+        if: steps.cfg.outputs.present == 'true'
+        run: pluto detect-files -d config/ --target-versions k8s=v1.30.0
+      - name: pluto detect-files (k8s 1.31)
+        if: steps.cfg.outputs.present == 'true'
+        run: pluto detect-files -d config/ --target-versions k8s=v1.31.0
+      - name: skip (no config/)
+        if: steps.cfg.outputs.present == 'false'
+        run: echo "config/ not present — skipping pluto"

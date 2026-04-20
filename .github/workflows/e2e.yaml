@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Decision refs: D13 kind+kuttl e2e, D11 matrix k8s versions
+
+name: E2E
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  kind-kuttl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        k8s: ['1.30.x', '1.31.x']
+    steps:
+      - uses: actions/checkout@v4
+      - name: check config/ exists
+        id: cfg
+        run: |
+          if [ -d config ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - name: create kind cluster
+        if: steps.cfg.outputs.present == 'true'
+        uses: helm/kind-action@v1
+        with:
+          node_image: kindest/node:v${{ matrix.k8s }}
+          cluster_name: keese-e2e
+      - uses: actions/setup-go@v5
+        if: steps.cfg.outputs.present == 'true'
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: bootstrap infra + run e2e
+        if: steps.cfg.outputs.present == 'true'
+        run: make bootstrap-infra test-e2e
+      - name: upload kuttl report
+        if: steps.cfg.outputs.present == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kuttl-report-${{ matrix.k8s }}
+          path: kuttl-report.xml
+          if-no-files-found: ignore
+      - name: skip (no config/)
+        if: steps.cfg.outputs.present == 'false'
+        run: echo "config/ not present — skipping e2e"

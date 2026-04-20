@@ -1,0 +1,113 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Decision refs: D18 OpenTofu plan-only in CI — never tofu apply; D21 conftest policy
+
+name: OpenTofu
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/opentofu/**'
+      - 'policy/opentofu/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: opentofu-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        module: [aws, gcp, azure]
+    steps:
+      - uses: actions/checkout@v4
+      - name: check module has .tf/.tofu files
+        id: tf
+        run: |
+          if compgen -G "deploy/opentofu/${{ matrix.module }}/*.tf" > /dev/null 2>&1 || \
+             compgen -G "deploy/opentofu/${{ matrix.module }}/*.tofu" > /dev/null 2>&1; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: opentofu/setup-opentofu@v1
+        if: steps.tf.outputs.present == 'true'
+      - name: tofu fmt check
+        if: steps.tf.outputs.present == 'true'
+        run: tofu fmt -check -recursive deploy/opentofu/${{ matrix.module }}
+      - name: tofu init (no backend)
+        if: steps.tf.outputs.present == 'true'
+        run: tofu init -backend=false deploy/opentofu/${{ matrix.module }}
+      - name: tofu validate
+        if: steps.tf.outputs.present == 'true'
+        run: tofu validate deploy/opentofu/${{ matrix.module }}
+      - name: tofu plan (no lock, no apply)
+        if: steps.tf.outputs.present == 'true'
+        id: plan
+        run: |
+          tofu plan -lock=false deploy/opentofu/${{ matrix.module }} 2>&1 | tee /tmp/plan-${{ matrix.module }}.txt
+        continue-on-error: true
+      - name: post plan as PR comment
+        if: steps.tf.outputs.present == 'true' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('/tmp/plan-${{ matrix.module }}.txt', 'utf8');
+            const marker = '<!-- keese-tofu-plan-${{ matrix.module }} -->';
+            const body = `${marker}\n<details><summary>OpenTofu plan: <code>${{ matrix.module }}</code></summary>\n\n\`\`\`\n${plan.slice(0, 60000)}\n\`\`\`\n</details>`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }
+      - name: skip (no .tf/.tofu files)
+        if: steps.tf.outputs.present == 'false'
+        run: echo "No .tf/.tofu files in deploy/opentofu/${{ matrix.module }} — skipping"
+
+  conftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        module: [aws, gcp, azure]
+    steps:
+      - uses: actions/checkout@v4
+      - name: check policy/opentofu/ exists
+        id: policy
+        run: |
+          if [ -d policy/opentofu ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - name: install conftest
+        if: steps.policy.outputs.present == 'true'
+        run: |
+          curl -sSfL \
+            https://github.com/open-policy-agent/conftest/releases/latest/download/conftest_Linux_x86_64.tar.gz \
+            | tar -xz -C /tmp
+          sudo mv /tmp/conftest /usr/local/bin/
+      - name: conftest test
+        if: steps.policy.outputs.present == 'true'
+        run: |
+          conftest test deploy/opentofu/${{ matrix.module }} \
+            -p policy/opentofu/
+      - name: skip (no policy/opentofu/)
+        if: steps.policy.outputs.present == 'false'
+        run: echo "policy/opentofu/ not present — skipping conftest"

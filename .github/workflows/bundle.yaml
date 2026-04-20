@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Decision refs: D16 OLM bundle, D17 cosign keyless OIDC signing
+
+name: Bundle
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  generate-validate-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: check bundle/ exists
+        id: bundle
+        run: |
+          if [ -d bundle ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-go@v5
+        if: steps.bundle.outputs.present == 'true'
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: make bundle + bundle-validate
+        if: steps.bundle.outputs.present == 'true'
+        run: make bundle bundle-validate
+      - name: log in to ghcr.io
+        if: steps.bundle.outputs.present == 'true' && startsWith(github.ref, 'refs/tags/')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build + push bundle image
+        if: steps.bundle.outputs.present == 'true' && startsWith(github.ref, 'refs/tags/')
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: bundle/
+          push: true
+          tags: ghcr.io/keese-ai/keese-bundle:${{ github.ref_name }}
+      - name: install cosign
+        if: steps.bundle.outputs.present == 'true' && startsWith(github.ref, 'refs/tags/')
+        uses: sigstore/cosign-installer@v3
+      - name: cosign sign (keyless OIDC)
+        if: steps.bundle.outputs.present == 'true' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          cosign sign --yes \
+            ghcr.io/keese-ai/keese-bundle@${{ steps.push.outputs.digest }}
+      - name: skip (no bundle/)
+        if: steps.bundle.outputs.present == 'false'
+        run: echo "bundle/ not present — skipping bundle workflow"
