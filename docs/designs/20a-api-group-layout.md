@@ -4,7 +4,7 @@
 ---
 scope: design
 category: api
-depends: [docs/plans/scaffolding-plan.md]
+depends: [docs/plans/scaffolding-plan.md, docs/designs/01-tenancy-capsule.md]
 related_skills: [crd-authoring, doc-authoring]
 status: current
 last_verified: 2026-04-20
@@ -18,8 +18,8 @@ rollback: Revert to prior commit; no migration plan required at v1alpha1 because
 **Decision:** 13 kinds across 8 sub-groups all under `operator.keese.ai`,
 all at `v1alpha1`. A shared-types package at
 `github.com/keese-ai/keese/api/core/v1alpha1` holds cross-group primitives.
-Promotion to `v1beta1` requires a rubric score ≥ 90, 90-day soak, and
-architect sign-off via a migration plan doc.
+Promotion to `v1beta1` requires a rubric score ≥ 90, 90-day customer-production
+soak, and architect sign-off via a migration plan doc.
 
 ## Context
 
@@ -54,10 +54,14 @@ cluster-scoped kind is needed later it requires an ADR in `docs/designs/`.
 holds cross-group primitives. All eight group packages import it; it imports nothing
 from the group packages (unidirectional).
 
+The package name `core` is intentional. It does not collide with `k8s.io/api/core/v1`
+because the Go import path is fully qualified; callers use a distinct alias, e.g.
+`keesecore "github.com/keese-ai/keese/api/core/v1alpha1"`, to eliminate ambiguity.
+
 | Type | Rationale |
 |---|---|
 | `Condition` (re-export wrapping `metav1.Condition`) | Uniform condition type/reason/message vocabulary across all 13 kinds. |
-| `Phase` (string type + const set: `Pending`, `Provisioning`, `Ready`, `Degraded`, `Terminating`) | Shared phase vocabulary; group-specific phases are additional consts in the group package, not in core. |
+| `Phase` (string type + 5 consts: `PhasePending`, `PhaseProvisioning`, `PhaseReady`, `PhaseDegraded`, `PhaseTerminating`) | Shared phase vocabulary; kind-specific extensions declared as additional consts in the kind's own `_types.go`. |
 | `ResourceRef` (`{ Name, Namespace, Group, Kind string }`) | Cross-group references (e.g., `Workspace.spec.runtimeRef`, `GuardrailBinding.spec.workspaceRef`). |
 | `StatusBase` (`ObservedGeneration int64`, `Conditions []metav1.Condition`, `Phase Phase`) | Embedded in every kind's `*Status` struct — enforces rule 04.4 (`observedGeneration` on every status). |
 | `ReBAC` marker type alias (string constant) | Anchor for `// +keese:rebac-tuple=<relation>` markers; not a Go type used at runtime, but keeps the constant definition canonical. |
@@ -65,6 +69,47 @@ from the group packages (unidirectional).
 Import rule: group packages may import `api/core/v1alpha1`. No group package
 imports another group package directly. Cross-group coordination goes through
 the controller layer, not the API types layer.
+
+### Phase Enum Strategy — Option C (Hybrid)
+
+`api/core/v1alpha1` defines the canonical `Phase` type and 5 consts. Each kind's
+`_types.go` **also** declares a `+kubebuilder:validation:Enum` marker on the
+`StatusBase.Phase` field listing the 5 core values plus any kind-specific
+extensions. This gives admission-time enforcement that the bare string type alone
+cannot provide.
+
+Example for `Workspace`:
+
+```go
+// WorkspaceStatus defines the observed state of Workspace.
+type WorkspaceStatus struct {
+    keesecore.StatusBase `json:",inline"`
+
+    // Phase is the current lifecycle phase of the Workspace.
+    // +kubebuilder:validation:Enum=Pending;Provisioning;Ready;Degraded;Terminating;Idle;Evicting
+    Phase keesecore.Phase `json:"phase,omitempty"`
+}
+```
+
+The `StatusBase` embedding provides `ObservedGeneration` and `Conditions`; the
+per-kind `Phase` field re-declares the field to attach the enum marker. For kinds
+with no extensions the enum lists the 5 core values only.
+
+Pre-commit hook `scripts/check-phase-enum-drift.sh` (P3) diffs every kind's enum
+marker against the 5 core const values and fails if a kind's marker omits any
+core value. Hook is not implemented until the design gate opens.
+
+### Shared-Type Envtest Assertions
+
+| Test name | Assertion |
+|---|---|
+| `TestCoreCondition_RoundTrip` | `core.Condition` survives serialize/deserialize with JSON and YAML without field loss. |
+| `TestCorePhase_EnumValidation` | For each of the 13 kinds, creates a CR with each core `Phase` value and asserts admission accepts; creates a CR with an invalid phase (e.g., `"Exploding"`) and asserts admission rejects. |
+| `TestCoreResourceRef_ValidateCrossGroup` | Asserts `core.ResourceRef` with `Group == ""` is rejected by the Workspace VAP; group must be specified for cross-group refs. |
+| `TestCoreStatusBase_ObservedGenerationMonotonic` | Asserts `StatusBase.ObservedGeneration` is never set to a value less than `metadata.generation` across any reconcile of any of the 13 controllers. |
+
+These tests live in `internal/controller/suite_test.go` (one file per group) and
+run against an envtest API server with CRDs loaded from `config/crd/bases/`.
 
 ## Versioning and Promotion Policy (v1alpha1 → v1beta1)
 
@@ -74,16 +119,15 @@ gates are cleared:
 | Gate | Criterion |
 |---|---|
 | **Rubric score** | Owning spec doc scores ≥ 90/100 on its iteration-3 pass. |
-| **Soak time** | The v1alpha1 CRD has been deployed in a production-like environment for ≥ 90 calendar days. |
+| **Soak time** | ≥ 90 calendar days starting at the earliest timestamp a customer (external, not keese-authored CI/e2e) runs the group at `v1alpha1` against a production cluster. The architect sign-off migration plan must cite the customer deployment event by its Elastic APM trace ID or a release-notes entry. |
 | **Architect sign-off** | An architect-signed commit adds `docs/plans/migration-<group>.md` scoring ≥ 90. |
-| **Conversion webhook** | A Hub-spoke conversion webhook is implemented and covered by envtest round-trip tests before the v1beta1 CRD ships. |
+| **Conversion webhook** | A Hub-spoke conversion webhook is implemented and covered by envtest round-trip tests before the `v1beta1` CRD ships. |
 
-No group promotes before all 13 kinds are deployed at v1alpha1 and the P8 design
-gate is open. The intent is that the first promotion happens no earlier than
-90 days after GA launch.
+No group promotes before all 13 kinds are deployed at `v1alpha1` and the P8 design
+gate is open.
 
-At v1alpha1 there are **no conversion webhooks** (rule 04.13). The only admission
-webhooks at v1alpha1 are mutating (defaulting) and validating (cross-resource
+At `v1alpha1` there are **no conversion webhooks** (rule 04.13). The only admission
+webhooks at `v1alpha1` are mutating (defaulting) and validating (cross-resource
 checks where CEL is insufficient — see D16).
 
 ## Printer Columns Required Per Kind
@@ -103,56 +147,47 @@ Every kind ships at minimum: `Age` (`.metadata.creationTimestamp`), `Ready`
 | observability | `Budget` (`.spec.limitTokens`) |
 | transport | `Type` (`.spec.type`) |
 
-## operator-sdk PROJECT Multigroup Encoding
+Printer column JSONPath validation policy and enforcement hooks are specified in
+[20b-api-group-layout.md](20b-api-group-layout.md) § Printer Column Validation.
 
-**Decision:** The PROJECT file at repo root uses `multigroup: true` with
-`domain: operator.keese.ai`. Each `create api` call sets `--group=<subgroup>`
-(e.g., `--group=workspace`). The SDK then constructs the full API group as
-`<subgroup>.operator.keese.ai`.
+## Per-Group RBAC Summary
 
-```
-operator-sdk init \
-  --domain=operator.keese.ai \
-  --repo=github.com/keese-ai/keese \
-  --plugins=go/v4 \
-  --project-name=keese
+The `docs/designs/01-tenancy-capsule.md` scaffold is the authoritative source;
+this table is a pointer. Nine ClusterRoles + 2 aggregate roles introduced in
+design 01 map to groups as follows:
 
-operator-sdk create api \
-  --group=workspace \
-  --version=v1alpha1 \
-  --kind=Workspace \
-  --resource --controller
-```
+| Group | Primary ClusterRole(s) |
+|---|---|
+| workspace | `keese-workspace-viewer`, `keese-workspace-editor` |
+| workflow | `keese-runtime-invoker` (for WorkflowRun create) |
+| runtime | `keese-runtime-admin` |
+| memory | `keese-memory-admin` |
+| recipe | `keese-recipe-publisher` |
+| guardrail | `keese-guardrail-author` |
+| observability | `keese-observability-viewer` |
+| transport | `keese-transport-admin` |
 
-The `domain` field in PROJECT is `operator.keese.ai`; the `group` field per
-resource entry is the sub-group (e.g., `workspace`). The Go import path per
-resource is `github.com/keese-ai/keese/api/<group>/v1alpha1`. This matches the
-actual PROJECT file at repo root (verified 2026-04-20).
+RBAC markers on every reconciler enumerate exact verbs and resources per rule
+04.9. Capsule `additionalRoleBindings` injects the workspace and runtime-invoker
+roles into every tenant namespace automatically (D-01.2).
 
-The `api/core/v1alpha1` package is not a PROJECT resource entry — it is a
-plain Go package, not an SDK-managed API group. It has no CRD and no
-SchemeBuilder registration beyond type declarations.
+## PROJECT Encoding and New-Kind Policy
 
-## New-Kind-in-Existing-Group Policy
+The PROJECT file uses `multigroup: true`, `domain: operator.keese.ai`. Each
+`create api` call sets `--group=<subgroup>`; the SDK constructs
+`<subgroup>.operator.keese.ai`. `api/core/v1alpha1` is a plain Go package —
+no PROJECT entry, no SchemeBuilder, no CRD.
 
-**Decision:** After a group's `v1alpha1` is published, a **new kind** is added
-to the same version (`v1alpha1`) by running `operator-sdk create api` with the
-same `--group` and `--version=v1alpha1`. No new API version is needed solely
-because a new kind is added. API versions attach to kinds, not groups.
-
-A new version (e.g., `v1alpha2` within the same group) is introduced only when
-an existing kind needs a breaking schema change. That requires a conversion
-webhook and a migration plan — the same gates as `v1beta1` promotion.
-
-New kinds at `v1alpha1` in an existing group must still pass:
-- The CRD design checklist (`docs/references/crd-design-checklist.md`).
-- `make manifests generate` with no drift.
-- ≥ 2 samples passing `kubectl apply --dry-run=server`.
-- A new row in the design doc that owns the group.
+After a group's `v1alpha1` is published, new kinds are added at the same version
+(`operator-sdk create api --group=<g> --version=v1alpha1 --kind=<K>`). API
+versions attach to kinds, not groups. New kinds must pass: CRD design checklist,
+`make manifests generate` with no drift, ≥ 2 samples passing
+`kubectl apply --dry-run=server`, and a new row in the owning design doc.
 
 ## Refs
 
 - [../plans/scaffolding-plan.md](../plans/scaffolding-plan.md) — D2, D16, D23
+- [../designs/01-tenancy-capsule.md](../designs/01-tenancy-capsule.md) — RBAC scaffold
 - [20b-api-group-layout.md](20b-api-group-layout.md) — trade-offs, failure modes,
   upgrade/rollback, observability, iteration log
 - [../references/crd-design-checklist.md](../references/crd-design-checklist.md)
