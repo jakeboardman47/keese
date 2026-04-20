@@ -25,7 +25,8 @@ before any spec is authored and before any controller code is written.
 | 01 | [01-tenancy-capsule.md](01-tenancy-capsule.md) | Tenancy via Capsule | tenancy | current |
 | 02 | [02-workspace-model.md](02-workspace-model.md) | Workspace Model | workspace | draft |
 | 03 | [03-workflow-argo-delegation.md](03-workflow-argo-delegation.md) | Workflow Argo Delegation | workflow | draft |
-| 04a | [04a-openfga-authz-model.md](04a-openfga-authz-model.md) | OpenFGA Authorization Model | authz | draft |
+| 04a | [04a-openfga-authz-model.md](04a-openfga-authz-model.md) | OpenFGA Authorization Model | authz | current |
+| 04a-ii | [04a-ii-testplan.md](04a-ii-testplan.md) | OpenFGA Auth Model: Test Plan and CI Automation | authz | current |
 | 04b | [04b-projected-sa-identity.md](04b-projected-sa-identity.md) | Projected ServiceAccount Identity | authz | current |
 | 04b-ii | [04b-ii-oidc-trust.md](04b-ii-oidc-trust.md) | OIDC Trust Anchoring Per Cloud | authz | current |
 | 04c | [04c-token-revocation.md](04c-token-revocation.md) | Token Revocation | authz | current |
