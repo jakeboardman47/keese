@@ -41,7 +41,7 @@ Source of truth for DSL: `dev/bootstrap/openfga/model.fga`.
 
 | OpenFGA type | Keese entity | CRD / primitive |
 |---|---|---|
-| `tenant` | Keese Tenant (D24) | `tenancy.operator.keese.ai/v1alpha1/Tenant` |
+| `tenant` | Keese Tenant (D24) | `tenancy.operator.keese.ai/v1alpha1/Tenant`; identity key `Tenant.metadata.name` (not `.uid` — names are stable across delete+recreate, avoiding full tuple backfill on typo-fix cycles) |
 | `workspace` | Workspace CR | `workspace.operator.keese.ai/v1alpha1/Workspace` |
 | `tool` | Callable function | ConfigMap-backed `ToolAllowList` via GuardrailBinding |
 | `extension` | RuntimeExtension provider | `runtime.operator.keese.ai/v1alpha1/RuntimeExtension` |
