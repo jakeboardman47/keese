@@ -1,103 +1,115 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright (c) 2026 keese-ai -->
 
-# claude-project-template
+# keese
 
-A reusable project skeleton for repos built with Claude Code. Captures the
-non-domain-specific conventions, docs-system, multi-agent worktree workflow, and
-pre-commit scaffolding so you can start a new project without re-deriving them.
+> **Status: pre-alpha · DESIGN GATE: CLOSED** — no operator/controller
+> implementation code lands until all 22 designs and 9 specs score ≥ 90/100
+> against [docs/plans/rubric.md](docs/plans/rubric.md).
 
-## What's in here
+Secure multi-tenant, multi-workspace Kubernetes operator orchestrating
+autonomous AI agent workflows on pluggable agent runtimes (goose first).
+Namespaces are the tenant boundary. Workspaces span one or more pods
+running an agent runtime. Identity is a projected Kubernetes ServiceAccount
+token; authorization is ReBAC (OpenFGA); egress flows through Envoy AI
+Gateway, which terminates the agent's SA token and injects the correct
+upstream credential per target. Composition over new CRDs — Capsule for
+tenants, Argo Workflows for workflow execution, Knative for outputs.
 
-```
-.claude/
-  rules/        always-loaded non-negotiable conventions
-  skills/       on-demand how-to modules
-  agents/       pre-configured subagents (explorer, implementer, architect, …)
-  commands/     slash commands (/dispatch, /score-plan, /merge-worktree)
-  hooks/        pre/post tool hooks (block secrets, enforce commit style, SPDX)
-  settings.json permission allowlist + hook wiring
-docs/
-  designs/      WHY — architecture decisions
-  specs/        WHAT — contracts testable by harnesses
-  plans/        HOW (phased) + rubric + flake log
-  features/     WHAT IS BUILT — one doc per user-visible capability
-  references/   HOW (steady-state) — cookbooks
-scripts/
-  lib/          log.sh, env.sh, paths.sh, signals.sh
-  agent-dispatch.sh   spawn a subagent into a sibling git worktree
-  worktree-merge.sh   merge a finished worktree back to main
-  check-diagram-freshness.sh
-.github/
-  dependabot.yaml
-  workflows/    commitlint, docs (mkdocs), scorecard
-.pre-commit-config.yaml
-.commitlintrc.json
-.editorconfig .markdownlint.json .secrets.baseline
-.gitignore .gitattributes .envrc .env.local.example
-flake.nix lychee.toml
-CLAUDE.md MEMORY.md CONTRIBUTING.md SECURITY.md CODEOWNERS LICENSE
-```
+## If you are Claude Code
 
-## What's deliberately NOT in here
+Read in this order, stop when the task is answered:
 
-No language toolchain, no framework-specific skills, no build/test targets. Those
-belong in the project that uses this template. What's here is the invariant scaffolding:
+1. [CLAUDE.md](CLAUDE.md) — task → doc → skill routing table.
+2. [.claude/rules/](.claude/rules/) — always-loaded non-negotiables
+   (01 conventions · 02 security · 03 context-mgmt · 04 kubernetes · 05
+   zero-trust · 06 signal-handling · 06 testing).
+3. [docs/plans/README.md](docs/plans/README.md) — phase index + gate
+   status.
+4. Task-specific doc per the routing table in CLAUDE.md.
 
-- **Docs system** (5 trees × frontmatter × 200-line cap × cross-link discipline).
-- **Plan rubric + iteration loop** (≤ 3 passes, target ≥ 90/100).
-- **Multi-agent worktree flow** (dispatch / merge / protected paths).
-- **Claude context hygiene** (rules 01–06).
-- **Security defaults** (secret blocks, conventional commits, SPDX headers).
+Do **not** `rg` the whole tree until routed. Do **not** load all designs
+or specs at once.
 
-## Usage
+## Repo map
+
+| Path | Purpose |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | Task-to-doc-to-skill index (always in prompt cache) |
+| [MEMORY.md](MEMORY.md) | Cross-session decision index |
+| [.claude/](.claude/) | Agents, commands, hooks, rules, skills, settings |
+| [docs/designs/](docs/designs/) | WHY — architecture decisions (≤ 200 lines each) |
+| [docs/specs/](docs/specs/) | WHAT — testable contracts (authored AFTER designs) |
+| [docs/plans/](docs/plans/) | HOW (phased) + rubric + flake-log |
+| [docs/features/](docs/features/) | WHAT IS BUILT (post-gate) |
+| [docs/references/](docs/references/) | HOW (steady-state) cookbooks |
+| `api/` | CRD Go types (stub-only until gate opens) |
+| `internal/controller/` | Reconcilers (stub-only until gate opens) |
+| `config/` | Kustomize base + overlays (`dev/`, `kind/`) |
+| `deploy/opentofu/` | Cloud deploy — `aws/` `gcp/` `azure/` |
+| `dev/` | Local infra bootstrap (kind, tilt, helmfile) |
+| `dev/ide/` | GoLand + VSCode dlv/debug configs |
+| `bundle/` | OLM bundle (generated) |
+| `scripts/` | Helpers + dispatch/merge + design-gate check |
+
+## Design gate
+
+Authoring specs before their owning designs reach `status: current` is
+**blocked** by `scripts/check-design-gate.sh` and a GitHub Action. Writing
+non-stub bodies to `api/**/*_types.go` or `internal/controller/**/*.go`
+is **blocked** until the gate opens. See
+[docs/plans/README.md](docs/plans/README.md#gate-status) for the current
+state of the 22 designs and 9 specs.
+
+## Quickstart
 
 ```sh
-# 1. Copy the template
-cp -r claude-project-template my-new-project
-cd my-new-project
-rm -rf .git
-git init
-
-# 2. Substitute placeholders
-#   keese      your project name
-#   keese-ai          copyright holder (e.g. "Your Name" or "Your Org, Inc.")
-#   2026              copyright year
-#   2026-04-19     today's date (YYYY-MM-DD)
-#   security@keese.ai   where to report vulnerabilities
-#   keese-ai/maintainers      your GitHub handle or team
-#
-# Example (bash):
-grep -rl 'keese' . | xargs sed -i '' 's/keese/my-new-project/g'
-grep -rl 'keese-ai' . | xargs sed -i '' 's/keese-ai/Your Name/g'
-grep -rl '2026' . | xargs sed -i '' "s/2026/$(date +%Y)/g"
-grep -rl '2026-04-19' . | xargs sed -i '' "s/2026-04-19/$(date +%Y-%m-%d)/g"
-# (repeat for the remaining placeholders)
-
-# 3. Seed the dev environment
-direnv allow
-nix develop
+direnv allow            # loads nix develop shell
 pre-commit install --install-hooks
 pre-commit install --hook-type commit-msg
-
-# 4. Start writing
-#    - First design doc:   docs/designs/00-why.md
-#    - First phase plan:   docs/plans/phase-00-scaffold.md
-#    - Refresh CLAUDE.md:  add task routing rows as you go
+make help               # target catalog
 ```
 
-## Conventions (tl;dr)
+Local Kubernetes (after phase P7 lands):
 
-- **Conventional Commits** — `type(scope): subject`. Enforced pre-commit and by a
-  Claude PreToolUse hook.
-- **Every source file** carries an SPDX + copyright header; PostToolUse hook blocks
-  writes that forget.
-- **`.env.local` is gitignored**; `.env.local.example` documents what goes in it.
-  `detect-secrets` + `gitleaks` scan pre-commit.
-- **Docs ≤ 200 lines**; cross-link instead of duplicating.
-- **CLAUDE.md is a task → doc → skill index**, not a content dump. It belongs to the
-  prompt cache prefix — don't mutate it mid-task.
+```sh
+make kind-up            # ctlptl-managed kind cluster
+make bootstrap-infra    # helmfile sync dev deps (cert-manager, Capsule,
+                        #   Envoy AI Gateway, OpenFGA, NACK/NATS, ECK,
+                        #   OpenBao, ExternalSecrets, Argo, Qdrant,
+                        #   Kyverno, OTEL)
+make tilt-up            # hot-reload the operator
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and
+[.claude/rules/01-conventions.md](.claude/rules/01-conventions.md). Commits
+use Conventional Commits (hook-enforced). Every source file carries an
+SPDX `Apache-2.0` header. Rubric in
+[docs/plans/rubric.md](docs/plans/rubric.md).
+
+## Security posture (5 invariants)
+
+- Agent runtime pods never see Kubernetes API kubeconfigs or upstream
+  LLM/MCP credentials. Identity is a projected SA token with audience
+  `keese-egress-<tenant>`; TTL 10m.
+- All network egress flows through Envoy AI Gateway, fail-closed. No
+  wildcard NetworkPolicies anywhere.
+- Authorization is ReBAC (OpenFGA). Every authz-affecting CRD field is
+  marked `// +keese:rebac-tuple=...` and paired with a design-doc
+  reference.
+- Upstream credentials live only in OpenBao (or cloud KMS) and are
+  swapped for the agent's SA token at the gateway via
+  `BackendSecurityPolicy`. They are never returned to the agent.
+- Bundle + operator images are signed via Sigstore cosign (keyless OIDC);
+  `operator-sdk bundle validate` and OpenSSF scorecard gate releases.
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and
+[.claude/rules/05-security-zero-trust.md](.claude/rules/05-security-zero-trust.md)
+for the full rule set.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+[Apache-2.0](LICENSE). Copyright (c) 2026 keese-ai. Maintainers listed in
+[CODEOWNERS](CODEOWNERS).
