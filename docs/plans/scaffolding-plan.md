@@ -538,7 +538,7 @@ Asserts tenant ready, workspace ready, workflow run succeeded, OpenFGA `check` r
 
 ## Phase 8 — Design-gate freeze enforcement
 
-**Goal:** No implementation lands until all 33 designs AND all 11 specs score ≥ 90 AND architect opens gate.
+**Goal:** No implementation lands until all 35 designs AND all 11 specs score ≥ 90 AND architect opens gate.
 
 ### `scripts/check-design-gate.sh`
 "Stub body" iff file contains `TODO(design-gate)` + ≤ 20 non-blank non-comment LOC. For every non-stub file, find matching design + spec in `docs/designs/` + `docs/specs/`, confirm `status: current` OR `regression_lock: true`, confirm top iter-log score ≥ 90. Exit non-zero with reason list. Additional check: if ANY `docs/specs/*.md` exists with `status != draft` BEFORE all `docs/designs/*.md` reach `current` → fail ("specs cannot be authored until designs complete").
@@ -553,9 +553,9 @@ Triggers on PRs touching `api/**`, `internal/controller/**`, `docs/{designs,spec
 Verifies `open-gate` commit signed by an architect identity (GPG key in org); bats tests at `test/scripts/check-design-gate.bats` run in `lint.yaml`.
 
 ### Exit criteria
-- All 33 designs + 11 specs score ≥ 90.
+- All 35 designs + 11 specs score ≥ 90.
 - `docs/plans/README.md` frontmatter flips `gate_status: open`.
-- Architect-signed commit: `docs(architecture): open design gate — 33 designs + 11 specs ≥ 90/100`.
+- Architect-signed commit: `docs(architecture): open design gate — 35 designs + 11 specs ≥ 90/100`.
 - Required check green on `main`.
 
 ### Iteration log — iter 3 total **91/100** (SHIP)
@@ -599,7 +599,7 @@ Verifies `open-gate` commit signed by an architect identity (GPG key in org); ba
 8. Writing non-stub body to `internal/controller/workspace/workspace_controller.go` → design-gate hook + CI block commit.
 9. `grep -rn 'TODO(design-gate)' api/ internal/` → 26 markers.
 10. SIGTERM drain test on operator pod → clean exit within 30s.
-11. Architect walks 33 designs + 11 specs, scores each ≥ 90, commits gate-open → gate flips to `open`.
+11. Architect walks 35 designs + 11 specs, scores each ≥ 90, commits gate-open → gate flips to `open`.
 
 ---
 
@@ -607,7 +607,7 @@ Verifies `open-gate` commit signed by an architect identity (GPG key in org); ba
 
 | # | Category | Wt | Ratio | Score | Notes |
 |---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | 9 phases + hard gate + 13 kinds + 33 designs + 11 specs explicit. |
+| 1 | Scope clarity | 10 | 1.0 | 10 | 9 phases + hard gate + 13 kinds + 35 designs + 11 specs explicit. |
 | 2 | Architecture fit | 10 | 1.0 | 10 | 23 locked decisions; composition-first; upstream primitives preserved. |
 | 3 | Security posture | 15 | 1.0 | 15 | Zero-trust, three-table credential decomposition, SIGTERM drain, SSA fieldOwner. |
 | 4 | Automatability | 10 | 1.0 | 10 | Every step behind make/script; CI 11-workflow matrix. |

@@ -49,7 +49,7 @@ Commits from `90395cd` (initial scaffold) to `2ac6094` (design-gate).
   `internal/controller/`
 - Design gate: **CLOSED** per `docs/plans/README.md`
   `gate_status: closed`. Controller code may not have non-stub bodies
-  until all 33 designs + 11 specs score ≥ 90/100 on the rubric and
+  until all 35 designs + 11 specs score ≥ 90/100 on the rubric and
   the gate commit opens it.
 
 ## Resume instructions (after moving or cloning the repo)
@@ -84,7 +84,7 @@ bootstrap-infra exceed 300s on the host.
 ## What the next agent should do
 
 Per the plan, the next phase after scaffolding is **architect-driven
-design authoring** — walk the 33 design stubs in
+design authoring** — walk the 35 design stubs in
 `docs/designs/` and iterate each to `status: current` with
 rubric score ≥ 90. The plan enforces **designs complete before
 specs**. Model discipline (D22) assigns these tasks to the
@@ -108,7 +108,7 @@ Recommended authoring order (dependency-free first):
 10. `19-ide-and-debugging`, `21-opentofu-cloud-deployment`,
     `22-workflow-composition-examples`
 
-Once all 33 designs are `current`, the 11 specs under `docs/specs/`
+Once all 35 designs are `current`, the 11 specs under `docs/specs/`
 are authored (each depends on 1–3 designs). When the 11 specs reach
 `current`, an architect opens the gate with a commit flipping
 `gate_status: closed -> open` in
