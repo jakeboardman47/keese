@@ -7,7 +7,18 @@
 # Generated / vendored files — keep stable in diffs.
 vendor/** linguist-vendored
 **/zz_generated_*.go linguist-generated
+**/zz_generated.deepcopy.go linguist-generated
 **/*.pb.go linguist-generated
+
+# Operator SDK / controller-gen outputs.
+config/crd/bases/*.yaml linguist-generated
+config/rbac/role.yaml linguist-generated
+config/webhook/manifests.yaml linguist-generated
+bundle/manifests/** linguist-generated
+bundle/metadata/** linguist-generated
+
+# Goose recipe YAML — enforce LF.
+dev/samples/recipes/** text eol=lf
 
 # ===== Git LFS =====
 # Large binary assets that should not bloat git history.

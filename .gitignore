@@ -19,7 +19,7 @@ kubeconfig-*
 *.age
 keys.txt
 
-# ===== Go (delete if not a Go project) =====
+# ===== Go =====
 bin/
 vendor/
 *.exe
@@ -32,7 +32,42 @@ vendor/
 coverage.out
 coverage.html
 coverage.txt
+cover.out
+cover.html
 go.work.sum
+
+# ===== Kubernetes / Operator SDK =====
+dist/
+*.tar
+envtest/
+envtest-bin/
+testbin/
+bundle/tests/scorecard/*.json
+manifests.tmp/
+
+# ===== Local kubeconfigs / cluster state =====
+.kube/
+dev/kind/.kube/
+
+# ===== Tilt / ctlptl =====
+.tilt/
+tilt_modules/
+
+# ===== Helm / Helmfile =====
+charts/*.tgz
+dev/bootstrap/*/charts/
+dev/bootstrap/*/crds/downloaded/
+
+# ===== keese-specific local state =====
+.keese/local-state/
+
+# ===== OpenTofu / Terraform =====
+deploy/opentofu/**/.terraform/
+deploy/opentofu/**/.tofu/
+deploy/opentofu/**/terraform.tfstate
+deploy/opentofu/**/terraform.tfstate.*
+deploy/opentofu/**/*.tfplan
+deploy/opentofu/**/tfplan
 
 # ===== Node (delete if not a Node project) =====
 node_modules/
