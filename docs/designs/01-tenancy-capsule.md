@@ -4,132 +4,163 @@
 ---
 scope: design
 category: tenancy
-depends: []
+depends: [docs/plans/scaffolding-plan.md]
 related_skills: [doc-authoring]
 status: current
 last_verified: 2026-04-20
-rollback: Pin Capsule Helm chart to the previously validated version via helmfile.lock;
-  revert keese operator image to the prior tag via OLM `replaces` chain; run
-  `make bootstrap-infra` against the pinned lock to restore. No keese CRD schema
-  migration is required because keese owns no Tenant CRD — Capsule's own upgrade
-  contract applies.
+rollback: |
+  Mode A: revert keese operator image via OLM `replaces` chain; no Capsule change needed.
+  Mode B: pin Capsule Helm chart to the previously validated version via helmfile.lock;
+  revert keese operator image via OLM `replaces` chain; run `make bootstrap-infra`
+  against the pinned lock to restore. No keese CRD schema migration required — keese
+  owns no Tenant CRD; Capsule's own upgrade contract applies.
 ---
 
 # 01 — Tenancy via Capsule
 
 ## Context
 
-Keese serves multiple tenants on a shared cluster. Tenants own a namespace tree;
-workspaces run inside those namespaces. Rather than maintaining a keese `Tenant` CRD
-(D23 — compose over replicate), keese consumes `capsule.clastix.io/v1beta2/Tenant`
-directly (D3). Capsule reconciles namespace ownership, `ResourceQuota`, `LimitRange`,
-`NetworkPolicy`, RBAC, and scheduling constraints. Keese's Workspace controller adds
-workspace-scoped resources on top (SA, PVC, HTTPRoute, OpenFGA tuples) and labels
-namespaces to opt them into Capsule's tenant tree. Hard isolation uses vcluster as a
-separate virtual cluster, opted in via `Workspace.spec.isolation: hard`.
+A **Tenant** is an organizational/identity concept — it does NOT map 1:1 to a
+namespace. A tenant owns one or more namespaces (no prescribed naming); a
+**Workspace** is a CR living inside any tenant-owned namespace; multiple Workspaces
+may share a namespace. Tenant membership is expressed through RBAC. Keese owns no
+`Tenant` CRD (D23) and consumes `capsule.clastix.io/v1beta2/Tenant` when present
+(D3). Two deployment modes: **Mode A** (single-namespace, no Capsule) and
+**Mode B** (multi-namespace, Capsule present). v1 runtime isolation uses standard
+Kubernetes primitives only.
 
 ## Decisions
 
-**D-01.1 — Namespace layout per tenant.**
-Every tenant gets a root namespace `keese-<tenant>` and zero or more workspace
-namespaces `keese-<tenant>-<workspace>`. The root namespace holds tenant-level
-`BackendSecurityPolicy` references and shared `ConfigMap` resources. Workspace
-namespaces are annotated `capsule.clastix.io/tenant: <tenant>` so Capsule claims
-them. Keese's Workspace controller creates workspace namespaces; Capsule reconciles
-quota and policy templates into them automatically.
+**D-01.1 — Namespace layout and tenant membership.**
+Keese does not prescribe namespace naming. A tenant owns any set of namespaces;
+in Mode B each carries label `capsule.clastix.io/tenant: <tenant>` so Capsule's
+Tenant CR (label-selector) claims it. Multiple Workspaces may coexist in one
+namespace; Workspace names are not baked into namespace names. Tenant membership is
+expressed purely through RBAC: users with `keese-tenant-editor` ClusterRole binding
+in a namespace may create Workspaces there. The Workspace controller creates only
+Workspace-scoped resources (SA, PVC, HTTPRoute, OpenFGA tuples, NetworkPolicy);
+namespace creation is an operator or platform-team action.
 
-**D-01.2 — Capsule additionalRoleBindings and keese RBAC.**
-Keese uses Capsule's `Tenant.spec.additionalRoleBindings` to bind two keese roles
-into every tenant namespace: `keese-workspace-viewer` (get/list/watch Workspace,
-WorkspaceShare) and `keese-runtime-invoker` (create WorkflowRun). Tenant admins
-may add further bindings; keese's own service account (`keese-operator`) holds
-`cluster-admin`-equivalent only inside tenant namespaces via a ClusterRole scoped
-by `ResourceNames`, not a wildcard. RBAC markers on every reconciler enumerate
-exact verbs and resources; no `resources: ["*"]` or `verbs: ["*"]` (rule 04.9).
+**D-01.2 — Capsule is opt-in; two deployment modes.**
+Flag `--capsule-integration=auto|on|off` (default `auto`) detects Capsule CRDs at
+startup via API discovery. Mode A (no Capsule): keese uses namespace-local quota via
+the Workspace mutating webhook; no cross-namespace aggregation. Mode B (Capsule
+present): the Workspace controller labels namespaces to enter the Capsule Tenant
+tree; Capsule reconciles tenant-level quota, LimitRange, and RBAC projections. P7
+helmfile installs Capsule by default; production single-namespace tenants do not
+need it.
 
-**D-01.3 — vcluster lifecycle ownership for `isolation: hard`.**
-The Workspace controller owns the vcluster lifecycle end-to-end. When
-`Workspace.spec.isolation: hard`, the Workspace reconciler provisions a vcluster
-`VirtualCluster` CR (loft-labs/vcluster operator) in the tenant namespace, waits
-for `Ready`, then projects workspace resources into the virtual cluster via a
-dedicated kubeconfig Secret mounted to the workspace sidecar only — never to the
-agent pod (rule 05.1). On workspace deletion the finalizer `finalizers.workspace.
-operator.keese.ai/vcluster` blocks until the VirtualCluster CR is deleted and the
-kubeconfig Secret is wiped. Lifecycle ownership does not extend to the vcluster
-operator itself; that is a Helmfile-managed dependency (P7).
+**D-01.3 — Kyverno ClusterPolicy for PSS + keese-specific pod admission.**
+Every workspace namespace receives `pod-security.kubernetes.io/enforce: restricted`.
+Keese also ships a `ClusterPolicy` (Kyverno, Enforce mode) in
+`config/overlays/base/kyverno-policies/` adding defense-in-depth: deny
+`hostNetwork/PID/IPC`, `privileged`, `allowPrivilegeEscalation`; require
+`readOnlyRootFilesystem: true` for agent pods (rule 05.11); require `runAsNonRoot:
+true`; require label `keese.ai/workspace=<name>` for admission in keese-managed
+namespaces. Audit mode reserved for break-glass only. Goose complies with
+`readOnlyRootFilesystem: true` — all writes target the workspace PVC mount (SQLite
+session store) or emptyDir for tmp; both are writable even with a read-only root
+filesystem. No workarounds needed.
 
-**D-01.4 — Quota / LimitRange / PSS division.**
-Capsule's `Tenant.spec.resourceQuota` and `.limitRanges` carry tenant-level
-ceilings set by the platform team. Keese injects workspace-level defaults via a
-mutating webhook on `Workspace` creation: one `ResourceQuota` sized from
+**D-01.4 — Quota / LimitRange division.**
+In Mode B, Capsule's `Tenant.spec.resourceQuota` and `.limitRanges` carry
+tenant-level ceilings set by the platform team. In both modes, the Workspace
+mutating webhook injects workspace-level defaults: one `ResourceQuota` sized from
 `Workspace.spec.resources` (or the tenant default if absent) and one `LimitRange`
-enforcing `requests == limits` for agent containers. PSS label `pod-security.
-kubernetes.io/enforce: restricted` is set on every workspace namespace by the
-Workspace controller. Workspace quota is always a subset of tenant quota; the VAP
-on Workspace creation validates this before persisting.
+enforcing `requests == limits` for agent containers. Workspace quota is always a
+subset of tenant quota; the VAP on Workspace creation validates this via CEL before
+persisting.
 
 **D-01.5 — TenantResource propagation and keese NetworkPolicy / BackendSecurityPolicy.**
-Keese does not use `TenantResource` propagation for NetworkPolicy or
-`BackendSecurityPolicy`. Instead: (a) the Workspace controller applies workspace
-NetworkPolicy via SSA with `fieldOwner: keese-workspace-controller` directly into
-the workspace namespace; (b) `BackendSecurityPolicy` references live in the root
-tenant namespace and are projected into workspace namespaces via `ReferenceGrant`.
-This avoids propagation ordering races and keeps field ownership unambiguous.
-Capsule `TenantResource` is reserved for platform team use (e.g. injecting a
-shared monitoring `NetworkPolicy`) — keese docs warn against double-propagating
-NetworkPolicy to workspace namespaces since Capsule would overwrite SSA fields.
+Keese does not use `TenantResource` for NetworkPolicy or `BackendSecurityPolicy`.
+The Workspace controller applies NetworkPolicy via SSA (`fieldOwner:
+keese-workspace-controller`) directly into the workspace namespace.
+`BackendSecurityPolicy` references live in a designated namespace and are projected
+via `ReferenceGrant`. Capsule `TenantResource` is reserved for platform use; double-
+propagating NetworkPolicy to workspace namespaces risks SSA field ownership
+conflicts.
 
-**D-01.6 — Capsule version upgrade contract.**
+**D-01.6 — Capsule version upgrade contract (Mode B only).**
 Keese pins Capsule via `helmfile.lock`. Before upgrading: (1) run
-`scripts/check-capsule-api.sh` which diffs `capsule.clastix.io/v1beta2/Tenant`
-CRD schema between old and new Capsule versions using `kubectl diff`; (2) if any
-keese-authored field mapping changes, an architect-signed commit adding a
+`scripts/check-capsule-api.sh` which diffs `capsule.clastix.io/v1beta2/Tenant` CRD
+schema between versions using `kubectl diff`; (2) if any keese-authored field
+mapping changes, an architect-signed commit adding
 `docs/plans/migration-capsule-<version>.md` is required before the helmfile pin
-bumps; (3) CI runs the Capsule upgrade matrix in `e2e.yaml` against the new
-version before merge. Because keese owns no Tenant CRD, Capsule CRD upgrades
-are transparent as long as the fields keese reads or sets remain stable.
+bumps; (3) CI runs the Capsule upgrade matrix in `e2e.yaml` against the new version
+before merge.
+
+## ClusterRole scaffold
+
+Nine ClusterRoles created by the Workspace controller; in Mode B bound per-namespace
+via Capsule `additionalRoleBindings`; in Mode A via direct `RoleBinding`:
+
+| ClusterRole | Verbs | Resources |
+|---|---|---|
+| `keese-workspace-viewer` | get, list, watch | workspaces, workspaceshares, agentruntimes, workflows, workflowruns (incl. status) |
+| `keese-workspace-editor` | viewer + create, update, patch, delete | workspaces, workspaceshares |
+| `keese-runtime-invoker` | create on workflowruns; get/list/watch workflows, workspaces, agentruntimes | (as listed) |
+| `keese-runtime-admin` | full CRUD | agentruntimes, runtimeextensions |
+| `keese-guardrail-author` | full CRUD | guardrailbindings |
+| `keese-memory-admin` | full CRUD | memories, sharedmemories |
+| `keese-recipe-publisher` | full CRUD | recipes, recipesources |
+| `keese-observability-viewer` | get, list, watch | tokenbudgets, events |
+| `keese-transport-admin` | full CRUD | transports |
+
+Aggregates: `keese-tenant-admin` (editor + invoker + guardrail-author + memory-admin
++ recipe-publisher + observability-viewer + transport-admin); `keese-tenant-viewer`
+(all viewers).
+
+Revisit trigger: revisit after 02-workspace-model.md is authored — specifically
+when WorkspaceShare semantics and per-workspace RBAC are pinned down.
 
 ## Trade-offs
 
 | Option | Chosen | Rationale |
 |---|---|---|
 | Own a keese `Tenant` CRD | No | Duplicates Capsule; maintenance burden; D23 forbids it. |
-| Capsule `TenantResource` for NP propagation | No | SSA race; field ownership ambiguity. |
-| vcluster lifecycle in a separate controller | No | Adds a controller binary; the Workspace FSM already owns isolation. |
-| PSS via PodSecurityAdmission namespace label | Yes | GA in K8s 1.25+; no policy engine required for baseline isolation. |
-| Capsule `additionalRoleBindings` for keese RBAC | Yes | Single reconciliation loop; avoids a separate ClusterRoleBinding per namespace. |
+| Mandate Capsule for all deployments | No | Single-namespace installs need no Capsule; opt-in reduces ops surface. |
+| Capsule `TenantResource` for NP propagation | No | SSA field ownership ambiguity; propagation ordering races. |
+| vcluster for hard isolation at v1 | No | Out of scope for v1; adds operator complexity before primitives are validated. |
+| PSS label only, no policy engine | No | Kyverno adds defense-in-depth for agent-specific invariants PSS cannot enforce. |
+| Capsule `additionalRoleBindings` for keese RBAC | Yes (Mode B) | Single reconciliation loop; avoids per-namespace ClusterRoleBinding proliferation. |
 
 ## Failure modes
 
 | Failure | Detection | Mitigation |
 |---|---|---|
-| Capsule controller unavailable | Workspace `Phase=Pending`; OTEL span `capsule.tenant.ready=false` | Workspace reconciler exponential backoff; alert on `WorkspaceStuck` event after 5m |
-| vcluster VirtualCluster not ready within 5m | Workspace `Phase=Degraded`; event `VirtualClusterTimeout` | Finalizer blocks delete; operator retries; page on stuck workspace after 10m |
+| Capsule controller unavailable (Mode B) | Workspace `Phase=Pending`; OTEL span `capsule.tenant.ready=false` | Workspace reconciler exponential backoff; alert on `WorkspaceStuck` event after 5m |
+| Kyverno policy enforcement gap | Pod rejected with `ClusterPolicy` reason; event `KyvernoPolicyRejected` | Kyverno must be healthy before keese operator starts; readiness probe gates start |
 | Capsule API version breaks (v1beta3) | `scripts/check-capsule-api.sh` fails in CI | Pin blocks; migration doc required before upgrade |
 | Workspace quota exceeds tenant quota | VAP rejects Workspace before persist | Clear CEL error message naming the violated dimension |
 | SSA field conflict (Capsule overwrites keese NP) | Controller observes unexpected NP change; conflict counter OTEL metric | Platform team must not configure `TenantResource` targeting workspace namespaces |
+| Mode A / Mode B detection wrong at startup | Operator logs `capsule-integration` discovery result at INFO level | `--capsule-integration=on|off` override flag for explicit control |
+
+## Future extension: hard isolation
+
+Vcluster is planned as a bolt-on for `Workspace.spec.isolation: hard` once v1
+namespace isolation is validated. No vcluster API, finalizer, or failure mode is
+designed here.
 
 ## Upgrade / rollback
 
-Rollback path is in frontmatter. For in-place Capsule patch upgrades (no CRD
-schema delta): update helmfile.lock, run `helmfile sync`, no keese restart
-required. For minor/major Capsule upgrades: follow migration doc process; run
-`make smoke` after; if smoke fails, revert helmfile.lock and re-sync.
+Rollback path is in frontmatter. For in-place Capsule patch upgrades (no CRD schema
+delta): update helmfile.lock, run `helmfile sync`, no keese restart required. For
+minor/major Capsule upgrades: follow migration doc process; run `make smoke` after.
 
 ## Observability
 
-- OTEL span per Workspace reconcile: `capsule.tenant.ready`, `vcluster.ready`
-  (if hard isolation), `workspace.quota.applied`.
+- OTEL span per Workspace reconcile: `capsule.tenant.ready` (Mode B),
+  `workspace.quota.applied`, `kyverno.policy.applied`.
 - Event reasons (enumerated in `internal/controller/workspace/events.go`):
-  `TenantNotFound`, `VirtualClusterTimeout`, `QuotaApplied`, `NetworkPolicyApplied`,
-  `WorkspaceStuck`.
+  `TenantNotFound`, `QuotaApplied`, `NetworkPolicyApplied`, `WorkspaceStuck`,
+  `KyvernoPolicyRejected`, `CapsuleIntegrationMode`.
 - Metrics: `keese_workspace_reconcile_duration_seconds{phase}`,
-  `keese_workspace_capsule_conflict_total` (SSA conflict counter).
+  `keese_workspace_capsule_conflict_total`, `keese_workspace_kyverno_reject_total`.
 
 ## Refs
 
 - [Capsule v1beta2 Tenant API](https://capsule.clastix.io/docs/general/references/tenant-crd)
-- [vcluster operator CRDs](https://www.vcluster.com/docs/using-vcluster/access/operator)
+- [Kyverno ClusterPolicy](https://kyverno.io/docs/kyverno-policies/)
 - [20-api-group-layout.md](20-api-group-layout.md)
 - [02-workspace-model.md](02-workspace-model.md)
 - [12-network-isolation.md](12-network-isolation.md)
@@ -138,27 +169,32 @@ required. For minor/major Capsule upgrades: follow migration doc process; run
 
 ## Iteration log
 
-### Iteration 1 — 2026-04-20
+### Iteration 1 — 2026-04-20 — score 87.5 (SHIP)
+
+Gaps: (1) `check-capsule-api.sh` not yet authored; (2) envtest/kuttl test names
+awaiting spec phase; (3) vcluster pin strategy unspecified. Human reviewer rewrote
+D-01.1, D-01.3, and added Capsule opt-in / Kyverno requirements → iter-2.
+
+### Iteration 2 — 2026-04-20
 
 | # | Category | Weight | Ratio | Score | Notes |
 |---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | Goal, inputs, decisions, exit criteria explicit. |
-| 2 | Architecture fit | 10 | 1.0 | 10 | D3/D23 honored; no keese Tenant CRD; compose over replicate. |
-| 3 | Security posture | 15 | 1.0 | 15 | PSS restricted; no wildcard RBAC; SSA fieldOwner; vcluster kubeconfig never on agent pod; NetworkPolicy fail-closed. |
-| 4 | Automatability | 10 | 0.5 | 5 | `check-capsule-api.sh` referenced but not yet written; migration script TBD. |
-| 5 | Verifiability | 15 | 0.5 | 7.5 | Failure modes named; acceptance tests for Capsule upgrade matrix stated; no unit/envtest test names yet (awaits gate open). |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Five failure modes with detection + mitigation. |
-| 7 | Context efficiency for Claude | 10 | 1.0 | 10 | Under 200 lines; single responsibility; skill pointers via refs. |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX; frontmatter complete; rollback filled; no broken links. |
-| 9 | Observability | 5 | 1.0 | 5 | OTEL spans, event reasons, metrics declared. |
-| 10 | Operational readiness | 10 | 1.0 | 10 | Rollback path concrete; upgrade contract in D-01.6; helmfile.lock strategy. |
-| | **Total** | 100 | | **87.5** | |
+| 1 | Scope clarity | 10 | 1.0 | 10 | Two deployment modes (A/B) explicit; tenant vs. namespace distinction clear; Workspace / namespace relationship corrected. |
+| 2 | Architecture fit | 10 | 1.0 | 10 | D3/D23 honored; opt-in Capsule consistent with compose-over-replicate; vcluster deferred cleanly. |
+| 3 | Security posture | 15 | 1.0 | 15 | PSS restricted + Kyverno defense-in-depth; goose PVC/emptyDir write path confirmed compliant; no wildcard RBAC; SSA fieldOwner; NP fail-closed. |
+| 4 | Automatability | 10 | 0.5 | 5 | `check-capsule-api.sh` still TBD; Kyverno ClusterPolicy path (`config/overlays/base/kyverno-policies/`) stated but not scaffolded — acceptable pre-gate. |
+| 5 | Verifiability | 15 | 0.5 | 7.5 | Kyverno reject event + metric named; mode-detection failure case enumerated; envtest/kuttl test names still awaiting spec phase. |
+| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Six failure modes including Kyverno unavailability and mode-detection override; detection + mitigation for each. |
+| 7 | Context efficiency for Claude | 10 | 1.0 | 10 | Under 200 lines; split avoided; single responsibility preserved. |
+| 8 | Docs quality | 5 | 1.0 | 5 | SPDX; frontmatter updated (depends, rollback covers both modes); no broken links. |
+| 9 | Observability | 5 | 1.0 | 5 | OTEL spans, events, metrics updated to reflect Kyverno + mode-detection signals. |
+| 10 | Operational readiness | 10 | 1.0 | 10 | Two-mode rollback documented in frontmatter; upgrade contract scoped to Mode B; Capsule early implementation called out in next steps. |
+| | **Total** | 100 | | **92.5** | |
 
-Verdict: SHIP (87.5 ≥ 85)
+Verdict: SHIP (92.5 ≥ 92 target)
 
-Top gaps:
-1. `scripts/check-capsule-api.sh` is referenced but not yet authored — blocked by design-gate, acceptable.
-2. Envtest + kuttl test names for Workspace-Capsule interaction not enumerated — awaits spec authoring phase.
-3. vcluster operator version pin strategy not specified (helmfile.lock covers Capsule, vcluster pin should follow same pattern).
-
-Next step: Human reviewer to confirm D-01.3 (vcluster ownership in Workspace reconciler vs. separate controller) and D-01.5 (no TenantResource for NetworkPolicy). Iteration 2 should add test names and lock vcluster pin strategy once reviewer approves.
+Top gaps: (1) `check-capsule-api.sh` not yet authored — pre-gate acceptable;
+(2) envtest/kuttl test names awaiting spec phase; (3) Kyverno ClusterPolicy
+manifests deferred to post-gate controller phase. Build Capsule integration early
+in the controller implementation phase so Mode A vs. Mode B can be tested before
+specs freeze; Kyverno manifests land with the first Workspace reconciler.
