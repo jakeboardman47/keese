@@ -8,7 +8,7 @@ model: haiku
 ---
 
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 # Worktree Merge
 

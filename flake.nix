@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) {{YEAR}} {{ORG_NAME}}
+# Copyright (c) 2026 keese-ai
 
 {
-  description = "{{PROJECT_NAME}} — reproducible dev environment";
+  description = "keese — reproducible dev environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -17,7 +17,7 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          name = "{{PROJECT_NAME}}";
+          name = "keese";
 
           packages = with pkgs; [
             # ===== Supply-chain / signing =====
@@ -84,7 +84,7 @@
 
           shellHook = ''
             echo ""
-            echo "  {{PROJECT_NAME}} dev shell"
+            echo "  keese dev shell"
             echo ""
             echo "  Next steps:"
             echo "    1. cp .env.local.example .env.local    # fill in secrets"

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) {{YEAR}} {{ORG_NAME}}
+# Copyright (c) 2026 keese-ai
 #
 # Two-stage signal supervisor. Source me; do not execute.
 # shellcheck shell=bash

@@ -9,7 +9,7 @@ model: sonnet
 ---
 
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 Dispatch an agent into an isolated git worktree to work on a phase.
 

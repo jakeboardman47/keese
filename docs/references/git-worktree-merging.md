@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 ---
 scope: reference
@@ -7,7 +7,7 @@ category: reference
 depends: [docs/references/agent-dispatch.md, docs/references/conventional-commits.md]
 related_skills: [worktree-merge]
 status: current
-last_verified: {{LAST_VERIFIED}}
+last_verified: 2026-04-19
 ---
 
 # Git Worktree Merging

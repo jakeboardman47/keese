@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 ---
 scope: reference
@@ -7,7 +7,7 @@ category: index
 depends: [../designs/README.md, ../specs/README.md]
 related_skills: [doc-authoring]
 status: current
-last_verified: {{LAST_VERIFIED}}
+last_verified: 2026-04-19
 ---
 
 # features/ — WHAT IS BUILT
@@ -53,7 +53,7 @@ the feature doc exists as soon as the code on `main` implements it.
 
 ```markdown
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 ---
 scope: feature

@@ -5,7 +5,7 @@ paths:
 ---
 
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 # Conventions (always loaded)
 
@@ -15,7 +15,7 @@ Every source file begins with:
 
 ```
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) {{YEAR}} {{ORG_NAME}}
+// Copyright (c) 2026 keese-ai
 ```
 
 Equivalent comment syntax for other languages (`#` for shell/YAML/Make/Nix/Python,

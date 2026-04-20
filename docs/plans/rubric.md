@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 ---
 scope: plan
@@ -7,7 +7,7 @@ category: rubric
 depends: [README.md]
 related_skills: [plan-management]
 status: current
-last_verified: {{LAST_VERIFIED}}
+last_verified: 2026-04-19
 ---
 
 # Plan / Spec / Implementation Rubric

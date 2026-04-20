@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) {{YEAR}} {{ORG_NAME}}
+# Copyright (c) 2026 keese-ai
 #
 # PostToolUse hook for Edit/Write: verify new or modified source files carry
 # the SPDX + copyright header. Issues a block so the model can self-correct.

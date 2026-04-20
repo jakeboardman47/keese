@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) {{YEAR}} {{ORG_NAME}}
+# Copyright (c) 2026 keese-ai
 #
 # Re-render every committed diagram source and compare to its sibling render.
 # Fail when source and render have drifted. Invoked by pre-commit and CI.

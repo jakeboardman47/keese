@@ -8,7 +8,7 @@ model: haiku
 ---
 
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 # Doc Authoring
 
@@ -20,7 +20,7 @@ Writing or updating any doc under `docs/**`.
 
 ```markdown
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 ---
 scope: design | spec | plan | feature | reference

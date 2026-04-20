@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 # Contributing
 
@@ -86,7 +86,7 @@ Every source file starts with:
 
 ```
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) {{YEAR}} {{ORG_NAME}}
+// Copyright (c) 2026 keese-ai
 ```
 
 Equivalent comment syntax for other languages. `addlicense` pre-commit + the

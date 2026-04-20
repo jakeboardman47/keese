@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 ---
 scope: reference
@@ -7,7 +7,7 @@ category: reference
 depends: []
 related_skills: [doc-authoring]
 status: current
-last_verified: {{LAST_VERIFIED}}
+last_verified: 2026-04-19
 ---
 
 # Documentation System
@@ -31,7 +31,7 @@ line and a few scope-specific fields change.
 
 ```markdown
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 ---
 scope: design

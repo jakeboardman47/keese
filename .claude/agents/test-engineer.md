@@ -13,7 +13,7 @@ isolation: worktree
 ---
 
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 # Test Engineer (Sonnet, worktree-isolated)
 

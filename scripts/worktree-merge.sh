@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) {{YEAR}} {{ORG_NAME}}
+# Copyright (c) 2026 keese-ai
 #
 # Merge a completed agent worktree back into main.
 # Usage:

@@ -8,7 +8,7 @@ model: sonnet
 ---
 
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 # Makefile Authoring
 
@@ -105,7 +105,7 @@ dev-run: ## Run the app against $$CONFIG
 ```bash
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) {{YEAR}} {{ORG_NAME}}
+# Copyright (c) 2026 keese-ai
 set -Eeuo pipefail
 IFS=$'\n\t'
 

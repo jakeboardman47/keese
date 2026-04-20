@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
-# {{PROJECT_NAME}} — Memory
+# keese — Memory
 
 MEMORY.md is a pointer index of **decisions made** and **gotchas hit**.
 Keep it scannable. One line per entry: `- [Short title](path/to/detail.md) — one-sentence hook.`

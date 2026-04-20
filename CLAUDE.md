@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}} — Claude Index
+# keese — Claude Index
 
 CLAUDE.md is a **task → doc → skill** map. It is not a content dump.
 Do not paste design, spec, or implementation text here. Link to it.
@@ -68,7 +68,7 @@ Goal: keep this file small and stable so prompt caching stays warm across sessio
 ## Conventions
 
 - **Copyright**: every source file has `// SPDX-License-Identifier: Apache-2.0` and
-  `// Copyright (c) {{YEAR}} {{ORG_NAME}}` (or the equivalent comment syntax).
+  `// Copyright (c) 2026 keese-ai` (or the equivalent comment syntax).
 - **Doc headers**: every doc has the SPDX/copyright HTML-comment pair plus YAML frontmatter
   (`scope`, `category`, `depends`, `related_skills`, `status`, `last_verified`).
 - **Commits**: Conventional Commits enforced via pre-commit (`type(scope): subject`).

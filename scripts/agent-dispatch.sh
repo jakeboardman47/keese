@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) {{YEAR}} {{ORG_NAME}}
+# Copyright (c) 2026 keese-ai
 #
 # Dispatch a Claude subagent into an isolated git worktree.
 # Usage:
@@ -79,7 +79,7 @@ fi
 mkdir -p "${wt_path}/.plan-logs"
 cat > "${wt_path}/.plan-logs/prompt.md" <<EOF
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 # Agent dispatch prompt
 

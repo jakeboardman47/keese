@@ -8,7 +8,7 @@ model: sonnet
 ---
 
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 # Diagram Authoring
 
@@ -40,7 +40,7 @@ change alters depicted structure — the affected diagram must ship in the same 
 
   ```
   # SPDX-License-Identifier: Apache-2.0
-  # Copyright (c) {{YEAR}} {{ORG_NAME}}
+  # Copyright (c) 2026 keese-ai
   # source_refs: pkg/foo/bar.go:42-180, internal/service/handler.go
   # depicts:     <what this diagram shows>
   ```

@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 ---
 scope: reference
@@ -7,7 +7,7 @@ category: reference
 depends: [docs/references/git-worktree-merging.md, docs/references/model-selection.md]
 related_skills: [agent-dispatch]
 status: current
-last_verified: {{LAST_VERIFIED}}
+last_verified: 2026-04-19
 ---
 
 # Multi-Agent Dispatch
@@ -47,8 +47,8 @@ that watch the main checkout:
 
 ```
 <path-to-repo>/
-  {{PROJECT_NAME}}/                 # main checkout, branch: main
-  {{PROJECT_NAME}}-worktrees/
+  keese/                 # main checkout, branch: main
+  keese-worktrees/
     phase-02-implementer/           # branch: feat/phase-02
     phase-03a-security-reviewer/    # branch: review/phase-03a
     ...
@@ -92,7 +92,7 @@ agent: implementer
 model: claude-sonnet-4-6
 ended: YYYY-MM-DDTHH:MM:SSZ
 branch: feat/phase-02
-worktree: ../{{PROJECT_NAME}}-worktrees/phase-02-implementer
+worktree: ../keese-worktrees/phase-02-implementer
 status: ready-for-merge     # ready-for-merge | blocked | abandoned
 ---
 

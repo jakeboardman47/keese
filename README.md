@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 # claude-project-template
 
@@ -60,18 +60,18 @@ rm -rf .git
 git init
 
 # 2. Substitute placeholders
-#   {{PROJECT_NAME}}      your project name
-#   {{ORG_NAME}}          copyright holder (e.g. "Your Name" or "Your Org, Inc.")
-#   {{YEAR}}              copyright year
-#   {{LAST_VERIFIED}}     today's date (YYYY-MM-DD)
-#   {{SECURITY_CONTACT_EMAIL}}   where to report vulnerabilities
-#   {{GITHUB_USER_OR_TEAM}}      your GitHub handle or team
+#   keese      your project name
+#   keese-ai          copyright holder (e.g. "Your Name" or "Your Org, Inc.")
+#   2026              copyright year
+#   2026-04-19     today's date (YYYY-MM-DD)
+#   security@keese.ai   where to report vulnerabilities
+#   keese-ai/maintainers      your GitHub handle or team
 #
 # Example (bash):
-grep -rl '{{PROJECT_NAME}}' . | xargs sed -i '' 's/{{PROJECT_NAME}}/my-new-project/g'
-grep -rl '{{ORG_NAME}}' . | xargs sed -i '' 's/{{ORG_NAME}}/Your Name/g'
-grep -rl '{{YEAR}}' . | xargs sed -i '' "s/{{YEAR}}/$(date +%Y)/g"
-grep -rl '{{LAST_VERIFIED}}' . | xargs sed -i '' "s/{{LAST_VERIFIED}}/$(date +%Y-%m-%d)/g"
+grep -rl 'keese' . | xargs sed -i '' 's/keese/my-new-project/g'
+grep -rl 'keese-ai' . | xargs sed -i '' 's/keese-ai/Your Name/g'
+grep -rl '2026' . | xargs sed -i '' "s/2026/$(date +%Y)/g"
+grep -rl '2026-04-19' . | xargs sed -i '' "s/2026-04-19/$(date +%Y-%m-%d)/g"
 # (repeat for the remaining placeholders)
 
 # 3. Seed the dev environment

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) {{YEAR}} {{ORG_NAME}}
+# Copyright (c) 2026 keese-ai
 
 # Fail fast; run in sensible order. Install with:
 #   pre-commit install --install-hooks
@@ -75,7 +75,7 @@ repos:
         args:
           - "-check"
           - "-c"
-          - "{{ORG_NAME}}"
+          - "keese-ai"
           - "-l"
           - "apache"
           - "-ignore"

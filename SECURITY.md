@@ -1,11 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 # Security Policy
 
 ## Reporting a Vulnerability
 
-Please report security issues privately to **{{SECURITY_CONTACT_EMAIL}}**. Do not open
+Please report security issues privately to **security@keese.ai**. Do not open
 a public GitHub issue for vulnerabilities.
 
 Include:

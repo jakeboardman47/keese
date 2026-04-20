@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) {{YEAR}} {{ORG_NAME}} -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 ---
 scope: reference
@@ -7,7 +7,7 @@ category: reference
 depends: []
 related_skills: [diagram-authoring, doc-authoring]
 status: current
-last_verified: {{LAST_VERIFIED}}
+last_verified: 2026-04-19
 ---
 
 # Diagram Authoring — Cookbook
@@ -59,7 +59,7 @@ dot -Tsvg internal/dep-graph.dot -o docs/designs/diagrams/dep-graph.svg
 
 ```d2
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) {{YEAR}} {{ORG_NAME}}
+# Copyright (c) 2026 keese-ai
 # source_refs: src/server.go, src/client.go
 # depicts: Phase-05 client/server topology
 
