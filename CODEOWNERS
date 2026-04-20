@@ -1,7 +1,48 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
+#
+# Three teams:
+#   @keese-ai/maintainers  — default reviewer for all code changes.
+#   @keese-ai/architects   — design-gate owner; reviews docs/designs,
+#                            docs/specs, docs/plans, and any change to
+#                            the API surface (api/, internal/controller/).
+#   @keese-ai/security     — zero-trust, rules 02/05, hooks, settings,
+#                            workflows, SECURITY.md, bundle/, and
+#                            dev/bootstrap/{envoy-gateway,openfga,openbao}.
 
-# Add your team handle or maintainer usernames below.
-# Example:
-# * @keese-ai/maintainers
+# Default — maintainers own everything not covered below.
 * @keese-ai/maintainers
+
+# Architecture / design-gate (blocks controller merges until gate opens).
+/docs/designs/          @keese-ai/architects
+/docs/specs/            @keese-ai/architects
+/docs/plans/            @keese-ai/architects
+/api/                   @keese-ai/architects @keese-ai/maintainers
+/internal/controller/   @keese-ai/architects @keese-ai/maintainers
+/PROJECT                @keese-ai/architects @keese-ai/maintainers
+
+# Security-sensitive paths.
+/.claude/rules/02-security.md             @keese-ai/security
+/.claude/rules/05-security-zero-trust.md  @keese-ai/security
+/.claude/rules/06-signal-handling.md      @keese-ai/security
+/.claude/settings.json                    @keese-ai/security
+/.claude/hooks/                           @keese-ai/security
+/.github/workflows/                       @keese-ai/security @keese-ai/maintainers
+/dev/bootstrap/envoy-gateway/             @keese-ai/security
+/dev/bootstrap/envoy-ai-gateway/          @keese-ai/security
+/dev/bootstrap/openfga/                   @keese-ai/security
+/dev/bootstrap/openbao/                   @keese-ai/security
+/dev/bootstrap/external-secrets/          @keese-ai/security
+/dev/bootstrap/kyverno/                   @keese-ai/security
+/SECURITY.md                              @keese-ai/security
+/bundle/                                  @keese-ai/security @keese-ai/maintainers
+/policy/opentofu/                         @keese-ai/security @keese-ai/maintainers
+
+# Release plumbing.
+/Makefile                                 @keese-ai/maintainers
+/flake.nix                                @keese-ai/maintainers
+/release-please-config.json               @keese-ai/maintainers
+/.release-please-manifest.json            @keese-ai/maintainers
+
+# Cloud deployment modules.
+/deploy/opentofu/                         @keese-ai/maintainers @keese-ai/security
