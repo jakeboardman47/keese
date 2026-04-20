@@ -54,3 +54,17 @@ Total: <n>/100 — <verdict>
 ```
 
 Do not rewrite the target doc unless invoked with an explicit "apply improvements" directive.
+
+## keese-specific
+
+- **Category 3 (Security posture)** is scored line-by-line against
+  `.claude/rules/05-security-zero-trust.md`. A half-score requires
+  naming which rule line is incompletely addressed.
+- **Category 5 (Verifiability)** requires that envtest and kuttl test
+  names exist (either in the spec's `tests:` frontmatter or in
+  `internal/controller/**/*_test.go`). A doc that only names "tests
+  will be added" scores 0 here.
+- **Category 9 (Observability)** requires at least one metric name
+  and one event reason cited in the doc.
+- Gate rule: no spec scores ≥ 90 until its owning design doc already
+  scores ≥ 90.

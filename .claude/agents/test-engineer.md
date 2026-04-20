@@ -83,3 +83,18 @@ coverage deltas.
 ## References
 
 - [../rules/06-testing.md](../rules/06-testing.md)
+- [../rules/04-kubernetes.md](../rules/04-kubernetes.md) — envtest,
+  idempotency, samples
+- [../rules/06-signal-handling.md](../rules/06-signal-handling.md) —
+  SIGTERM drain test required per binary
+
+## keese-specific
+
+- **Unit** = table-driven against fakes in `internal/controller/fake/`.
+- **Integration** = envtest, CRDs loaded from `config/crd/bases/`,
+  per-test namespace, `Eventually` 10s / 250ms.
+- **E2E** = kuttl against a kind-keese cluster.
+- **Mandatory** per-reconciler idempotency test:
+  `TestReconcileIdempotent_<Kind>` — reconcile ≥ 3 times with no spec
+  change, assert stable status.
+- **Mandatory** SIGTERM drain test per `cmd/` binary (rule 06.10).

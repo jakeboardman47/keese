@@ -32,3 +32,13 @@ reading several files but does not require any writes.
 4. Report under 200 words. Include file paths with line ranges.
 5. If the answer requires > 10 files, report the top 3 and say "there are more; ask for
    a specific slice."
+
+## keese-specific
+
+- Scope `rg` to `api/`, `internal/`, `config/`, `docs/`, `deploy/`,
+  `dev/`. Skip `bundle/` (generator output) unless asked.
+- **Never** read `.env.local` or any `kubeconfig*` (denied by
+  settings, but fail noisily rather than silently if you try).
+- When asked about a CRD or controller, start at
+  `docs/designs/20-api-group-layout.md` to locate the group, then
+  the owning design doc.

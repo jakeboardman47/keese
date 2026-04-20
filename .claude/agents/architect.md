@@ -39,3 +39,17 @@ boundary decisions, security model changes.
 
 - Design docs: full frontmatter, clear decision header, rationale, trade-offs, next steps.
 - Plan proposals: scored rubric table + work-item list with dependencies.
+
+## keese-specific
+
+- Read `docs/designs/20-api-group-layout.md` and
+  `docs/designs/07-agent-runtime-spi.md` first on any CRD or SPI question.
+- The 23 locked decisions (D1–D23) in `docs/plans/README.md` are
+  load-bearing — do not re-litigate without a migration plan entry in
+  `docs/plans/migration-<slug>.md`.
+- **Hard rule: designs complete before any spec.** When asked to start a
+  spec, verify every design it depends on has `status: current` and
+  iter-log score ≥ 90. If not, escalate.
+- Each design stays ≤ 200 lines — split into `NNa-*.md` / `NNb-*.md`
+  as needed (see examples: `04a/04b/04c`, `05a/05b/05c`, `08a/08b/08c`,
+  `14a/14b`).

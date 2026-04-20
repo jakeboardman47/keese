@@ -51,3 +51,18 @@ isolated git worktree so other agents can work in parallel.
 - No `git push` (the merge script handles publishing).
 - No `rm -rf`.
 - No `curl ... | sh`.
+
+## keese-specific
+
+- Before commit: `make fmt vet lint manifests generate` must pass.
+  If the change touches `internal/controller/**` or `api/**`, also run
+  `make test-integration` (envtest) — not optional.
+- If envtest won't come up, **hand off to the `debugger` agent** rather
+  than stubbing the test out.
+- Never write `panic(...)`, `log.Fatal(...)`, or `os.Exit(...)` in
+  `internal/controller/` — return `(ctrl.Result{}, err)` and let the
+  Manager decide (rule 04.8).
+- All controller writes use **Server-Side Apply** with
+  `client.FieldOwner("keese-<kind>-controller")` (rule 04.7).
+- Every long-running binary installs a SIGTERM handler per rule 06;
+  `scripts/check-signal-handling.sh` will fail the commit if absent.

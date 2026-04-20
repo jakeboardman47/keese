@@ -9,6 +9,22 @@ paths:
 
 # Conventions (always loaded)
 
+## Rule precedence (when rules conflict)
+
+From highest to lowest — a higher rule wins any conflict:
+
+1. [`05-security-zero-trust.md`](05-security-zero-trust.md)
+2. [`04-kubernetes.md`](04-kubernetes.md)
+3. [`06-signal-handling.md`](06-signal-handling.md)
+4. [`02-security.md`](02-security.md)
+5. [`03-context-mgmt.md`](03-context-mgmt.md)
+6. [`01-conventions.md`](01-conventions.md) (this file)
+7. [`06-testing.md`](06-testing.md)
+
+A deviation from a lower rule to comply with a higher rule is normal.
+A deviation from a higher rule to comply with a lower rule requires
+an ADR in `docs/designs/` with architect sign-off.
+
 ## License & copyright
 
 Every source file begins with:

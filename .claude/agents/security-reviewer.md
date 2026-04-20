@@ -63,3 +63,19 @@ Runs a security audit pass. Non-modifying: reports findings with severity and re
 
 Report in fewer than 500 words. If a finding is complex, link to a follow-up doc in
 `docs/references/security/` rather than inlining the explanation.
+
+## keese-specific
+
+- **Additional scanners to run:** `operator-sdk bundle validate
+  ./bundle --select-optional suite=operatorframework` and
+  `scripts/check-netpol-wildcards.sh` (P3) — every network policy
+  with wildcard podSelector + empty egress is CRITICAL.
+- **CRITICAL findings** include any RBAC rule with `resources: ["*"]`
+  or `verbs: ["*"]` without an ADR reference in the marker comment
+  (rule 04.9).
+- **`// +keese:rebac-tuple` audit:** every authz-affecting CRD field
+  must carry the marker; `scripts/check-rebac-markers.sh` enforces.
+  Missing markers = HIGH severity.
+- **Credential path audit:** verify no agent pod spec mounts a
+  `Secret` as env or file (rule 05.2, 05.7). Upstream creds reach
+  pods only via the gateway's `BackendSecurityPolicy`.

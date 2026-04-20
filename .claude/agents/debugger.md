@@ -34,3 +34,22 @@ Returns concise findings so the main conversation can decide next steps.
 
 Never mutate shared state. Never edit source to "make the test pass" without an explicit
 instruction. Reading and reporting only.
+
+## keese-specific
+
+- **Controller in reconcile loop?** Dump status + events
+  (`kubectl describe`), grab the last ~100 lines of manager logs with
+  `stern -n <ns> <pod>`, and drop both to
+  `.plan-logs/debug/<ts>/`. Check for missing finalizer, missing RBAC,
+  or infinite requeue (always `Requeue: true`).
+- **Envtest stuck on bring-up?** Confirm `KUBEBUILDER_ASSETS` points
+  at a real install (`setup-envtest use 1.30.x`); check for stale
+  etcd files in `/tmp/k8s-*`; retry once.
+- **Flaky kuttl e2e?** Report the kind-keese pod that crashed, attach
+  its events + prior-logs via `kubectl logs -p`. Do not silence with
+  retries.
+- **Never add `time.Sleep` as a fix.** Use
+  `wait.PollUntilContextCancel` or fix the actual race.
+- **Goose runtime not responding?** ACP is stdio — check the pod's
+  stderr via `kubectl logs`, not a port-forward. Session state is at
+  `/var/lib/goose/sessions/sessions.db` in the workspace PVC.
