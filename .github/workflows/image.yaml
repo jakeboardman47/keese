@@ -27,7 +27,7 @@ jobs:
           else echo "present=false" >> "$GITHUB_OUTPUT"; fi
       - name: set up QEMU
         if: steps.df.outputs.present == 'true'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
       - name: set up buildx
         if: steps.df.outputs.present == 'true'
         uses: docker/setup-buildx-action@v3
