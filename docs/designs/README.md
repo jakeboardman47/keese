@@ -25,6 +25,7 @@ before any spec is authored and before any controller code is written.
 | 01 | [01-tenancy-capsule.md](01-tenancy-capsule.md) | Tenancy via Capsule | tenancy | current |
 | 02 | [02-workspace-model.md](02-workspace-model.md) | Workspace Model | workspace | current |
 | 03 | [03-workflow-argo-delegation.md](03-workflow-argo-delegation.md) | Workflow Argo Delegation | workflow | current |
+| 03b | [03b-workflow-trigger-projections.md](03b-workflow-trigger-projections.md) | Workflow Trigger Projections | workflow | current |
 | 04a | [04a-openfga-authz-model.md](04a-openfga-authz-model.md) | OpenFGA Authorization Model | authz | current |
 | 04a-ii | [04a-ii-testplan.md](04a-ii-testplan.md) | OpenFGA Auth Model: Test Plan and CI Automation | authz | current |
 | 04b | [04b-projected-sa-identity.md](04b-projected-sa-identity.md) | Projected ServiceAccount Identity | authz | current |
