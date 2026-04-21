@@ -42,7 +42,7 @@ before any spec is authored and before any controller code is written.
 | 07b | [07b-agent-runtime-spi.md](07b-agent-runtime-spi.md) | Agent Runtime SPI: Trade-offs, Failure Modes, Upgrade, Observability | runtime | current |
 | 08a | [08a-goose-headless-modes.md](08a-goose-headless-modes.md) | Goose Headless Modes | runtime | draft |
 | 08b | [08b-goose-acp-stdio-k8s.md](08b-goose-acp-stdio-k8s.md) | Goose ACP stdio over K8s | runtime | draft |
-| 08c | [08c-goose-subagents-limits.md](08c-goose-subagents-limits.md) | Goose Sub-Agents and Limits | runtime | draft |
+| 08c | [08c-goose-subagents-limits.md](08c-goose-subagents-limits.md) | Goose Sub-Agents and Limits | runtime | current |
 | 09 | [09-transport-crd.md](09-transport-crd.md) | Transport CRD | transport | draft |
 | 10a | [10a-otel-topology.md](10a-otel-topology.md) | OTEL Topology | observability | current |
 | 10a-ii | [10a-ii-iter-log.md](10a-ii-iter-log.md) | OTEL Topology: Iteration Log | observability | current |
