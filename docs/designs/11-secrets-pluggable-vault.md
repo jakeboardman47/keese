@@ -12,7 +12,7 @@ depends:
   - 17-credential-broker.md
   - 21-opentofu-cloud-deployment.md
 related_skills: []
-status: current
+status: draft
 last_verified: 2026-04-21
 rollback: |
   OpenBao: restore from latest auto-snapshot (6h cadence) in object storage;
