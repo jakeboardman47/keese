@@ -8,6 +8,9 @@ depends:
   - 01-tenancy-capsule.md
   - 04a-openfga-authz-model.md
   - 04b-projected-sa-identity.md
+  - 05a-envoy-ai-gateway-topology.md
+  - 05c-mcp-policy-enforcement.md
+  - 10a-otel-topology.md
   - 20a-api-group-layout.md
   - 20b-api-group-layout.md
 related_skills: [crd-authoring]
@@ -47,6 +50,8 @@ Go path: `api/tenancy/v1alpha1`. Identity key for OpenFGA: `Tenant.metadata.name
 | `spec.credentialPoolRef.{name,namespace}` | No | Must resolve (webhook) | User |
 | `spec.defaultWorkspaceQuota` | No | ResourceList; dims ≥ 0 (VAP) | User |
 | `spec.dedicatedGateway` | No | May not toggle while `status.namespaces[]` non-empty (VAP) | User |
+| `spec.jwksCacheFailOpenSeconds` | No (default 300) | Int in [30, 600]; default 60 when `dedicatedGateway: true` (mutating webhook) | User (tenant-admin) |
+| `spec.auditArgumentsRedacted` | No (default false) | Boolean (OpenAPI-enforced) | User (tenant-admin) |
 | `status.observedGeneration` | — | operator-populated | Operator |
 | `status.phase` | — | Enum: Pending/Provisioning/Ready/Degraded/Terminating | Operator |
 | `status.conditions[]` | — | Standard `metav1.Condition` | Operator |
@@ -59,6 +64,24 @@ Printer columns (rule 04.5): `Age`, `Ready`, `Phase`, `Namespaces` (count),
 ReBAC marker on `spec.adminSubjects[]`:
 `// +keese:rebac-tuple=tenant:T#admin@user:U` (rule 04.14; written by operator
 bootstrap Job per 04a tuple table).
+
+`spec.jwksCacheFailOpenSeconds` semantics: controls the per-tenant fail-open window for
+Envoy JWT Authn JWKS caching during kube-apiserver unavailability. Values < 30s rejected
+(apiserver JWKS load dominates); values > 600s rejected (excessive fail-open). Default 300s
+for standard tenants; drops to 60s at admission when `dedicatedGateway: true` (mutating
+webhook). During the window, JWT Authn accepts tokens validated against the last cached JWKS;
+past the window, fails-closed (all egress denied with 401). Metric:
+`keese_envoy_jwks_cache_fail_open_seconds_remaining{tenant}`; event `JWKSCacheExhausted`
+at < 10% remaining. See 05a-envoy-ai-gateway-topology.md iter-2.
+
+`spec.auditArgumentsRedacted` semantics: default `false` (PII-safe) — `mcp.arguments` never
+reaches ES/Loki. Set `true` → OTEL processor `keese-argument-redactor` routes sanitized
+arguments into audit span attribute `mcp.arguments.redacted` via the Presidio engine configured
+per tenant (05c + 06). No redaction engine → arguments still dropped; event
+`AuditRedactionUnavailable` emitted. Cross-ref: 10a (stub) for OTEL collector topology.
+Compliance note: `true` is an explicit opt-in to process potentially-sensitive data through a
+redaction pipeline; tenant-admin must verify Presidio config matches data residency requirements.
+Rule 05.10 applies — tokens/bodies are never logged; only redacted argument attributes appear.
 
 Deferred: `spec.tokenTTLOverride` (04b handles tier overrides at Workspace);
 `spec.vclusterRef` (hard isolation deferred per D-01.2).
@@ -113,6 +136,17 @@ Rule 04.12: VAP-first; webhook only for cross-resource lookups.
   CEL: `oldSelf.spec.dedicatedGateway == self.spec.dedicatedGateway || size(self.status.namespaces) == 0`.
 - Warn if both `capsuleTenantRef` and `namespaceSelector` set (`NamespaceSelectorIgnoredInModeB`).
 - `spec.defaultWorkspaceQuota` dims must be valid Kubernetes quantity strings.
+- `spec.jwksCacheFailOpenSeconds` in range: CEL
+  `self.spec.jwksCacheFailOpenSeconds == 0 || (self.spec.jwksCacheFailOpenSeconds >= 30 && self.spec.jwksCacheFailOpenSeconds <= 600)`.
+  Zero is treated as unset (mutating webhook applies default).
+- `spec.auditArgumentsRedacted` is boolean (OpenAPI schema enforces; VAP noted for completeness).
+
+**Mutating webhook (defaulting):**
+- If `spec.jwksCacheFailOpenSeconds` unset (0) and `spec.dedicatedGateway == true` → default to 60.
+- If `spec.jwksCacheFailOpenSeconds` unset (0) and `spec.dedicatedGateway == false` → default to 300.
+- Envtest assertions: `tenant_fields_test.go` in `test/envtest/admission/` — three cases:
+  admission-accept (valid range), admission-reject (out-of-range), webhook-default
+  (unset field gets correct default for each dedicatedGateway value).
 
 **Validating webhook (cross-resource):**
 - `spec.capsuleTenantRef` must resolve to an existing `capsule.clastix.io/v1beta2/Tenant`.
@@ -144,6 +178,14 @@ Run: `kubectl apply -f migrations/tenant-backfill.yaml`.
 - **04a-openfga-authz-model.md:** Identity key for `tenant` type is
   `Tenant.metadata.name` (not `.uid` as implied in iter-4). 04a iter-5 should
   align. Tuple shapes unchanged; no migration required.
+- **05a-envoy-ai-gateway-topology.md (iter-2, current):** `spec.jwksCacheFailOpenSeconds`
+  field defined here; 05a iter-2 reads it in JWT Authn filter configuration. Semantics
+  alignment settled.
+- **05c-mcp-policy-enforcement.md (iter-1, current):** `spec.auditArgumentsRedacted`
+  field defined here; 05c iter-1 references it in the audit log opt-in section. Semantics
+  alignment settled.
+- **10a-otel-topology.md (stub dep):** OTEL processor `keese-argument-redactor` topology
+  is specified here but realized in 10a; treat 10a as a stub dependency until current.
 
 ## Refs
 

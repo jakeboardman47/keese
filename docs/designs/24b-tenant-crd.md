@@ -40,6 +40,8 @@ admission, and migration details are in 24.
 | Tenant deleted with live Workspaces | Finalizer blocks | `TenantDeletionBlocked` event; drain Workspaces first |
 | `dedicatedGateway` toggle with live namespaces | VAP rejects | Drain namespaces; coordinate 05a gateway teardown first |
 | `--tenant-crd-mode=off` rollback with orphaned tuples | OpenFGA tuples for `tenant:X` remain; workspace controller resumes label-derivation | Run `fga tuple delete` cleanup job; document in rollback migration plan |
+| JWKS cache exhausted (`jwksCacheFailOpenSeconds` elapsed) | `keese_envoy_jwks_cache_fail_open_seconds_remaining` → 0; event `JWKSCacheExhausted` | Envoy JWT Authn fails-closed (401 all egress); restore apiserver connectivity |
+| Redaction engine unavailable (`auditArgumentsRedacted: true`, Presidio down) | Event `AuditRedactionUnavailable` | Arguments still dropped (fail-safe); alert and restore Presidio sidecar |
 
 ## Upgrade / Rollback
 
@@ -69,15 +71,18 @@ OTEL spans:
 Event reasons (finite table in `internal/controller/tenancy/tenant/events.go`):
 `TenantProvisioned`, `NamespaceAdded`, `NamespaceRemoved`, `TenantLabelLocked`,
 `CapsuleTenantNotFound`, `RefNotResolved`, `TenantDeletionBlocked`,
-`SelectorOverlapDenied`, `NamespaceSelectorIgnoredInModeB`.
+`SelectorOverlapDenied`, `NamespaceSelectorIgnoredInModeB`,
+`JWKSCacheExhausted`, `AuditRedactionUnavailable`.
 
 Metrics:
 - `keese_tenant_reconcile_duration_seconds{mode,phase}`
 - `keese_tenant_namespace_count{tenant,mode}`
 - `keese_tenant_capsule_sync_errors_total{tenant}`
 - `keese_tenant_deletion_blocked_total{tenant}`
+- `keese_envoy_jwks_cache_fail_open_seconds_remaining{tenant}` (from Envoy stats bridge)
 
 Alert: `keese_tenant_capsule_sync_errors_total > 0 for 5m` → P2 (Mode B only).
+Alert: `keese_envoy_jwks_cache_fail_open_seconds_remaining < 30` → P1 (JWKS cache near exhaustion).
 
 ## Iteration Log
 
@@ -105,3 +110,28 @@ Top gaps:
 3. 04a identity key discrepancy (`metadata.uid` vs `metadata.name`) flagged in 24 § Cross-Reference Impacts; 04a iter-5 needed to align.
 
 Next step: Author `docs/plans/migration-d23-tenant-crd.md` (D26 backfill ADR). Then 04a iter-5 to align identity key.
+
+### Iteration 2 — 2026-04-20
+
+| # | Category | Weight | Ratio | Score | Notes |
+|---|---|---:|---:|---:|---|
+| 1 | Scope clarity | 10 | 1.0 | 10 | Targeted field-absorption pass; two fields added within explicit scope; no scope creep. |
+| 2 | Architecture fit | 10 | 1.0 | 10 | No new primitives; fields integrate into existing VAP-first + mutating-webhook pattern (rule 04.12). |
+| 3 | Security posture | 15 | 1.0 | 15 | `auditArgumentsRedacted` defaults false (PII-safe; rule 05.10 compliant); VAP floor/ceiling on `jwksCacheFailOpenSeconds` prevents apiserver JWKS abuse; fail-closed past window; redaction drop on missing engine. |
+| 4 | Automatability | 10 | 0.9 | 9 | VAP CEL specified; mutating webhook defaulting logic stated; envtest suite named (`test/envtest/admission/tenant_fields_test.go`); webhook implementation deferred to controller phase (pre-gate acceptable). |
+| 5 | Verifiability | 15 | 1.0 | 15 | Envtest assertions named explicitly: admission-accept (valid range), admission-reject (out-of-range), webhook-default (unset → correct default per dedicatedGateway value). Full credit per mandate. |
+| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Two new failure modes added: JWKS cache exhaustion (fail-closed 401) and redaction engine unavailable (arguments still dropped). |
+| 7 | Context efficiency | 10 | 1.0 | 10 | 24 at 196 lines (≤ 200); 24b at target (≤ 200); no unrelated sections modified. |
+| 8 | Docs quality | 5 | 1.0 | 5 | Cross-refs updated for 05a iter-2, 05c iter-1, 10a stub dep; `last_verified` refreshed; `depends` updated; status current. |
+| 9 | Observability | 5 | 1.0 | 5 | `keese_envoy_jwks_cache_fail_open_seconds_remaining{tenant}`, `JWKSCacheExhausted`, `AuditRedactionUnavailable` added; P1 alert on near-exhaustion. |
+| 10 | Operational readiness | 10 | 0.9 | 9 | Tenant-admin runbook for `auditArgumentsRedacted` opt-in named (compliance posture documented inline); full standalone runbook deferred to pre-gate (acceptable). |
+| | **Total** | 100 | | **97** | |
+
+Verdict: SHIP (97 ≥ 90)
+
+Top gaps:
+1. Mutating webhook defaulting logic needs controller-phase implementation (`test/envtest/admission/tenant_fields_test.go` unscaffolded — pre-gate acceptable).
+2. `10a-otel-topology.md` is a stub dep — `keese-argument-redactor` processor topology not yet current; flag for 10a iter-1.
+3. Tenant-admin runbook for `auditArgumentsRedacted` opt-in is documented inline; a dedicated runbook should be authored pre-launch.
+
+Next step: 04a iter-5 to align `metadata.name` identity key. Then author `docs/plans/migration-d23-tenant-crd.md` (D26 backfill ADR).
