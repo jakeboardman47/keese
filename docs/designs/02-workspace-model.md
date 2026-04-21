@@ -6,12 +6,14 @@ scope: design
 category: workspace
 depends:
   - 01-tenancy-capsule.md
+  - 03-workflow-argo-delegation.md
   - 04a-openfga-authz-model.md
   - 04b-projected-sa-identity.md
   - 04c-token-revocation.md
   - 05a-envoy-ai-gateway-topology.md
   - 06-guardrailbinding.md
   - 07-agent-runtime-spi.md
+  - 08b-goose-acp-stdio-k8s.md
   - 10b-token-accounting.md
   - 18-process-lifecycle.md
   - 20a-api-group-layout.md
@@ -21,180 +23,153 @@ related_skills: [crd-authoring, controller-authoring]
 status: current
 last_verified: 2026-04-21
 rollback: |
-  spec.suspended=true + wait for drain (operator emits WorkspaceSuspended with
-  drain_duration_ms). Pod-topology change requires new Workspace + spec.resumeFrom
-  pointing to the evicted Workspace's last checkpoint; suspend then terminate the
-  original. CR deletion triggers finalizer drain: OpenFGA tuples → NetworkPolicy →
-  projected SA → PVC (retained per spec.storage.retentionPolicy). Revert operator
-  image via OLM `replaces` chain; no CRD migration needed until v1beta1 promotion.
+  Interactive → non-interactive switch is forbidden by VAP (InteractivityImmutable); recreate
+  Workspace with spec.interactive: false + spec.resumeFrom pointing to last checkpoint.
+  For topology changes: spec.suspended=true + drain; create new Workspace with resumeFrom;
+  terminate old. CR deletion triggers finalizer drain: OpenFGA tuples → NetworkPolicy →
+  projected SA → PVC (per spec.storage.retentionPolicy). Revert operator via OLM `replaces`
+  chain; no CRD migration until v1beta1 promotion.
 ---
 
 # 02 — Workspace Model
 
 ## Context
 
-A `Workspace` CR is the durable identity of one autonomous agent. It projects
-~7 resources (Deployment + PVC + ServiceAccount + NetworkPolicy + HTTPRoute +
-OpenFGA tuples + Capsule labels) and governs the full agent lifecycle from first
-`WorkflowRun` through eviction and resume. D24 establishes that Workspace identity
-survives pod churn; D25 mandates the controller call `Resume` whenever work is
-pending with no active session. This design owns the lifecycle FSM, pod topology,
-idle/eviction policy, storage model, scheduling merge, and the `spec.supervision`
-schema that design 23 depends on.
+A `Workspace` CR is the durable identity of one autonomous agent. `spec.interactive` is the
+primary axis: `false` (default) = WorkflowRun-driven execution (Argo); `true` = attach-driven
+interactive sessions via `WorkspaceSession` CRs (D27). The two modes have distinct FSMs, pod
+topologies, and admission invariants. This design owns: spec schema, bifurcated FSM, pod topology,
+idle/eviction, storage, scheduling merge, supervision schema, attach policy, and concurrency policy.
 
-## Spec schema sketch
+## Spec schema (iter-2 fields marked *)
 
-Top-level spec fields (full schema in `workspace.operator.keese.ai-v1alpha1.md` spec):
+Full schema in `workspace.operator.keese.ai-v1alpha1.md`.
 
-| Field | Required | Default | Constraint |
-|---|---|---|---|
-| `spec.tenantRef.name` | Mode A | — | Immutable (VAP) |
-| `spec.runtimeRef.name` | Yes | — | Must resolve to AgentRuntime CR |
-| `spec.topology` | No | `single` | `single\|pod-per-subagent`; immutable (VAP) |
-| `spec.suspended` | No | `false` | Boolean |
-| `spec.idleTimeout` | No | `15m` | VAP: [1m, tenant ceiling] |
-| `spec.evictionTimeout` | No | `2h` | VAP: [15m, tenant ceiling]; from Idle entry |
-| `spec.resumeFrom` | No | `""` | Checkpoint path or prior Workspace name |
-| `spec.guardrails.inherit[]` | Injected | `[keese.ai/default]` | Mutating webhook; VAP rejects removal |
-| `spec.storage.size` | No | `10Gi` | VAP: [tenant floor, ceiling] |
-| `spec.storage.className` | No | cluster default | VAP: allowedClasses[] |
-| `spec.storage.retentionPolicy` | No | `Retain` | `Retain\|Delete` on termination |
-| `spec.forceRevoke.epoch` | No | `0` | Monotonic ms; VAP epoch > lastEpoch |
-| `spec.revocationMode` | No | `abort` | `abort\|finish` (04c) |
-| `spec.supervision.overrides.*` | No | see §supervision | Duration; VAP bounds per tenant |
-| `spec.evictionPolicy.deleteAfter` | No | `168h` | Post-Evicted auto-terminate + PVC delete |
-
-## Lifecycle FSM
-
-States and transitions (controller uses SSA; fieldOwner `keese-workspace-controller`):
-
-| From | To | Event / Condition | Controller Action |
-|---|---|---|---|
-| _(new)_ | `Pending` | CR created | Validate tenant ref; queue provisioning |
-| `Pending` | `Provisioning` | Tenant resolved; resources reconciling | Apply SA, PVC, NetworkPolicy, Deployment, OpenFGA tuples; write `workspace:W#owner@tenant:T` |
-| `Provisioning` | `Ready` | All 7 projected resources healthy; SA token projected; tuples written | Set `conditions[Ready=True]`; emit `WorkspaceReady` |
-| `Ready` | `Running` | First `WorkflowRun` accepted; SPI `Start` called | Write `status.activeSessionRef`; update `conditions[Running=True]` |
-| `Running` | `Idle` | No active `WorkflowRun` for `spec.idleTimeout` OR step-boundary checkpoint with no pending work | Emit `WorkspaceIdle`; pod stays running |
-| `Idle` | `Running` | New `WorkflowRun` pending; D25 GUPP | Call `AgentRuntime.Resume`; emit `WorkspaceResumed` |
-| `Idle` | `Evicted` | Idle for `spec.evictionTimeout` | Scale Deployment to 0; write `status.lastCheckpoint`; retain PVC + tuples + SA; emit `WorkspaceEvicted` |
-| `Evicted` | `Provisioning` | New `WorkflowRun`; controller must Resume per D25 | Create new pod; call `Start`/`Resume`; re-enter Provisioning→Ready→Running |
-| `Running\|Idle\|Evicted` | `Suspended` | `spec.suspended: true` (tenant-admin) | Graceful SPI `Drain`; pods scaled to 0; tuples retained; emit `WorkspaceSuspended` |
-| `Suspended` | `Running` | `spec.suspended: false` | SPI `Resume`; re-enter Running |
-| `*` | `Revoked` | `spec.forceRevoke.epoch > 0`; 04c `revocationMode` | Abort or finish per mode; delete OpenFGA tuples; emit `ForceRevokeApplied`; terminal unless `spec.resumeFrom` set |
-| `*` | `Degraded` | Any projected resource unhealthy | Retry with backoff; emit `WorkspaceDegraded`; does not evict |
-| `*` | `Terminating` | CR deletion; finalizer drain order: OpenFGA tuples → NetworkPolicy → projected SA → PVC (per retentionPolicy) | Emit `WorkspaceTerminating`; release resources in order |
-
-Conditions: `Ready`, `Running`, `Revoked`, `Degraded`. `observedGeneration` on every status update (rule 04.4).
-
-## Pod topology
-
-`spec.topology` is **immutable** after creation (VAP `oldSelf.spec.topology == self.spec.topology`).
-
-- `single` (default): one Pod; goose runtime container + optional sidecar(s). `accessMode: ReadWriteOnce`. Works in all environments.
-- `pod-per-subagent`: one Pod per sub-agent (max 10 per 08c). Requires `CapabilitySupportsSubAgents: true` on the registered `AgentRuntime`. `accessMode: ReadWriteMany`; requires an RWX-capable StorageClass (VAP rejects in kind/dev where only `standard` is available). Admission validates StorageClass RWX support via annotation `keese.ai/rwx-capable: "true"` on the StorageClass object.
-
-Migration path: create a new Workspace with `spec.resumeFrom: <old-ws-name-or-checkpoint>` and `spec.topology: pod-per-subagent`; set old Workspace `spec.suspended: true`; after migration confirm, terminate old Workspace.
-
-## Idle + eviction
-
-Two independent timers; both configurable at cluster scope via `ConfigMap keese-workspace-defaults` in `keese-system`.
-
-| Timer | Default | Tenant override | Cluster floor/ceiling | Phase transition |
-|---|---|---|---|---|
-| `spec.idleTimeout` | 15 min | `Tenant.spec.defaultIdleTimeout` | VAP: [1m, 4h] | `Running → Idle` |
-| `spec.evictionTimeout` | 2 hr (from Idle entry) | `Tenant.spec.defaultEvictionTimeout` | VAP: [15m, 7d] | `Idle → Evicted` |
-
-Evicted workspaces retain PVC + OpenFGA tuples + SA token (not revoked). `spec.evictionPolicy.deleteAfter` (default `168h`) auto-terminates + deletes PVC after that duration in `Evicted` phase. Pod is scaled to 0 replicas; Deployment manifest retained for fast re-provision.
-
-## PVC sizing and access mode
-
-| Env | Default StorageClass | RWX StorageClass |
+| Field | Default | VAP constraint |
 |---|---|---|
-| dev (kind) | `standard` | none — RWX rejected at admission |
-| EKS | `gp3-csi` | `efs-sc` |
-| GKE | `pd-ssd` | `filestore-rwx` |
-| AKS | `managed-premium` | `azurefile-rwx` |
+| `spec.tenantRef.name` | — | Immutable |
+| `spec.runtimeRef.name` | — | Must resolve to AgentRuntime |
+| `spec.topology` | `single` | Immutable; `single\|pod-per-subagent` |
+| `spec.interactive` * | `false` | **Immutable** (`InteractivityImmutable`) |
+| `spec.suspended` | `false` | Boolean |
+| `spec.idleTimeout` | `15m` | [1m, tenant ceiling] |
+| `spec.evictionTimeout` | `2h` | [15m, tenant ceiling] |
+| `spec.resumeFrom` | `""` | Checkpoint path or prior Workspace name |
+| `spec.storage.{size,className,retentionPolicy}` | `10Gi / cluster default / Retain` | [tenant floor,ceiling]; allowedClasses[] |
+| `spec.forceRevoke.epoch` | `0` | Monotonic ms > lastEpoch (04c) |
+| `spec.revocationMode` | `abort` | `abort\|finish` |
+| `spec.evictionPolicy.deleteAfter` | `168h` | Post-Evicted auto-terminate + PVC delete |
+| `spec.resources.{cpu,memory}` | `1 / 2Gi` | [tenant floor, ceiling] |
+| `spec.supervision.*` | see §supervision | Duration per tenant bounds (23) |
+| `spec.concurrencyPolicy` * | `Allow` | `Allow\|Forbid\|Replace`; ignored if interactive |
+| `spec.sessionMode` * | `shared` | `shared\|per-user\|per-attach`; interactive only |
+| `spec.attachPolicy.allowedSubjects[]` * | `[]` | Optional allowlist; interactive only |
+| `spec.attachPolicy.requiredClaims` * | `{}` | OIDC claim key→values; interactive only |
+| `spec.attachPolicy.maxConcurrentSessionsPerUser` * | `0` (unbounded) | VAP rejects over cap |
+| `spec.attachPolicy.maxConcurrentAttaches` * | `0` (unbounded) | VAP rejects over cap |
+| `spec.attachGrace` * | `5m` | VAP: [0s, 24h]; interactive only |
+| `spec.subagentLimits.{max,budgetMode}` | `10 / shared` | VAP: ≤ tenant limit (08c) |
 
-`spec.storage.size` defaults to 10Gi; VAP enforces `[Tenant.spec.storage.min, Tenant.spec.storage.max]`. `spec.storage.className` allows override; VAP validates against `Tenant.spec.storage.allowedClasses[]`. Daily VolumeSnapshot via VolumeSnapshot CR; retention per `Tenant.spec.storage.snapshotRetention` (default 7 days). Checkpoint path within PVC: `/var/run/keese/sessions/<workspace-uid>/session.sqlite` (18).
+`spec.interactive` VAP CEL: `oldSelf.spec.interactive == self.spec.interactive`.
+Reason: distinct FSMs, pod topology (bridge sidecar conditional on 07), and lazy vs eager
+pod lifecycle. Mode switch = recreate.
 
-## Scheduling merge with Capsule
+## Bifurcated FSM
 
-`Workspace.spec.scheduling` fields compose with Capsule (Mode B) or cluster defaults (Mode A):
+### Non-interactive (`spec.interactive: false`)
 
-- Workspace `nodeSelector` must be a **superset** of `Tenant.spec.nodeSelector` (VAP). Conflicting key values → `SchedulingCollision` event + admission reject.
-- Tolerations are additive; Workspace may add tolerations the tenant requires.
-- `affinity` merged by intersection (both must match); workspace cannot weaken Capsule affinity groups.
-- Mode A (no Capsule): `keese-workspace-defaults` ConfigMap provides defaults; Workspace spec is authoritative.
+No persistent workspace pod. Argo manages step pods in the Workspace namespace (03 iter-2).
 
-## `spec.supervision` (bounded)
+| From | To | Condition | Controller action |
+|---|---|---|---|
+| _(new)_ | `Pending` | CR created | Validate tenantRef; queue provisioning |
+| `Pending` | `Provisioning` | Tenant resolved | Apply SA, PVC, NetworkPolicy, OpenFGA tuples |
+| `Provisioning` | `Ready` | 7 resources healthy; tuples written | `conditions[Ready=True]`; `WorkspaceReady` |
+| `Ready` | `Running` | WorkflowRun accepted | `status.activeRunRef`; `conditions[Running=True]` |
+| `Running` | `Idle` | No in-flight runs for `spec.idleTimeout` | `WorkspaceIdle` |
+| `Idle` | `Running` | New WorkflowRun; D25 GUPP | SPI `Resume`; `WorkspaceResumed` |
+| `Idle` | `Evicted` | Idle for `spec.evictionTimeout` | Write checkpoint; retain PVC + tuples + SA; `WorkspaceEvicted` |
+| `Evicted` | `Provisioning` | New WorkflowRun | Recreate pod; re-enter Provisioning→Ready→Running |
 
-Schema defined here; consumed by design 23. VAP enforces bounds per `Tenant.spec.supervision.bounds` (cluster defaults in `keese-workspace-defaults`):
+`spec.concurrencyPolicy` (`Allow|Forbid|Replace`) enforced at WorkflowRun admission (03 iter-2).
+02 owns the field; 03 owns semantics.
 
-| Field | Default | Cluster floor | Cluster ceiling | Notes |
-|---|---|---|---|---|
-| `overrides.zeroTokenUsage` | `10m` | `1m` | `60m` | Duration string |
-| `overrides.noPhaseTransition` | `15m` | `1m` | `120m` | |
-| `overrides.acpIdle` | `5m` | `1m` | `30m` | D25 GUPP; workspace must be Running |
-| `overrides.noArtifactTouch` | `30m` | `5m` | `120m` | Enabled only if `expectsArtifacts: true` |
-| `overrides.expectsArtifacts` | `false` | — | — | Boolean gate for artifact signal |
-| `escalationLadder` | `[]` (use cluster default) | — | max 7 steps | Step `action` values enumerated by 23 |
+### Interactive (`spec.interactive: true`)
 
-VAP rejects duration values outside `[clusterFloor, clusterCeiling]`. CEL pattern: `duration(self.spec.supervision.overrides.zeroTokenUsage) >= duration("1m") && duration(self.spec.supervision.overrides.zeroTokenUsage) <= duration("60m")`.
+Lazy pod. Bridge sidecar always present (07 iter-2). No Deployment at `Ready`; pod created on first attach.
 
-## Trade-offs
+| From | To | Condition | Controller action |
+|---|---|---|---|
+| `Pending` | `Provisioning` | Tenant resolved | Apply SA, NetworkPolicy, OpenFGA tuples (no Deployment) |
+| `Provisioning` | `Ready` | SA + tuples + NP healthy; no Pod | `WorkspaceReady`; await attach |
+| `Ready` | `Starting` | First/subsequent attach passes admission | Attach webhook → controller creates WorkspaceSession CR + Pod |
+| `Starting` | `Running` | Pod running; ACP bridge healthy | `conditions[Running=True]`; `WorkspaceRunning` |
+| `Running` | `Idle` | All clients disconnect; `spec.attachGrace` starts | `WorkspaceIdle`; pod stays up |
+| `Idle` | `Running` | Client reconnects within grace | Reuse pod; `WorkspaceResumed` |
+| `Idle` | `Ready` | Grace expires; scale-to-zero | Delete pod; `WorkspaceScaledToZero`; next attach = cold boot (~15–30 s) |
 
-Single FSM / one controller: simpler causality; D25 GUPP requires tight loop.
-Topology immutable (VAP): RWO vs. RWX Deployment graph differs materially; in-place change unsafe.
-SA token + PVC retained on Evicted: D24 durable identity; revocation is an explicit 04c act.
-Two timers (idle/evict): idle pod costs compute; evicted costs storage only — separate levers needed.
-Supervision schema in 02: 23 mandates it; 02 is the canonical Workspace spec source.
+`spec.concurrencyPolicy` is **ignored** for interactive Workspaces. `spec.sessionMode` governs multi-attach.
 
-## Failure modes
+### Shared states (both FSMs)
+
+`Suspended`, `Revoked`, `Degraded`, `Terminating` — semantics unchanged from iter-1.
+Conditions: `Ready`, `Running`, `Revoked`, `Degraded`. `observedGeneration` on every status update (04.4).
+
+## WorkspaceSession integration (D27)
+
+**Attach flow:** `kubectl-keese attach` → attach webhook → admission chain → controller creates
+`WorkspaceSession` CR + Pod. Session name defaults to `"default"`; caller may supply `--session=<name>`.
+
+**Uniqueness by `spec.sessionMode`:**
+- `shared`: one CR per Workspace; attachSubject ignored for uniqueness; all attaches join one pod.
+- `per-user`: `(subject, sessionName)` unique; each user's `default` is their own CR + pod.
+- `per-attach`: sessionName operator-generated; caller-provided name rejected (`AttachSessionNameForbidden`).
+
+**Cleanup:** finalizer `finalizers.workspacesession.operator.keese.ai/cleanup` handles pod drain,
+PVC release (if not shared), and OpenFGA tuple removal. Pod failure: 30 s reconnect window; then
+auto-delete WorkspaceSession CR. Override: `WorkspaceSession.spec.preserveOnPodFailure: true`.
+
+OpenFGA subject for the workspace agent SA: `user:ksa-<workspace-uid>` (04b iter-2, bare name).
+
+## Attach policy (interactive only)
+
+Admission check order — ALL must pass:
+1. OpenFGA `Check(workspace:W#editor@user:ksa-<uid>)` — base ReBAC.
+2. `allowedSubjects[]` — if non-empty, caller subject MUST be in list.
+3. `requiredClaims` — JWT MUST carry all listed claim key/value pairs (e.g. `groups: ["eng"]`).
+4. `maxConcurrentSessionsPerUser` — VAP counts active `WorkspaceSession` CRs for `(subject, Workspace)`.
+5. `maxConcurrentAttaches` — VAP counts all active CRs across subjects.
+
+## Interactive ↔ WorkflowRun mutual exclusion
+
+`interactive: true` → attach only. VAP rejects `WorkflowRun` create: `WorkflowRunNotAllowedOnInteractiveWorkspace`.
+`interactive: false` → WorkflowRun only. Attach webhook rejects: `AttachNotAllowedOnNonInteractiveWorkspace`.
+
+## Pod topology, idle/eviction, PVC, scheduling, supervision
+
+Pod topology immutability, RWO vs RWX StorageClass rules, idle/eviction timers (two-timer model),
+PVC sizing table, scheduling merge with Capsule, and `spec.supervision.*` VAP bounds — all unchanged
+from iter-1; see `02-ii-iter-log.md` §Background.
+
+## Failure modes (iter-2 additions; full table in `02-ii-iter-log.md`)
 
 | Failure | Detection | Mitigation |
 |---|---|---|
-| Projected resource reconcile failure | `Degraded` phase; `WorkspaceDegraded` event | Exponential backoff (max 1000s per rule 04); alert `WorkspaceStuck` after 5m |
-| SPI `Start`/`Resume` returns `ErrTransient` | Controller retries; `AgentUnresponsive` after 2m | D23 escalation ladder; supervisor assesses |
-| PVC provision failure | `Provisioning` stuck; span `pvc.provision=false` | Event `PVCProvisionFailed`; webhook validates StorageClass at admission |
-| RWX StorageClass unavailable in dev | Admission reject | `topology: pod-per-subagent` blocked in kind; create new Workspace with `single` |
-| SIGKILL during Drain | Pod `Failed`; controller reads `status.lastCheckpoint` | `Resume` from checkpoint; ≤ 1 step of lost progress (18) |
-| ForceRevoke `can_revoke` check fails | OpenFGA down; fail-closed deny | Admission returns `ForbiddenToRevoke`; supervisor falls back to pod restart (step 4 of 23) |
-| SchedulingCollision (VAP) | Admission reject | Event `SchedulingCollision`; correct `nodeSelector` mismatch |
-| Eviction deleteAfter elapsed with live data | Auto-terminate triggered | VolumeSnapshot exists (daily); operator emits `WorkspaceAutoTerminated` alert |
+| Pod crash before session reconnect | 30 s timeout; `WorkspaceSessionFailed` | Auto-delete WorkspaceSession CR; scale-to-zero |
+| Attach rejected (policy violation) | Webhook + VAP; 403 | `AttachRejected` with specific reason code |
+| `per-attach` caller provides session name | VAP reject | `AttachSessionNameForbidden` |
+| Grace expires mid-reconnect | Timer race | Pod deleted; reconnect triggers cold boot |
 
-## Upgrade / rollback
+## Observability (iter-2 additions)
 
-Rollback in frontmatter. Topology change requires new Workspace + `spec.resumeFrom`. FSM changes are non-destructive; controller reconverges ≤ 3 reconciles (D24). v1alpha1 → v1beta1 requires conversion webhook + `docs/plans/migration-workspace-v1beta1.md` ≥ 90.
-
-## Observability
-
-- OTEL spans: `workspace.reconcile`, `workspace.provision`, `workspace.spi.start`, `workspace.spi.resume`, `workspace.spi.drain`.
-- Event reasons (in `internal/controller/workspace/events.go`): `WorkspaceReady`, `WorkspaceIdle`, `WorkspaceEvicted`, `WorkspaceResumed`, `WorkspaceSuspended`, `WorkspaceDegraded`, `WorkspaceTerminating`, `ForceRevokeApplied`, `PVCProvisionFailed`, `AgentUnresponsive`, `SchedulingCollision`, `WorkspaceAutoTerminated`.
-- Metrics: `keese_workspace_phase_total{phase,tenant}`, `keese_workspace_reconcile_duration_seconds{phase}`, `keese_workspace_idle_duration_seconds{tenant}`, `keese_workspace_eviction_total{tenant}`.
-- Printer columns (rule 04.5): `Age`, `Ready`, `Phase`, `Topology`, `Runtime`.
-- Alert: `WorkspaceStuck` (Degraded > 5m); `WorkspaceAutoTerminated` (informational page).
+New events: `WorkspaceRunning`, `WorkspaceScaledToZero`, `AttachRejected`, `WorkspaceSessionFailed`,
+`SessionsPerUserLimitExceeded`, `ConcurrentAttachLimitExceeded`, `AttachSessionNameForbidden`,
+`ConcurrentRunForbidden`, `ConcurrentRunForced`.
+New spans: `workspace.attach`, `workspace.session.create`, `workspace.scale_to_zero`.
+New metrics: `keese_workspace_attach_total{tenant,result}`, `keese_workspace_session_active{tenant,mode}`.
+New printer column: `Interactive` (rule 04.5).
+Full observability inventory in `02-ii-iter-log.md`.
 
 ## Refs
 
-[01](01-tenancy-capsule.md) · [04a](04a-openfga-authz-model.md) · [04b](04b-projected-sa-identity.md) · [04c](04c-token-revocation.md) · [05a](05a-envoy-ai-gateway-topology.md) · [06](06-guardrailbinding.md) · [07](07-agent-runtime-spi.md) · [10b](10b-token-accounting.md) · [18](18-process-lifecycle.md) · [20a](20a-api-group-layout.md) · [23](23-agent-supervision.md) · [24](24-tenant-crd.md) · [spec](../specs/workspace.operator.keese.ai-v1alpha1.md) · [rubric](../plans/rubric.md)
-
-## Iteration log
-
-### Iteration 1 — 2026-04-21
-
-| # | Category | Wt | Ratio | Score | Notes |
-|---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | FSM, topology, idle/eviction, PVC, scheduling, supervision bounded. |
-| 2 | Architecture fit | 10 | 1.0 | 10 | D24/D25 honored; SSA; VAP-first; compose-over-replicate. |
-| 3 | Security posture | 15 | 1.0 | 15 | SA retained on eviction but not revoked; fail-closed can_revoke; RWX guard; finalizer drain order. |
-| 4 | Automatability | 10 | 0.5 | 5 | VAP CEL stated; ConfigMap named; StorageClass annotation convention stated. Pre-gate. |
-| 5 | Verifiability | 15 | 0.5 | 7.5 | FSM transitions have event reasons; envtest/kuttl test names not authored (pre-gate P8). |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | 8 failure modes; SIGKILL + scheduling collision covered. |
-| 7 | Context efficiency | 10 | 1.0 | 10 | ≤ 200 lines; single responsibility; all deps linked. |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX; frontmatter; rollback concrete. |
-| 9 | Observability | 5 | 1.0 | 5 | OTEL spans, events, metrics, printer columns, alerts. |
-| 10 | Operational readiness | 10 | 1.0 | 10 | Topology migration; v1beta1 gated; eviction deleteAfter. |
-| | **Total** | 100 | | **92.5** | |
-Verdict: **SHIP** (92.5 ≥ 90). Status: `current`.
-Gaps: Cat 4 — VAP manifests pre-gate. Cat 5 — FSM envtest names (stuck-state, eviction timer, suspend/resume, 3-reconcile idempotency) flag for spec phase.
-Cross-deps settled: 23 supervision schema satisfied; 07 topology gates on CapabilitySupportsSubAgents; 24 association is label-based (not OwnerRef).
+[01](01-tenancy-capsule.md) · [03](03-workflow-argo-delegation.md) · [04a](04a-openfga-authz-model.md) · [04b](04b-projected-sa-identity.md) · [04c](04c-token-revocation.md) · [05a](05a-envoy-ai-gateway-topology.md) · [06](06-guardrailbinding.md) · [07](07-agent-runtime-spi.md) · [08b](08b-goose-acp-stdio-k8s.md) · [08c](08c-goose-subagents-limits.md) · [10b](10b-token-accounting.md) · [18](18-process-lifecycle.md) · [20a](20a-api-group-layout.md) · [23](23-agent-supervision.md) · [24](24-tenant-crd.md) · [iter-log](02-ii-iter-log.md) · [spec](../specs/workspace.operator.keese.ai-v1alpha1.md) · [rubric](../plans/rubric.md)
