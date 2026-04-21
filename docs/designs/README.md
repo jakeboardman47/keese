@@ -23,7 +23,7 @@ before any spec is authored and before any controller code is written.
 | # | Doc | Title | Category | Status |
 |---|---|---|---|---|
 | 01 | [01-tenancy-capsule.md](01-tenancy-capsule.md) | Tenancy via Capsule | tenancy | current |
-| 02 | [02-workspace-model.md](02-workspace-model.md) | Workspace Model | workspace | draft |
+| 02 | [02-workspace-model.md](02-workspace-model.md) | Workspace Model | workspace | current |
 | 03 | [03-workflow-argo-delegation.md](03-workflow-argo-delegation.md) | Workflow Argo Delegation | workflow | draft |
 | 04a | [04a-openfga-authz-model.md](04a-openfga-authz-model.md) | OpenFGA Authorization Model | authz | current |
 | 04a-ii | [04a-ii-testplan.md](04a-ii-testplan.md) | OpenFGA Auth Model: Test Plan and CI Automation | authz | current |
