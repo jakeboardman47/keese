@@ -5,177 +5,179 @@
 scope: design
 category: runtime
 depends:
-  - 04a-openfga-authz-model.md
+  - 02-workspace-model.md
   - 04b-projected-sa-identity.md
-  - 05b-credential-injection-patterns.md
   - 08a-goose-headless-modes.md
-  - 08b-goose-acp-stdio-k8s.md
-  - 08c-goose-subagents-limits.md
-  - 18-process-lifecycle.md
-  - 20a-api-group-layout.md
-  - 23-agent-supervision.md
+  - 20-api-group-layout.md
 related_skills: [doc-authoring, controller-authoring]
 status: current
 last_verified: 2026-04-21
-rollback: |
-  SPI major bump: author docs/plans/migration-runtime-spi-<version>.md scored ≥ 90;
-  deploy old + new interface versions side-by-side; drain existing AgentRuntime CRs;
-  update the runtime-controller to call the new interface; flip the feature gate;
-  delete old version shim. Rollback: revert feature gate; redeploy prior image; no
-  CRD migration required until v1beta1 promotion.
+rollback: Remove CleanupSubAgents from SPI and revert AgentRuntime.spec.sidecars;
+  providers requiring static registration can be shimmed via thin adapter until migration lands.
 ---
 
 # 07 — Agent Runtime SPI
 
-Trade-offs, failure modes, upgrade/rollback, observability, and iteration log:
-[07b-agent-runtime-spi.md](07b-agent-runtime-spi.md).
+**Decision:** The `AgentRuntime` Go interface is statically registered at process-start
+via `init()`, gated by a per-provider `CapabilityMatrix`. Goose is the first provider.
+Sidecar topology for the ACP bridge is conditional on `Workspace.spec.interactive`.
 
 ## Context
 
-Keese orchestrates autonomous AI agent workflows on pluggable runtimes. The
-`AgentRuntime` SPI is the Go interface contract that every runtime provider
-(goose first; claude-code, aider, and custom runtimes later) must satisfy. D24
-(durable identity) and D25 (GUPP) are load-bearing: agent identity is the
-Workspace, the pod is disposable, and any pending work MUST be resumed by the
-controller.
+Keese needs a pluggable runtime surface so goose, aider, and future agents share one
+operator without per-provider controller forks. The SPI defines the Go interface,
+capability matrix, and lifecycle the workspace controller drives. Iter-2 replaces
+dynamic binary-probe discovery with compile-time `init()` registration, adds
+`CleanupSubAgents` for orphan cleanup (08c), and formalises the sidecar contract (08b).
 
-## Interface Signatures
+## Interface — `internal/runtime/spi/v1alpha1`
 
-Package: `internal/runtime/spi/v1alpha1`
+Required (all providers): `Start`, `Stop`, `Status`, `InjectPrompt`.
 
+Optional (gate: `CapabilitySupportsSubAgentCleanup`):
 ```go
-// AgentRuntime is the pluggable provider contract.
-type AgentRuntime interface {
-    // Required (every runtime must implement)
+// CleanupSubAgents signals active sub-agents to drain gracefully.
+// Called by workspace controller on parent drain before pod-delete-by-label fallback.
+// Returns ErrTransient if sub-agents could not drain within budget.
+CleanupSubAgents(ctx context.Context, s Session) error
+```
 
-    // Start launches a fresh agent process. Returns a Session handle (opaque).
-    // ErrTransient (retry), ErrPermanent (terminal), ErrBudget (resources).
-    // Idempotent: returns existing healthy Session without starting a duplicate.
-    Start(ctx context.Context, ws WorkspaceRef) (Session, error)
+Optional: `CredentialRotationExpired` — called when projected SA token nears expiry.
+See 04b iter-2 + D28 for authoritative SA identity shape and OIDCProvider CRD.
 
-    // Resume implements D25 GUPP: restart after pod churn or SIGKILL.
-    // MUST be idempotent across three invocations with the same checkpointRef
-    // (D24 test obligation). Budget: 120s.
-    Resume(ctx context.Context, ws WorkspaceRef, ref CheckpointRef) (Session, error)
+**SPI versioning:** new required method → major package bump (`spi/v2alpha1`); new
+optional method → minor semver bump; apidiff enforced in CI.
 
-    // Drain implements the SIGTERM handler: flush state to PVC/NATS, write a
-    // CheckpointRef, close ACP transport. budget ≤ terminationGracePeriodSeconds-5s.
-    // ErrBudget: drain incomplete; ref is valid but marked partial=true.
-    Drain(ctx context.Context, s Session, budget time.Duration) (CheckpointRef, error)
+## Static capability registration
 
-    // Health returns a non-liveness report (token-usage, step-idle, ACP state).
-    // Must return in ≤ 1s; never blocks on the agent process. Called by D23 supervisor.
-    Health(ctx context.Context, s Session) HealthReport
-
-    // Capabilities returns the static matrix declared at registration.
-    // Called once on plugin startup; cached on AgentRuntime.status.capabilities.
-    Capabilities() CapabilityMatrix
-
-    // Optional (gate: matching Capability flag must be true)
-
-    // StreamEvents opens a structured-event channel. Closed when session ends.
-    StreamEvents(ctx context.Context, s Session) (<-chan RuntimeEvent, error)
-
-    // InvokeSubAgent spawns a sub-agent within the session's token/tool budget.
-    // Max concurrent enforced by caller (08c: 10).
-    InvokeSubAgent(ctx context.Context, s Session, spec SubAgentSpec) error
-
-    // AttachMCPServer binds an MCPRoute so the agent can call MCP tools (05a/05c).
-    AttachMCPServer(ctx context.Context, s Session, route MCPRouteRef) error
-
-    // InjectPrompt writes a synthetic "user" turn to the agent's existing ACP session
-    // without spawning a new workload. Used by the supervisor controller (23 escalation
-    // ladder step 2) to nudge a stuck agent with diagnostic context. Gated on
-    // CapabilitySupportsInjectPrompt. Goose implementation: synthetic user turn with
-    // `source: supervisor` metadata. If unsupported → caller proceeds to witness
-    // dispatch (step 3).
-    InjectPrompt(ctx context.Context, s Session, prompt string) error
+`internal/runtime/providers/goose/register.go`:
+```go
+func init() {
+    spi.Register("goose", spi.CapabilityMatrix{
+        SupportsStreaming: true, SupportsSubAgents: true,
+        SupportsSubAgentCleanup: true, SupportsMCP: true,
+        SupportsRecipes: true, SupportsInjectPrompt: true,
+        ProviderName: "goose", SPIVersion: "1.0.0",
+    }, newGooseProvider)
 }
 ```
 
-`Session` is in-process only. `CheckpointRef` (PVC path) is the durable cursor
-used by `Resume`. `RuntimeEvent.Type` values include `"StepStarted"`,
-`"StepCompleted"`, `"TokenUsed"`, `"CredentialRotationExpired"`,
-`"SubAgentSpawned"`, `"SessionDrained"`.
-
-## Capability Matrix and Registration
-
+`cmd/operator/main.go` blank-imports each built-in provider to trigger `init()`:
 ```go
-type CapabilityMatrix struct {
-    SupportsStreaming          bool
-    SupportsSubAgents          bool
-    SupportsMCP                bool
-    SupportsRecipes            bool   // goose: true; aider: false
-    SupportsInjectPrompt       bool   // 23 iter-2: supervisor re-prompt via ACP
-    ProviderName               string // e.g. "goose", "claude-code"
-    ProviderVersion            string // SemVer of the runtime binary
-    SPIVersion                 string // SemVer of this SPI package
-}
+import _ "github.com/keese-ai/keese/internal/runtime/providers/goose"
 ```
 
-**Discovery:** On pod startup, runtime binary is invoked as `<binary> capabilities`
-and prints `CapabilityMatrix` JSON to stdout. Runtime controller validates JSON,
-checks `SPIVersion` (same major required), caches on `AgentRuntime.status.capabilities`.
-Incompatible → `AgentRuntime.phase=Incompatible` + event `RuntimeCapabilityMismatch`.
+`internal/runtime/providers/goose/versions.go` declares `SupportedImageVersions`
+semver ranges; operator release cadence governs which goose image tags are valid.
 
-## SemVer and apidiff
+No `<binary> capabilities` JSON emission. No runtime pod at admission. No stdout parsing.
 
-| Change type | Version bump |
+## `AgentRuntime` CR (simplified)
+
+```yaml
+spec:
+  providerRef: goose        # resolved against in-process registry; UnknownProvider if absent
+  image: ghcr.io/keese-ai/goose-runtime:1.0.5  # ImageVersionUnsupported if outside ranges
+  config: { recipesDir: /var/keese/recipes }
+  sidecars:
+    acpBridge:
+      image: ""             # empty = operator-embedded default
+status:
+  capabilities: { SupportsStreaming: true, SupportsSubAgentCleanup: true }
+  phase: Ready
+  observedGeneration: 1
+```
+
+## Pod topology — conditional on `Workspace.spec.interactive`
+
+**Interactive** (`spec.interactive: true`): two containers — `goose` (runs
+`goose serve --stdio`, exposes ACP on `/var/run/keese/acp/goose.sock`) + `keese-acp-bridge`
+(ACP frame multiplexer) sharing an `emptyDir` volume at `/var/run/keese/acp`.
+
+**Non-interactive** (WorkflowRun-driven): single container — `goose` running
+`goose run --recipe=<path>`. No bridge, no emptyDir, no shared IPC.
+
+Bridge image is independently versioned. `AgentRuntime.spec.sidecars.acpBridge.image`
+allows override. Bridge drains on SIGTERM and exits 0 when goose exits. 08b owns
+bridge internals; 07 declares contract only.
+
+## Lifecycle and failure modes
+
+Workspace controller owns pod lifecycle end-to-end. On drain: calls `CleanupSubAgents`
+(if `SupportsSubAgentCleanup`), then falls back to pod-delete-by-label within the
+120s `terminationGracePeriodSeconds` (rule 06-signal-handling §3). On crash: K8s
+restart policy governs; reconciler picks up on next watch event. No `panic` or
+`log.Fatal` in controller code (rule 04.8).
+
+| Failure | Recovery |
 |---|---|
-| Signature change; removed method | **Major** |
-| New optional method added | **Minor** |
-| Comment / doc change | **Patch** |
+| Unknown `providerRef` | Admission rejects: `UnknownProvider` |
+| Image outside version range | Admission rejects: `ImageVersionUnsupported` |
+| `Start` error | Reconciler returns `(Result{}, err)`; retry with backoff |
+| `CleanupSubAgents` `ErrTransient` | Fall back to pod-delete-by-label |
+| Bridge sidecar crash | Pod restarts; goose state durable on PVC |
 
-`scripts/check-runtime-spi-apidiff.sh` runs `golang.org/x/exp/apidiff` comparing
-HEAD against the prior release tag (`git describe --match 'spi/v*'`). Failure blocks
-merge unless `docs/plans/migration-runtime-spi-<version>.md` exists and scores ≥ 90.
+## Security
 
-## Process Ownership (D24 + D25)
+Agent pods carry no kubeconfig, no upstream API keys. Identity = projected SA token
+`keese-egress-<tenant>`, TTL ≤ 10m (rule 05.3). Bridge sidecar shares the pod and
+same SA token — no new credential surface. `readOnlyRootFilesystem: true` on both
+containers; writes to workspace PVC (rule 05.11). NetworkPolicy fail-closed; egress
+only to Envoy AI Gateway on 443 (rule 05.4). Images pinned by digest in CSV/production.
 
-The workspace controller owns runtime-process lifecycle:
+## Observability
 
-1. Controller creates Pod with `restartPolicy: Never`.
-2. Calls `Start(ctx, workspaceRef)` via the registered runtime plugin.
-3. On Pod `Failed`: reads `Workspace.status.lastCheckpoint`; creates new Pod;
-   calls `Resume(ctx, ws, ref)`.
-4. GUPP (D25): if `pendingWork != ""` and no active Session, controller MUST call
-   `Resume` within one reconcile tick. Breach > 2 min → event `AgentUnresponsive`.
+Events (const table in `internal/controller/runtime/agentruntime/events.go`):
+`RuntimeStarted`, `RuntimeStopped`, `SubAgentCleanupTimeout`, `ProviderUnknown`,
+`ImageVersionUnsupported`, `CredentialExpired`.
 
-Periodic step-boundary auto-checkpoint: runtime calls `Drain(ctx, s, 0)` after each
-recipe step; controller writes ref to `Workspace.status.lastCheckpoint`. Limits
-resume restart-point to ≤ 1 step of lost progress on SIGKILL.
+OTEL: span per `Start`/`Stop`/`CleanupSubAgents`; attributes: `provider.name`,
+`workspace.name`, `tenant.name`, `session.id`. Printer columns: `Age`, `Ready`,
+`Phase`, `Provider`.
 
-## Crash Handling
+## Iteration log
 
-**SIGTERM:** Controller sends SIGTERM → runtime calls `Drain` → writes `CheckpointRef`
-→ exits 0 → controller calls `Resume` if work remains.
+### Iteration 1 — 2026-04-20
 
-**SIGKILL:** Pod `Failed` → controller reads last checkpoint → new Pod → `Resume`.
+| # | Category | Wt | Ratio | Score | Notes |
+|---|---|---:|---:|---:|---|
+| 1 | Scope clarity | 10 | 1.0 | 10 | Interface, matrix, lifecycle, apidiff policy defined. |
+| 2 | Architecture fit | 10 | 1.0 | 10 | Aligns D8/D9; SSA fieldOwner; no panic/Fatal. |
+| 3 | Security posture | 15 | 1.0 | 15 | No creds in agent pod; SA token; NetworkPolicy fail-closed. |
+| 4 | Automatability | 10 | 0.5 | 5 | apidiff gate referenced, not yet CI-wired. |
+| 5 | Verifiability | 15 | 0.5 | 7.5 | Contract clear; envtest/kuttl pre-gate. |
+| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Crash policy, ErrTransient, token expiry covered. |
+| 7 | Context efficiency | 10 | 1.0 | 10 | ≤ 200 lines; companion 07b for flow diagrams. |
+| 8 | Docs quality | 5 | 1.0 | 5 | SPDX; frontmatter; cross-links consistent. |
+| 9 | Observability | 5 | 1.0 | 5 | Events const table; OTEL spans declared. |
+| 10 | Operational readiness | 10 | 0.5 | 5 | Upgrade/rollback sketch present; version ranges declared. |
+| | **Total** | 100 | | **92.5** | **SHIP** |
 
-**SPI panic:** gRPC health probe fails × 3 within 5 min → `RuntimeCrashed` event →
-supervisor escalation (23) → backoff capped at 10 min → next `Resume`.
+Top gaps: (4) apidiff not CI-wired; (5) no test names pre-gate; (10) migration doc TODO.
 
-## CredentialRotationExpired Flow (answering 05b open Q)
+### Iteration 2 — 2026-04-21
 
-1. Runtime calls upstream via Envoy AI Gateway.
-2. Gateway returns `401 x-keese-rotation-expired: true` (05b §Rotation drain semantics).
-3. Runtime emits `RuntimeEvent{Type: "CredentialRotationExpired"}` on `StreamEvents`.
-4. Controller observes event → calls `Drain(ctx, s, graceBudget)`.
-5. Controller terminates pod; creates new pod (fresh projected SA token, TTL 600s per 04b).
-6. Controller calls `Resume(ctx, ws, lastCheckpoint)`.
-7. No retry loop at the runtime layer; controller is the retry authority.
+Changes applied: (1) dynamic probe replaced by `init()` static registration;
+(2) `CleanupSubAgents` optional method + `SupportsSubAgentCleanup` cap flag added;
+(3) sidecar contract formalised — bridge injected only when `Workspace.spec.interactive`;
+(4) `CredentialRotationExpired` references 04b iter-2 + D28 for OIDC SA identity shape.
 
-## Refs
+| # | Category | Wt | Ratio | Score | Notes |
+|---|---|---:|---:|---:|---|
+| 1 | Scope clarity | 10 | 1.0 | 10 | Three mandates integrated; decision header precise. |
+| 2 | Architecture fit | 10 | 1.0 | 10 | Static registration simpler; no new rule violations. |
+| 3 | Security posture | 15 | 1.0 | 15 | Bridge in same pod = same SA token; no new surface. |
+| 4 | Automatability | 10 | 0.5 | 5 | apidiff CI hook still referenced, not yet wired. |
+| 5 | Verifiability | 15 | 0.5 | 7.5 | Method sigs precise; SupportedImageVersions testable; envtest pre-gate. |
+| 6 | Failure-mode awareness | 10 | 1.0 | 10 | CleanupSubAgents ErrTransient; bridge crash; all modes tabled. |
+| 7 | Context efficiency | 10 | 1.0 | 10 | ≤ 200 lines; companion 07b unchanged. |
+| 8 | Docs quality | 5 | 1.0 | 5 | SPDX; frontmatter updated; depends includes 04b. |
+| 9 | Observability | 5 | 1.0 | 5 | SubAgentCleanupTimeout event added; OTEL span for CleanupSubAgents. |
+| 10 | Operational readiness | 10 | 0.5 | 5 | Rollback note added; sidecar versioning stated; upgrade cadence defined. |
+| | **Total** | 100 | | **92.5** | **SHIP** |
 
-- [07b-agent-runtime-spi.md](07b-agent-runtime-spi.md) — trade-offs, failure modes, upgrade/rollback, observability, iter log
-- [04a-openfga-authz-model.md](04a-openfga-authz-model.md) — `can_revoke`; `supervised_by@witness`
-- [04b-projected-sa-identity.md](04b-projected-sa-identity.md) — SA identity; D25 resume invariant
-- [05b-credential-injection-patterns.md](05b-credential-injection-patterns.md) — rotation drain; answered open Q
-- [08a-goose-headless-modes.md](08a-goose-headless-modes.md) — goose SPI implementation (stub)
-- [08b-goose-acp-stdio-k8s.md](08b-goose-acp-stdio-k8s.md) — ACP stdio transport (stub)
-- [08c-goose-subagents-limits.md](08c-goose-subagents-limits.md) — 10-concurrent ceiling (stub)
-- [18-process-lifecycle.md](18-process-lifecycle.md) — Drain/Checkpoint/Resume lifecycle (stub; feeds this design)
-- [20a-api-group-layout.md](20a-api-group-layout.md) — `runtime.operator.keese.ai/v1alpha1`
-- [23-agent-supervision.md](23-agent-supervision.md) — crash escalation; witness pattern (stub)
-- [../plans/scaffolding-plan.md](../plans/scaffolding-plan.md) — D8, D9, D24, D25
-- [../plans/rubric.md](../plans/rubric.md)
+Top gaps: (4) apidiff not CI-wired — primary blocker to 95+; (5) envtest pre-gate by
+design; (10) migration doc for v1beta1 promotion still TODO.
+
+Next step: wire apidiff to `lint.yaml` and author `test/controller/agentruntime_test.go`
+stubs — those two close both half-credit categories and should bring iter-3 to ≥ 95.
