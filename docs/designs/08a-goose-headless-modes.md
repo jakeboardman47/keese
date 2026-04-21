@@ -16,7 +16,7 @@ depends:
   - 18-process-lifecycle.md
   - 21-operator-config.md
 related_skills: [doc-authoring, controller-authoring]
-status: current
+status: draft
 last_verified: 2026-04-21
 rollback: |
   Mode change (recipe → serve) requires a new Workspace with spec.resumeFrom
