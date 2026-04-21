@@ -38,7 +38,8 @@ before any spec is authored and before any controller code is written.
 | 06 | [06-guardrailbinding.md](06-guardrailbinding.md) | GuardrailBinding | guardrails | current |
 | 06-ii | [06-ii-spec-schema.md](06-ii-spec-schema.md) | GuardrailBinding: Spec Schema | guardrails | current |
 | 06-iii | [06-iii-samples.md](06-iii-samples.md) | GuardrailBinding: Scope Samples | guardrails | current |
-| 07 | [07-agent-runtime-spi.md](07-agent-runtime-spi.md) | Agent Runtime SPI | runtime | draft |
+| 07 | [07-agent-runtime-spi.md](07-agent-runtime-spi.md) | Agent Runtime SPI | runtime | current |
+| 07b | [07b-agent-runtime-spi.md](07b-agent-runtime-spi.md) | Agent Runtime SPI: Trade-offs, Failure Modes, Upgrade, Observability | runtime | current |
 | 08a | [08a-goose-headless-modes.md](08a-goose-headless-modes.md) | Goose Headless Modes | runtime | draft |
 | 08b | [08b-goose-acp-stdio-k8s.md](08b-goose-acp-stdio-k8s.md) | Goose ACP stdio over K8s | runtime | draft |
 | 08c | [08c-goose-subagents-limits.md](08c-goose-subagents-limits.md) | Goose Sub-Agents and Limits | runtime | draft |
@@ -55,7 +56,7 @@ before any spec is authored and before any controller code is written.
 | 15 | [15-memory-management.md](15-memory-management.md) | Memory Management | memory | draft |
 | 16 | [16-recipe-distribution.md](16-recipe-distribution.md) | Recipe Distribution | recipes | draft |
 | 17 | [17-credential-broker.md](17-credential-broker.md) | Credential Broker | egress | draft |
-| 18 | [18-process-lifecycle.md](18-process-lifecycle.md) | Process Lifecycle | reliability | draft |
+| 18 | [18-process-lifecycle.md](18-process-lifecycle.md) | Process Lifecycle | reliability | current |
 | 19 | [19-ide-and-debugging.md](19-ide-and-debugging.md) | IDE and Debugging | developer-experience | draft |
 | 20 | [20-api-group-layout.md](20-api-group-layout.md) | API Group Layout (redirect) | api | superseded |
 | 20a | [20a-api-group-layout.md](20a-api-group-layout.md) | API Group Layout: Groups, Kinds, Shared Types, Versioning | api | current |
