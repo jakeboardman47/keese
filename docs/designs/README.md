@@ -42,7 +42,9 @@ before any spec is authored and before any controller code is written.
 | 07 | [07-agent-runtime-spi.md](07-agent-runtime-spi.md) | Agent Runtime SPI | runtime | current |
 | 07b | [07b-agent-runtime-spi.md](07b-agent-runtime-spi.md) | Agent Runtime SPI: Trade-offs, Failure Modes, Upgrade, Observability | runtime | current |
 | 08a | [08a-goose-headless-modes.md](08a-goose-headless-modes.md) | Goose Headless Modes | runtime | current |
-| 08b | [08b-goose-acp-stdio-k8s.md](08b-goose-acp-stdio-k8s.md) | Goose ACP stdio over K8s | runtime | draft |
+| 08b | [08b-goose-acp-stdio-k8s.md](08b-goose-acp-stdio-k8s.md) | Goose ACP stdio over K8s | runtime | current |
+| 08b-ii | [08b-ii-session-crd-spec.md](08b-ii-session-crd-spec.md) | Goose ACP: WorkspaceSession CRD Spec + Attach Flow | runtime | current |
+| 08b-iii | [08b-iii-iter-log.md](08b-iii-iter-log.md) | Goose ACP: Iteration Log | runtime | current |
 | 08c | [08c-goose-subagents-limits.md](08c-goose-subagents-limits.md) | Goose Sub-Agents and Limits | runtime | current |
 | 09 | [09-transport-crd.md](09-transport-crd.md) | Transport CRD | transport | draft |
 | 10a | [10a-otel-topology.md](10a-otel-topology.md) | OTEL Topology | observability | current |
