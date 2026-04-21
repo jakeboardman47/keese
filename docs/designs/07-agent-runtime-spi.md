@@ -82,6 +82,14 @@ type AgentRuntime interface {
 
     // AttachMCPServer binds an MCPRoute so the agent can call MCP tools (05a/05c).
     AttachMCPServer(ctx context.Context, s Session, route MCPRouteRef) error
+
+    // InjectPrompt writes a synthetic "user" turn to the agent's existing ACP session
+    // without spawning a new workload. Used by the supervisor controller (23 escalation
+    // ladder step 2) to nudge a stuck agent with diagnostic context. Gated on
+    // CapabilitySupportsInjectPrompt. Goose implementation: synthetic user turn with
+    // `source: supervisor` metadata. If unsupported → caller proceeds to witness
+    // dispatch (step 3).
+    InjectPrompt(ctx context.Context, s Session, prompt string) error
 }
 ```
 
@@ -94,13 +102,14 @@ used by `Resume`. `RuntimeEvent.Type` values include `"StepStarted"`,
 
 ```go
 type CapabilityMatrix struct {
-    SupportsStreaming  bool
-    SupportsSubAgents bool
-    SupportsMCP       bool
-    SupportsRecipes   bool   // goose: true; aider: false
-    ProviderName      string // e.g. "goose", "claude-code"
-    ProviderVersion   string // SemVer of the runtime binary
-    SPIVersion        string // SemVer of this SPI package
+    SupportsStreaming          bool
+    SupportsSubAgents          bool
+    SupportsMCP                bool
+    SupportsRecipes            bool   // goose: true; aider: false
+    SupportsInjectPrompt       bool   // 23 iter-2: supervisor re-prompt via ACP
+    ProviderName               string // e.g. "goose", "claude-code"
+    ProviderVersion            string // SemVer of the runtime binary
+    SPIVersion                 string // SemVer of this SPI package
 }
 ```
 
