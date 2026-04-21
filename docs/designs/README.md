@@ -43,8 +43,10 @@ before any spec is authored and before any controller code is written.
 | 08b | [08b-goose-acp-stdio-k8s.md](08b-goose-acp-stdio-k8s.md) | Goose ACP stdio over K8s | runtime | draft |
 | 08c | [08c-goose-subagents-limits.md](08c-goose-subagents-limits.md) | Goose Sub-Agents and Limits | runtime | draft |
 | 09 | [09-transport-crd.md](09-transport-crd.md) | Transport CRD | transport | draft |
-| 10a | [10a-otel-topology.md](10a-otel-topology.md) | OTEL Topology | observability | draft |
-| 10b | [10b-token-accounting.md](10b-token-accounting.md) | Token Accounting | observability | draft |
+| 10a | [10a-otel-topology.md](10a-otel-topology.md) | OTEL Topology | observability | current |
+| 10a-ii | [10a-ii-iter-log.md](10a-ii-iter-log.md) | OTEL Topology: Iteration Log | observability | current |
+| 10b | [10b-token-accounting.md](10b-token-accounting.md) | Token Accounting | observability | current |
+| 10b-ii | [10b-ii-iter-log.md](10b-ii-iter-log.md) | Token Accounting: Iteration Log | observability | current |
 | 11 | [11-secrets-pluggable-vault.md](11-secrets-pluggable-vault.md) | Secrets Pluggable Vault | secrets | draft |
 | 12 | [12-network-isolation.md](12-network-isolation.md) | Network Isolation | security | draft |
 | 13 | [13-cli-tunnel-wireguard.md](13-cli-tunnel-wireguard.md) | CLI Tunnel (WireGuard) | developer-experience | draft |
