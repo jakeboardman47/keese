@@ -13,7 +13,7 @@ depends:
   - 20-api-group-layout.md
   - 24-tenant-crd.md
 related_skills: []
-status: draft
+status: current
 last_verified: 2026-04-20
 rollback: Remove cluster-scoped keese.ai/default binding + ReferenceGrant; VAP
   auto-rejects workspace bindings missing parent status — safe to uninstall CRD.

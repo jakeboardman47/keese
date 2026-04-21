@@ -13,7 +13,7 @@ last_verified: 2026-04-19
 # designs/ — WHY
 
 Design docs explain **why** the project is shaped the way it is.
-All 37 design docs must reach `status: current` and score ≥ 90/100
+All 40 design docs must reach `status: current` and score ≥ 90/100
 before any spec is authored and before any controller code is written.
 
 > **Gate status: CLOSED.** See [../plans/README.md](../plans/README.md).
@@ -35,7 +35,9 @@ before any spec is authored and before any controller code is written.
 | 05b | [05b-credential-injection-patterns.md](05b-credential-injection-patterns.md) | Credential Injection Patterns | egress | current |
 | 05b-ii | [05b-ii-bsp-examples.md](05b-ii-bsp-examples.md) | Credential Injection: BSP YAML Examples + Iteration Log | egress | current |
 | 05c | [05c-mcp-policy-enforcement.md](05c-mcp-policy-enforcement.md) | MCP Policy Enforcement | egress | current |
-| 06 | [06-guardrailbinding.md](06-guardrailbinding.md) | GuardrailBinding | guardrails | draft |
+| 06 | [06-guardrailbinding.md](06-guardrailbinding.md) | GuardrailBinding | guardrails | current |
+| 06-ii | [06-ii-spec-schema.md](06-ii-spec-schema.md) | GuardrailBinding: Spec Schema | guardrails | current |
+| 06-iii | [06-iii-samples.md](06-iii-samples.md) | GuardrailBinding: Scope Samples | guardrails | current |
 | 07 | [07-agent-runtime-spi.md](07-agent-runtime-spi.md) | Agent Runtime SPI | runtime | draft |
 | 08a | [08a-goose-headless-modes.md](08a-goose-headless-modes.md) | Goose Headless Modes | runtime | draft |
 | 08b | [08b-goose-acp-stdio-k8s.md](08b-goose-acp-stdio-k8s.md) | Goose ACP stdio over K8s | runtime | draft |

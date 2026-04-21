@@ -8,7 +8,7 @@ depends:
   - 06-guardrailbinding.md
   - 05c-mcp-policy-enforcement.md
 related_skills: []
-status: draft
+status: current
 last_verified: 2026-04-20
 rollback: Schema changes require CRD conversion webhook at v1beta1 (rule 04.2);
   removing fields is a breaking change — gate behind feature flag.

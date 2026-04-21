@@ -8,7 +8,7 @@ depends:
   - 06-guardrailbinding.md
   - 06-ii-spec-schema.md
 related_skills: [guardrail-author]
-status: draft
+status: current
 last_verified: 2026-04-20
 rollback: see 06-guardrailbinding.md
 ---
