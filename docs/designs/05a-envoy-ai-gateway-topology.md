@@ -115,8 +115,11 @@ automatically.
 
 ## TokenBudget 429 signaling via NATS KV
 
-`TokenBudget` controller (D10b) writes budget-exceeded state to NATS JetStream KV bucket
-`keese-budget-exceeded` under keys `tenant/<name>` or `workspace/<uid>`.
+**NATS KV carries signals, not counters.** Consumption counters (tokens used per window)
+live in Prometheus as OTEL metrics (10b). The `TokenBudget` controller scrapes Prometheus
+at reconcile interval; when consumed ≥ limit, it writes a boolean flag to NATS JetStream
+KV bucket `keese-budget-exceeded` under keys `tenant/<name>` or `workspace/<uid>`.
+
 `keese-ext-authz` Deployment watches the same NATS KV bucket — reusing the infrastructure
 already required for 04c revocation (same NATS server, same Go client). On match,
 ext_authz sets response header `x-keese-budget-exceeded: true`. Envoy's `local_reply_config`
@@ -135,7 +138,7 @@ impersonate workspace upstream-model calls. Cross-ref: 23 iter-1 must honor this
 
 1. JWT Authn filter validates SA token via JWKS; projects `aud` to dynamic metadata.
 2. Ext_authz reads `keese.sa_token.aud` → stamps `x-keese-tenant`.
-3. Derives subject `user:ksa-<workspace-uid>@keese-egress-<tenant>` (04b).
+3. Derives subject `user:ksa-<workspace-uid>` for OpenFGA checks (04b; per-cluster OpenFGA means bare SA name is globally unique within the store). The JWT `aud` claim remains `keese-egress-<tenant>` for cloud STS trust policies — audience and OpenFGA subject are deliberately separate concerns.
 4. Checks NATS KV `keese-revocation-version/workspace/<uid>` (04c); NATS-degraded: skip cache.
 5. Checks NATS KV `keese-budget-exceeded/workspace/<uid>` → sets `x-keese-budget-exceeded`.
 6. `Check(tool:<name>#can_call@<subject>)` at `HIGHER_CONSISTENCY` (≤ 50 ms, 04a).

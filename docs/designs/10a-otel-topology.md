@@ -135,8 +135,13 @@ this as locked.
 | Loki `{job=keese-*}` | logs Tier 1+2 | object storage | ≥ 1 year |
 | Prometheus | metrics Tier 1+2 | — | 30-day |
 
-10b cross-ref: NATS KV budget signaling is owned by 10b; 10a owns the
-Prometheus metrics pipeline only. `keese_envoy_jwks_cache_fail_open_seconds_remaining{tenant}` (24b) is a Prometheus gauge emitted by `keese-ext-authz`, scraped by Tier 1.
+10b cross-ref: Prometheus is the authoritative source for token consumption
+(`keese_token_budget_consumed_total{tenant, workspace, model, direction}`). The
+`TokenBudget` reconciler queries Prometheus at its reconcile interval to compare
+consumed vs. limit; NATS KV is used only as the boolean budget-exceeded signal
+(not as a counter store). 10a owns the Prometheus pipeline; 10b owns the
+TokenBudget reconcile logic. `keese_envoy_jwks_cache_fail_open_seconds_remaining{tenant}`
+(24b) is a Prometheus gauge emitted by `keese-ext-authz`, scraped by Tier 1.
 
 ## `keese-argument-redactor` processor
 

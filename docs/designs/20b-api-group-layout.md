@@ -64,7 +64,7 @@ When `v1beta1` is introduced for a kind:
 
 | Option | Chosen? | Rationale |
 |---|---|---|
-| All kinds in one group (`operator.keese.ai`) | No | Single group RBAC is all-or-nothing for tenants; 9 groups allow per-group RBAC bindings aligned to team ownership. |
+| All kinds in one group (`operator.keese.ai`) | No | Single group RBAC is all-or-nothing for tenants; 10 groups allow per-group RBAC bindings aligned to team ownership. |
 | Per-kind top-level groups (`workspace.keese.ai`, etc.) | No | D2 locks `*.operator.keese.ai`; top-level is too broad for future expansion without collision. |
 | Shared types in each group package | No | Leads to duplication and drift. Unidirectional `api/core/v1alpha1` import enforces consistency. |
 | Promote groups to v1beta1 on first stable release | No | Conversion webhooks before 90-day customer soak add premature complexity; conservative gate prevents thrash. |

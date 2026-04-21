@@ -62,17 +62,19 @@ Broken into **nine phases (P0–P8)**. Each scored against `docs/plans/rubric.md
 | D24 | **Agent identity is durable; sessions are ephemeral.** Workspace is the persistent agent identity. Pod churn is expected; state survives via PVC (goose SQLite), NATS JetStream (in-flight), OpenFGA (relations), and `Memory` CRD backends (long-term). | Test obligation: SIGKILL mid-run → resume on a new pod with no duplicate side effects. Added 2026-04-20 after review of Steve Yegge's "Welcome to Gas Town"; prevents conflation of Workspace with agent pod. See `docs/designs/23-agent-supervision.md`. |
 | D25 | **GUPP contract for AgentRuntime SPI.** Every runtime exposes `Resume(ctx, workspace)`; the controller MUST invoke it on observing pending work with no active session. Timeout → event `AgentUnresponsive`; escalation ladder lives in `docs/designs/23-agent-supervision.md`. | "GUPP" = Yegge's *"if there is work on your hook, YOU MUST RUN IT."* Prevents agents sitting idle while work sits on the hook. Added 2026-04-20. |
 | D26 | **Keese `Tenant` CRD owns keese-specific tenancy config; delegates namespace aggregation to Capsule (Mode B) or derives from labels (Mode A).** New group `tenancy.operator.keese.ai/v1alpha1/Tenant`. Cluster-scoped. Spec: `guardrailBindings[]`, `tokenBudgetRef`, `credentialPoolRef`, `defaultQuota`, optional `capsuleTenantRef`. Does **not** reimplement namespace aggregation. Kind count 13 → 14 across 9 groups. | Partial amendment to D23 (Tenant was on the drop list). Rationale: tenants need a first-class K8s object for ReBAC backing, tenant-wide config (no ConfigMap sprawl), events, and finalizers. Capsule still owns namespace aggregation + quota in Mode B. Added 2026-04-20 after architectural review; migration plan: `docs/plans/migration-d23-tenant-crd.md` (to author). Detailed design: `docs/designs/24-tenant-crd.md`. |
+| D27 | **`WorkspaceSession` CRD represents one active interactive attach session.** Namespaced, lives in the Workspace's namespace. Created by the operator on `kubectl-keese attach` when `Workspace.spec.interactive: true`, keyed by `(workspaceRef, attachSubject, sessionName)` — default session name is `default`; additional named sessions allowed via API. Owner-ref to parent Workspace; finalizer drives pod drain + PVC release + tuple cleanup. Kind count 14 → 15; group count unchanged (stays in `workspace.operator.keese.ai`). | Kubectl-native delete + GitOps UX + independent RBAC + independent lifecycle from the template. `per-user`/`per-attach`/`shared` session modes handled by `(subject, sessionName)` uniqueness rules. Added 2026-04-21 after multi-session-per-user + interactive-vs-workflow-mutual-exclusion architectural review. Detailed spec: `docs/designs/02-workspace-model.md` iter-2 and `docs/designs/08b-goose-acp-stdio-k8s.md` iter-2. |
+| D28 | **`OIDCProvider` CRD carries per-issuer JWT-to-OpenFGA-subject transformation config.** New group `authz.operator.keese.ai/v1alpha1/OIDCProvider`. Cluster-scoped. Spec: `issuer`, `audiences[]`, `subjectTemplate` (Go template over JWT claims), `jwksUri`, `normalization`. Operator bootstraps defaults for google / github-actions / azure-entra / okta / keycloak / gitlab; tenants opt-in via `Tenant.spec.oidc.allowedProviders[]`. Kind count 15 → 16; group count 9 → 10 (new `authz.operator.keese.ai`). | Declarative + VAP-validated + GitOps-friendly. Not replicating OpenFGA primitives: OpenFGA sees only transformed subject strings; OIDCProvider is the config layer BEFORE OpenFGA. Agent SA subject form is `user:ksa-<workspace-uid>` (bare SA name; OpenFGA is per-cluster so no further domain disambiguation needed). Human subject form is `user:<email-or-sub@domain>` per provider template. Added 2026-04-21. Detailed spec: `docs/designs/04b-projected-sa-identity.md` iter-2. |
 
 ---
 
-## Final kind list — **14 kinds across 9 groups** (down from 18; +1 for Tenant per D26)
+## Final kind list — **16 kinds across 10 groups** (+2 kinds, +1 group since D26)
 
 All groups under `*.operator.keese.ai`, all `v1alpha1`:
 
 | Group | Kinds | Count |
 |---|---|---:|
 | `tenancy.operator.keese.ai` | `Tenant` (D26) | 1 |
-| `workspace.operator.keese.ai` | `Workspace`, `WorkspaceShare` | 2 |
+| `workspace.operator.keese.ai` | `Workspace`, `WorkspaceShare`, `WorkspaceSession` (D27) | 3 |
 | `workflow.operator.keese.ai` | `Workflow`, `WorkflowRun` | 2 |
 | `runtime.operator.keese.ai` | `AgentRuntime`, `RuntimeExtension` | 2 |
 | `memory.operator.keese.ai` | `Memory`, `SharedMemory` | 2 |
@@ -80,7 +82,8 @@ All groups under `*.operator.keese.ai`, all `v1alpha1`:
 | `guardrail.operator.keese.ai` | `GuardrailBinding` | 1 |
 | `observability.operator.keese.ai` | `TokenBudget` | 1 |
 | `transport.operator.keese.ai` | `Transport` | 1 |
-| **TOTAL** | | **14** |
+| `authz.operator.keese.ai` | `OIDCProvider` (D28) | 1 |
+| **TOTAL** | | **16** |
 
 **Deferred / composed (no CRD):**
 - **Namespace aggregation** → Capsule `capsule.clastix.io/v1beta2/Tenant` (Mode B) or label selector on namespaces (Mode A). Keese `Tenant` (D26) holds keese-specific config and references Capsule's in Mode B.
