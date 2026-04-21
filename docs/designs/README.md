@@ -51,7 +51,8 @@ before any spec is authored and before any controller code is written.
 | 10a-ii | [10a-ii-iter-log.md](10a-ii-iter-log.md) | OTEL Topology: Iteration Log | observability | current |
 | 10b | [10b-token-accounting.md](10b-token-accounting.md) | Token Accounting | observability | current |
 | 10b-ii | [10b-ii-iter-log.md](10b-ii-iter-log.md) | Token Accounting: Iteration Log | observability | current |
-| 11 | [11-secrets-pluggable-vault.md](11-secrets-pluggable-vault.md) | Secrets Pluggable Vault | secrets | draft |
+| 11 | [11-secrets-pluggable-vault.md](11-secrets-pluggable-vault.md) | Secrets Pluggable Vault | secrets | current |
+| 11-ii | [11-ii-examples.md](11-ii-examples.md) | Secrets: Canonical ExternalSecret YAML Examples + Iteration Log | secrets | current |
 | 12 | [12-network-isolation.md](12-network-isolation.md) | Network Isolation | security | draft |
 | 13 | [13-cli-tunnel-wireguard.md](13-cli-tunnel-wireguard.md) | CLI Tunnel (WireGuard) | developer-experience | draft |
 | 14a | [14a-olm-channels-upgrades.md](14a-olm-channels-upgrades.md) | OLM Channels and Upgrades | packaging | draft |
