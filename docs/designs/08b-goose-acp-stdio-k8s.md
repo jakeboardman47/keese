@@ -13,7 +13,7 @@ depends:
   - 13-cli-tunnel-wireguard.md
   - 18-process-lifecycle.md
 related_skills: [doc-authoring, controller-authoring]
-status: current
+status: draft
 last_verified: 2026-04-21
 rollback: |
   Set Transport CR spec.stdio.bridgeImage to the prior digest; the workspace

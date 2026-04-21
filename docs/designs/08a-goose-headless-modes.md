@@ -14,7 +14,7 @@ depends:
   - 16-recipe-distribution.md
   - 18-process-lifecycle.md
 related_skills: [doc-authoring, controller-authoring]
-status: current
+status: draft
 last_verified: 2026-04-21
 rollback: |
   Mode change (recipe → serve or vice versa) requires a new Workspace with
