@@ -14,9 +14,8 @@ depends:
   - 10a-otel-topology.md
   - 16-recipe-distribution.md
   - 18-process-lifecycle.md
-  - 21-operator-config.md
 related_skills: [doc-authoring, controller-authoring]
-status: draft
+status: current
 last_verified: 2026-04-21
 rollback: |
   Mode change (recipe → serve) requires a new Workspace with spec.resumeFrom
@@ -106,7 +105,7 @@ Prod CSVs require digest (rule 05.12); cosign keyless signature verified at admi
 Upgrade: update `spec.image` → hot-swap `Idle` Workspaces; emit `RuntimeMigrationDeferred`
 for `Running` Workspaces until next `Drain`+`Resume`.
 
-Deferral caps from ConfigMap `keese-runtime-migration-defaults` (21):
+Deferral caps from ConfigMap `keese-system/keese-runtime-migration-defaults` (bootstrapped by P7 helmfile; values defined in this document):
 `critical` → 1h (CVE); `high` → 6h; `medium` → 24h; `low` → 168h.
 Admin sets `migrationPolicy.severity`; tenant-admin may extend non-critical via
 `Tenant.spec.migrationPolicy.maxDeferralExtension`; cannot extend `critical` past 1h.
@@ -164,7 +163,7 @@ Alert: `RuntimeMigrationDeferred` age > severity deferral cap → page on-call.
 
 ## Refs
 
-[02](02-workspace-model.md) · [04b](04b-projected-sa-identity.md) · [05b](05b-credential-injection-patterns.md) · [07](07-agent-runtime-spi.md) · [08b](08b-goose-acp-stdio-k8s.md) · [08c](08c-goose-subagents-limits.md) · [10a](10a-otel-topology.md) · [16](16-recipe-distribution.md) · [18](18-process-lifecycle.md) · [21](21-operator-config.md) · [rubric](../plans/rubric.md) · [plan D8/D9/D24/D25](../plans/scaffolding-plan.md)
+[02](02-workspace-model.md) · [04b](04b-projected-sa-identity.md) · [05b](05b-credential-injection-patterns.md) · [07](07-agent-runtime-spi.md) · [08b](08b-goose-acp-stdio-k8s.md) · [08c](08c-goose-subagents-limits.md) · [10a](10a-otel-topology.md) · [16](16-recipe-distribution.md) · [18](18-process-lifecycle.md) · [rubric](../plans/rubric.md) · [plan D8/D9/D24/D25](../plans/scaffolding-plan.md)
 
 ## Iteration log
 ### Iteration 1 — 2026-04-21 (summary)
@@ -197,4 +196,4 @@ Changes: (1) Removed `goose capabilities` JSON; static compile-time `register.go
 Verdict: **SHIP** (97.5 ≥ 95). Status: `current`.
 Gaps: Cat 4/5 pre-gate (VAP manifests, envtest harness).
 Cross-deps settled: 07 iter-2 static registration; 05b rotation drain semantics (`x-keese-rotation-expired`).
-Cross-deps flagged: 02 iter-2 — add `Workspace.spec.maintenance`; 21 — add ConfigMap `keese-runtime-migration-defaults`.
+Cross-deps settled (iter-2.1 inline): `Workspace.spec.maintenance.{quietHours, maxDisruptionsPerHour}` added to 02's spec table; ConfigMap `keese-system/keese-runtime-migration-defaults` is a P7 helmfile bootstrap concern (values defined in this document; no separate design doc needed).

@@ -69,6 +69,8 @@ Full schema in `workspace.operator.keese.ai-v1alpha1.md`.
 | `spec.attachPolicy.maxConcurrentAttaches` * | `0` (unbounded) | VAP rejects over cap |
 | `spec.attachGrace` * | `5m` | VAP: [0s, 24h]; interactive only |
 | `spec.subagentLimits.{max,budgetMode}` | `10 / shared` | VAP: ≤ tenant limit (08c) |
+| `spec.maintenance.quietHours.{start,end,timezone}` * | _unset_ | Optional; HH:MM window + IANA tz; operator delays `Resume` during window |
+| `spec.maintenance.maxDisruptionsPerHour` * | `0` (unbounded) | Rate-limits node-drain-driven pod restarts per operator hints (08a) |
 
 `spec.interactive` VAP CEL: `oldSelf.spec.interactive == self.spec.interactive`.
 Reason: distinct FSMs, pod topology (bridge sidecar conditional on 07), and lazy vs eager

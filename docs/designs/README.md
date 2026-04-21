@@ -41,7 +41,7 @@ before any spec is authored and before any controller code is written.
 | 06-iii | [06-iii-samples.md](06-iii-samples.md) | GuardrailBinding: Scope Samples | guardrails | current |
 | 07 | [07-agent-runtime-spi.md](07-agent-runtime-spi.md) | Agent Runtime SPI | runtime | current |
 | 07b | [07b-agent-runtime-spi.md](07b-agent-runtime-spi.md) | Agent Runtime SPI: Trade-offs, Failure Modes, Upgrade, Observability | runtime | current |
-| 08a | [08a-goose-headless-modes.md](08a-goose-headless-modes.md) | Goose Headless Modes | runtime | draft |
+| 08a | [08a-goose-headless-modes.md](08a-goose-headless-modes.md) | Goose Headless Modes | runtime | current |
 | 08b | [08b-goose-acp-stdio-k8s.md](08b-goose-acp-stdio-k8s.md) | Goose ACP stdio over K8s | runtime | draft |
 | 08c | [08c-goose-subagents-limits.md](08c-goose-subagents-limits.md) | Goose Sub-Agents and Limits | runtime | current |
 | 09 | [09-transport-crd.md](09-transport-crd.md) | Transport CRD | transport | draft |
