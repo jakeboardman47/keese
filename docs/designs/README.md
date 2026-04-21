@@ -62,7 +62,8 @@ before any spec is authored and before any controller code is written.
 | 20a | [20a-api-group-layout.md](20a-api-group-layout.md) | API Group Layout: Groups, Kinds, Shared Types, Versioning | api | current |
 | 20b | [20b-api-group-layout.md](20b-api-group-layout.md) | API Group Layout: Trade-offs, Failure Modes, Rollback, Observability | api | current |
 | 21 | [21-opentofu-cloud-deployment.md](21-opentofu-cloud-deployment.md) | OpenTofu Cloud Deployment | deployment | draft |
-| 22 | [22-workflow-composition-examples.md](22-workflow-composition-examples.md) | Workflow Composition Examples | workflow | draft |
+| 22 | [22-workflow-composition-examples.md](22-workflow-composition-examples.md) | Workflow Composition Examples | workflow | current |
+| 22-ii | [22-ii-samples.md](22-ii-samples.md) | Workflow Composition Examples: Full YAML Samples | workflow | current |
 | 23 | [23-agent-supervision.md](23-agent-supervision.md) | Agent Supervision (Patrol Pattern) | reliability | current |
 | 24 | [24-tenant-crd.md](24-tenant-crd.md) | Keese Tenant CRD: Spec, Reconcile, Admission, Migration | tenancy | current |
 | 24b | [24b-tenant-crd.md](24b-tenant-crd.md) | Keese Tenant CRD: Trade-offs, Failure Modes, Upgrade, Observability | tenancy | current |
