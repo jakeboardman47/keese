@@ -4,197 +4,181 @@
 ---
 scope: design
 category: authz
-depends: [01-tenancy-capsule.md, 04a-openfga-authz-model.md]
+depends:
+  - 04a-openfga-authz-model.md
+  - 04b-ii-oidc-trust.md
+  - authz.operator.keese.ai/v1alpha1 OIDCProvider CRD (D28)
+  - 20a-api-group-layout.md
 related_skills: []
 status: current
-last_verified: 2026-04-20
-rollback: |
-  Audience template change: revert EGRESS_SA_AUDIENCE_TEMPLATE on the operator
-  Deployment; trigger a rolling restart so Workspace controllers re-project tokens
-  with the old audience; patch projected volume TTL to 1s on affected pods (forces
-  kubelet reissue); document in docs/plans/migration-sa-<slug>.md. Gateway-side:
-  redeploy BackendSecurityPolicy CRs referencing the old audience; cache entries
-  expire at next TTL tick (≤ 10 min). Cloud IAM trust policy reverts must be
-  completed before the old audience's last token expires; the migration doc must
-  include the IAM change set and the 15-minute propagation window.
+last_verified: 2026-04-21
 ---
 
 # 04b — Projected ServiceAccount Identity
 
+**Decision:** Agent pods carry a single projected ServiceAccount token with
+audience `keese-egress-<tenant>` and TTL ≤ 10 m. The ext_authz sidecar
+derives an OpenFGA subject `user:ksa-<workspace-uid>` via an `OIDCProvider`
+CR. JWT audience and OpenFGA subject are explicitly separate concerns.
+
 ## Context
 
-Agent pods carry no long-lived secrets. Their sole credential is a Kubernetes
-projected ServiceAccount (SA) token issued by the cluster OIDC token issuer,
-scoped to a per-tenant audience (`keese-egress-<tenant>`), with a short TTL. The
-Envoy AI Gateway terminates this token and, via `BackendSecurityPolicy`, exchanges
-it for an upstream cloud IAM credential (AWS Bedrock via STS OIDC, GCP Vertex AI
-via Workload Identity Federation, Azure OpenAI via Entra Federated Identity) or
-injects a static key from OpenBao. Agent identity for audit, OpenFGA authz, and
-D24/D25 durable resume is the Workspace UID + namespace + tenant tuple — NOT the
-JWT `jti`. Pod churn and token rotation do not create new identities.
+Keese's zero-trust model (rule 05.3) allows agent pods no API keys. The only
+credential is a projected SA token consumed by two distinct downstream systems:
 
-## Identity Model
+1. **Cloud IAM** (AWS STS, GCP WIF, Azure Entra) — uses JWT `aud` + `sub`.
+2. **OpenFGA ext_authz** — uses a keese-internal ReBAC subject.
 
-**Durable agent identity (D24):** `(workspace-uid, namespace, tenant)` — stable across
-pod churn, token rotation, and SIGKILL restarts. Token rotation is NOT a new identity.
+D28 ratified `OIDCProvider` (`authz.operator.keese.ai/v1alpha1`,
+cluster-scoped) to carry per-issuer JWT-to-subject transformation config,
+decoupling identity derivation from hardcoded logic in ext_authz.
 
-**OpenFGA user subject string** (consumed by 04a — publish this exact value):
+## Identity model
 
-```
-user:ksa-<workspace-uid>@keese-egress-<tenant>
-```
+### Four distinct concepts
 
-Example: `user:ksa-d3c9f21a-87bb-4e01-a93e-b2f1e9dc01f4@keese-egress-acme-corp`
-
-The `ksa-` prefix disambiguates from human users. The `@keese-egress-<tenant>`
-suffix scopes tuples within the OpenFGA store.
-
-**OIDC `sub` claim** (for cloud IAM trust policies):
-`system:serviceaccount:<namespace>:keese-ws-<workspace-name>`
-(≤ 63 chars; 8-char stable hash suffix if truncated). Cloud trust policies MUST
-constrain on both `sub` AND `aud` to prevent cross-tenant privilege escalation.
-
-**D25 resume invariant:** After SIGKILL/restart: same audience, same subject shape, no rekeying.
-
-## Audience Template
-
-Resolved at Workspace reconcile time from operator env var
-`EGRESS_SA_AUDIENCE_TEMPLATE=keese-egress-{{.Tenant}}`. `{{.Tenant}}` resolves
-to the Capsule Tenant name (Mode B) or `Workspace.spec.tenantRef.name` (Mode A);
-stored read-only on `Workspace.status.saAudience`.
-
-Projected volume: `serviceAccountToken.audience=keese-egress-<tenant>`,
-`expirationSeconds=600`, mounted read-only at `/var/run/keese/identity/token`.
-No other credential files share this path (K8s Secrets mount at
-`/var/run/keese/secrets/<name>` per rule 05.7).
-
-## TTL + Refresh
-
-Default TTL: **600 s (10 min)** — aligned with rule 05.3. Refresh at **70% TTL
-(420 s)** — consistent with D13 gateway cache. The kubelet handles rotation and
-atomically replaces the token file (POSIX rename; no partial-read race). Agent
-processes MUST re-read the file before each gateway call, not cache in memory.
-
-| Tenant tier | TTL | Refresh point |
+| Concept | Value | Consumed by |
 |---|---|---|
-| `standard` | 600 s | 420 s |
-| `restricted` | 300 s | 210 s |
-| `extended` (future, ADR required) | 900 s | 630 s |
+| JWT `aud` claim | `keese-egress-<tenant>` | Cloud IAM trust policies (AWS STS AssumeRoleWithWebIdentity, GCP WIF, Azure Entra) — see 04b-ii |
+| JWT `sub` claim | `system:serviceaccount:<ns>:ksa-<workspace-uid>` | Cloud IAM trust policies' `sub` constraint |
+| OpenFGA subject | `user:ksa-<workspace-uid>` | ReBAC Check calls in ext_authz |
+| K8s ServiceAccount name | `ksa-<workspace-uid>` | The actual K8s SA object |
 
-`Workspace.spec.tokenTTL` is an optional override; admission VAP enforces the
-tier ceiling. Effective TTL stored on `Workspace.status.saTokenTTL`.
+The first two are JWT-level; changing them is a cloud-IAM concern. The third
+is keese-internal ReBAC. The fourth is the K8s resource. They were conflated
+in prior drafts; they are not the same thing.
 
-**Who refreshes:** Kubelet only. Gateway-pod upstream credential rotation (D13) is
-independent and also anchored at 70% TTL. The two refresh clocks are not
-synchronized; gateway-side cache miss on expired agent token triggers a fresh OIDC
-exchange without dropping the request.
+`ksa-<workspace-uid>` is cluster-unique by K8s workspace UID. OpenFGA is
+per-cluster, so no domain suffix is needed. `@<tenant>` and `@<cluster>`
+suffixes are removed and must not re-appear.
 
-## OIDC Trust Anchoring Per Cloud
+### Subject vs. audience separation
 
-Full detail in [04b-ii-oidc-trust.md](04b-ii-oidc-trust.md).
+- JWT `aud` is consumed **only** by cloud IAM trust policies (04b-ii).
+- OpenFGA subject `user:ksa-<workspace-uid>` is **independent** of `aud`.
+- Moving a workspace to a new tenant requires cloud-IAM trust-policy updates;
+  it does **not** require OpenFGA tuple rewrites.
 
-**Issuer:** K8s API server (`/.well-known/openid-configuration`, JWKS at
-`/openid/v1/jwks`). Private-cluster operators must expose JWKS via a stable
-public endpoint. Operator emits startup warning if `OIDC_ISSUER_URL` is unset
-and apiserver URL is a private CIDR.
+## OIDCProvider CRD integration
 
-All three clouds require trust policies constraining BOTH `aud = keese-egress-<tenant>`
-AND `sub = system:serviceaccount:<ns>:keese-ws-<name>` to prevent cross-tenant
-privilege escalation. OpenTofu modules at `deploy/opentofu/{aws,gcp,azure}/`
-provision the OIDC provider and per-tenant IAM role/binding.
+`OIDCProvider` (cluster-scoped, `authz.operator.keese.ai/v1alpha1`) carries
+per-issuer transformation config. The operator bootstraps default CRs via
+an install Job; admins may customize or add.
 
-**Static API keys (Anthropic, OpenAI):** Not exchanged via OIDC. Agent pods never
-see these. Gateway injects from OpenBao via ExternalSecrets → K8s Secret →
-`BackendSecurityPolicy.spec.basic`. See 05b.
+```yaml
+# kubernetes-default — K8s apiserver SA issuer
+apiVersion: authz.operator.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: kubernetes-default
+spec:
+  issuer: https://kubernetes.default.svc.cluster.local
+  audiences: ["keese-egress-*"]   # glob; agent tokens use per-tenant aud
+  subjectTemplate: >-
+    ksa-{{ .Claims.kubernetes_serviceaccount_name | trimPrefix "ksa-" }}
+  normalization:
+    lowercase: true
+```
 
-## Tenant-Move Rotation Contract
+The template parses `sub: system:serviceaccount:<ns>:ksa-<uid>` via the
+`kubernetes.io/serviceaccount/name` claim injected by the kube-apiserver,
+yielding `ksa-<uid>`. See `04b-ii` for cloud-provider `OIDCProvider` examples
+(google-workspace, github-actions, azure-entra).
 
-Direct `tenantRef` updates on running Workspaces are blocked by admission webhook
-(`phase != Terminating`). Tenant moves require Workspace delete + recreate.
-On deletion: controller revokes SA; removes OpenFGA tuple
-`user:ksa-<uid>@keese-egress-<old-tenant>` within SIGTERM drain window (≤ 60 s).
-On creation in new tenant: new SA, new `workspace-uid`, new tuple for new audience.
-D24 note: Workspace UID changes on recreate; logical continuity tracked via
-`resume.stateRef`, not the token. Old token valid until remaining TTL (≤ 10 min);
-event `WorkspaceTenantMoved` includes TTL expiry timestamp.
+### Template evaluation
 
-## Audit Trail
+`subjectTemplate` is Go `text/template` over
+`{ .Claims map[string]interface{}, .Issuer string, .Audience string }`.
 
-No token bytes, no JWT header/payload beyond named claims (rule 05.10).
+Allowed Sprig subset: `trimPrefix`, `trimSuffix`, `lower`, `upper`, `split`,
+`replace`. No other functions; unknown functions → parse error at admission.
 
-Span `keese.workspace.sa_reconcile` (issuance): `keese.identity.subject`,
-`.audience`, `.workspace_uid`, `.namespace`, `.ttl_seconds`, `.event=token_projected`.
+- Templates evaluated at JWT-validation time by the ext_authz sidecar (agent
+  tokens) or the attach webhook (human tokens).
+- Rendered result used directly as OpenFGA subject; only `normalization`
+  transforms apply.
+- Parse error → `OIDCProvider.status.phase=Degraded` + `TemplateInvalid` event;
+  tokens from that provider fail `403 OIDCProviderDegraded`.
+- Runtime evaluation error (missing claim) → deny request + increment
+  `keese_oidc_template_eval_errors_total` metric.
 
-Span `keese.gateway.authz_check` (use): `keese.authz.subject`, `.audience`,
-`.upstream_role`, `.decision` (allow/deny), `.upstream_status`, `.host`.
+### Tenant opt-in
 
-ES index: `keese-authz-<YYYY.MM.DD>`; 90-day retention; ILM: `dev/bootstrap/elasticsearch/ilm-authz.json`.
+`Tenant.spec.oidc.allowedProviders[]` lists accepted provider names. Future
+24 iter-3 adds this field; flagged as a dependency. Without it, any cluster
+provider is accepted for any tenant (overly permissive pre-24-iter-3).
 
-## Trade-offs
+## Token lifecycle
 
-Per-workspace SA (chosen): tightest trust-policy scoping; SA name encodes workspace;
-clean audit trail. Shared tenant SA rejected: one compromised pod impersonates any
-workspace in the tenant. TTL = 10 min (rule 05.3 ceiling; kubelet rotation
-automatic); 1-hour TTL rejected (blast-radius window). Tenant-move via in-place
-update rejected: audience mid-flight risks stale gateway cache; delete+recreate
-is safer and aligns with D24 identity semantics.
+- TTL: ≤ 10 m per rule 05.3. Agent pod refreshes via `projected.sources[].serviceAccountToken`.
+- `expirationSeconds` ≤ 600; kubelet rotates at 80% TTL.
+- Gateway caches rendered subjects keyed by `(issuer, sub, aud)` for ≤ 5 m to
+  avoid repeated template evaluation under load; cache invalidated on
+  `OIDCProvider` update event.
 
-## Failure Modes
+## Tenant-move rotation
 
-| Failure | Detection | Mitigation |
-|---|---|---|
-| Kubelet token rotation failure | Expired token → gateway 401 | `IdentityTokenExpired` event; controller re-projects |
-| JWKS endpoint unreachable | Gateway 401 | 5-min JWKS cache (fail-open window); then fail-closed; alert `JWKSFetchFailed` |
-| Cloud IAM misconfigured | STS/WIF/Entra 403 → gateway 502 | `BackendSecurityPolicy Ready=False`; `CredentialExchangeFailed`; workspace `Degraded` |
-| SA name truncation collision | Duplicate SA name | Controller checks existence; `SANameCollision` event; 4-char hash disambiguator |
-| SIGKILL mid-token-write | — | Kubelet uses POSIX rename; partial read is impossible |
-| Tenant-move TTL race | Old token still valid during window | Accepted per contract; platform may revoke IAM binding immediately |
+Tenant move changes: JWT `aud` (per cloud IAM), K8s namespace, projected SA
+name (if name encodes tenant). Tenant move does **not** change the OpenFGA
+subject `user:ksa-<uid>` because the workspace UID is stable. Existing
+OpenFGA tuples remain valid; no backfill required. The only move-related cost
+is updating cloud-IAM trust policies (per 04b-ii).
 
-## Observability
+## Failure modes
 
-- Metrics: `keese_identity_token_projected_total{tenant,namespace}`,
-  `keese_identity_token_ttl_seconds{tenant,tier}`,
-  `keese_gateway_authz_decision_total{decision,upstream,tenant}`,
-  `keese_gateway_jwks_fetch_failures_total{issuer}`.
-- Events: `TokenProjected`, `IdentityTokenExpired`, `JWKSFetchFailed`,
-  `CredentialExchangeFailed`, `SANameCollision`, `WorkspaceTenantMoved`.
-- Alert: `keese_gateway_jwks_fetch_failures_total > 0 for 5m` → P2.
+| Failure | Behavior |
+|---|---|
+| `OIDCProvider` missing for issuer | ext_authz denies `403 OIDCProviderNotFound` |
+| `OIDCProvider.status.phase=Degraded` | ext_authz denies `403 OIDCProviderDegraded` |
+| Template eval error (missing claim) | deny request; metric incremented |
+| JWT expired | gateway returns `401` before ext_authz |
+| OpenFGA unavailable | fail-closed; `503` (governed by 04a circuit-breaker) |
+| OIDCProvider CR deleted at runtime | ext_authz caches last-good for ≤ 5 m; then denies |
+
+## Audit trail
+
+ext_authz logs `(issuer, rendered_subject, aud, openfga_decision,
+upstream_status)` per rule 05.10. Tokens and claims are never logged. Events
+emitted on `OIDCProvider` degraded transitions with reason `TemplateInvalid`.
 
 ## Refs
 
-- [../plans/scaffolding-plan.md](../plans/scaffolding-plan.md) — D13, D24, D25
-- [04a-openfga-authz-model.md](04a-openfga-authz-model.md) — consumes subject string
-- [04b-ii-oidc-trust.md](04b-ii-oidc-trust.md) — cloud trust-policy detail
-- [04c-token-revocation.md](04c-token-revocation.md) — consumes TTL + audience
-- [05b-credential-injection-patterns.md](05b-credential-injection-patterns.md) — gateway
-- [01-tenancy-capsule.md](01-tenancy-capsule.md) — tenant name derivation
-- [23-agent-supervision.md](23-agent-supervision.md) — witness SA pattern (open)
-- [17-credential-broker.md](17-credential-broker.md) — gateway cache contract
-- [../plans/rubric.md](../plans/rubric.md)
+- [04a-openfga-authz-model.md](04a-openfga-authz-model.md) — tuple shapes using `user:ksa-<uid>`
+- [04b-ii-oidc-trust.md](04b-ii-oidc-trust.md) — per-cloud trust policy detail (unchanged)
+- [04c-token-revocation.md](04c-token-revocation.md)
+- [05a-envoy-ai-gateway-topology.md](05a-envoy-ai-gateway-topology.md) — ext_authz wiring
+- [20a-api-group-layout.md](20a-api-group-layout.md) — `authz.operator.keese.ai` group (D28)
+- [24-tenant-crd.md](24-tenant-crd.md) — `Tenant.spec.oidc.allowedProviders[]` (future iter-3)
 
 ## Iteration log
 
-### Iteration 1 — 2026-04-20
+### Iteration 1 — 2026-04-19 — **95 SHIP**
+
+Subject `user:ksa-<uid>@keese-egress-<tenant>`; no OIDCProvider CRD; TTL policy
+and audit trail established. Cat 4 docked 0.5 (tests/manifests not yet authored).
+
+### Iteration 2 — 2026-04-21
 
 | # | Category | Weight | Ratio | Score | Notes |
 |---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | Identity model, audience, TTL, trust, tenant-move, audit all bounded. |
-| 2 | Architecture fit | 10 | 1.0 | 10 | D13/D24/D25/rule 05 honored; split to 04b-ii per 200-line rule. |
-| 3 | Security posture | 15 | 1.0 | 15 | Dual constraint (sub+aud); no env-var secrets; fail-closed TTL; POSIX atomicity. |
-| 4 | Automatability | 10 | 0.5 | 5 | Audience template env var + OpenTofu paths stated; modules pre-gate TBD. |
-| 5 | Verifiability | 15 | 1.0 | 15 | Six failure modes; SIGKILL resume; D25 test obligation. |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Collision, JWKS window, TTL race enumerated. |
-| 7 | Context efficiency for Claude | 10 | 1.0 | 10 | Split at ceiling; cloud detail in 04b-ii. |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX; frontmatter complete; rollback specific. |
-| 9 | Observability | 5 | 1.0 | 5 | OTEL spans, metrics, events, ES index, alert named. |
-| 10 | Operational readiness | 10 | 1.0 | 10 | Rollback concrete; IAM propagation window; migration doc requirement. |
+| 1 | Scope clarity | 10 | 1.0 | 10 | Decision + four-concept table explicit |
+| 2 | Architecture fit | 10 | 1.0 | 10 | D28 OIDCProvider wired; no rule violations |
+| 3 | Security posture | 15 | 1.0 | 15 | Fail-closed on all provider errors; no subject conflation |
+| 4 | Automatability | 10 | 0.5 | 5 | Operator bootstrap Job named; tests/manifests not yet authored |
+| 5 | Verifiability | 15 | 1.0 | 15 | Template-eval assertions, metric, event, status named |
+| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Full failure-mode table; cache expiry on CR delete |
+| 7 | Context efficiency for Claude | 10 | 1.0 | 10 | ≤ 200 lines; no inline code; skill pointers via refs |
+| 8 | Docs quality | 5 | 1.0 | 5 | SPDX + frontmatter; links valid |
+| 9 | Observability | 5 | 1.0 | 5 | Metric + event + audit log named |
+| 10 | Operational readiness | 10 | 1.0 | 10 | Tenant-move simplified; cache TTL stated; upgrade path via 04b-ii |
 | | **Total** | 100 | | **95** | |
 
-Verdict: SHIP (95 ≥ 90)
+Verdict: **SHIP**
 
-Top gaps: (1) OpenTofu modules not yet authored — pre-gate acceptable. (2) Private-cluster
-JWKS proxy optional/deferred — air-gapped operators need this before production.
-(3) Witness SA audience pattern unresolved in 23-agent-supervision.md Q4.
+Top gaps:
+1. Cat 4 (0.5): envtest suite + OIDCProvider sample manifests not yet authored (blocked on design gate).
+2. 24-iter-3 dependency: `Tenant.spec.oidc.allowedProviders[]` not yet in 24; provider acceptance is cluster-wide until then.
+3. Template function allow-list validation not encoded in a CEL VAP rule yet.
 
-Next step: Publish subject string to 04a; publish TTL=600s/refresh=420s to 04c;
-confirm 05b reads token from `/var/run/keese/identity/token` per request.
+Next step: Companion 04b-ii carries cloud-provider trust policy detail; no edits needed.
+When design gate opens, author OIDCProvider CRD + envtest suite + samples.
