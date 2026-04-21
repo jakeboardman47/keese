@@ -14,7 +14,7 @@ depends:
   - 20a-api-group-layout.md
   - 22-workflow-composition-examples.md
 related_skills: [doc-authoring, crd-authoring, controller-authoring]
-status: current
+status: draft
 last_verified: 2026-04-21
 rollback: |
   spec.type is immutable (VAP-enforced). Migration = new Transport CR + consumer
