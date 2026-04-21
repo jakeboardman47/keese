@@ -58,7 +58,7 @@ before any spec is authored and before any controller code is written.
 | 14b | [14b-olm-dependencies.md](14b-olm-dependencies.md) | OLM Dependencies | packaging | draft |
 | 15 | [15-memory-management.md](15-memory-management.md) | Memory Management | memory | draft |
 | 16 | [16-recipe-distribution.md](16-recipe-distribution.md) | Recipe Distribution | recipes | draft |
-| 17 | [17-credential-broker.md](17-credential-broker.md) | Credential Broker | egress | draft |
+| 17 | [17-credential-broker.md](17-credential-broker.md) | Credential Broker | egress | current |
 | 18 | [18-process-lifecycle.md](18-process-lifecycle.md) | Process Lifecycle | reliability | current |
 | 19 | [19-ide-and-debugging.md](19-ide-and-debugging.md) | IDE and Debugging | developer-experience | draft |
 | 20 | [20-api-group-layout.md](20-api-group-layout.md) | API Group Layout (redirect) | api | superseded |
