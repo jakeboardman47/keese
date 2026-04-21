@@ -12,7 +12,7 @@ depends:
   - 10b-token-accounting.md
   - 18-process-lifecycle.md
 related_skills: []
-status: current
+status: draft
 last_verified: 2026-04-21
 rollback: |
   Set `keese-supervision-defaults` ConfigMap `supervision.enabled: false`. In-flight
