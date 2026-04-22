@@ -4,18 +4,21 @@
 ---
 scope: reference
 category: index
-gate_status: closed
-depends: [../designs/README.md, rubric.md]
+gate_status: open
+depends: [../designs/README.md, rubric.md, gate-open-audit-2026-04-22.md]
 related_skills: [plan-management]
 status: current
-last_verified: 2026-04-19
+last_verified: 2026-04-22
 ---
 
 # plans/ — HOW (phased)
 
-> **Gate status: CLOSED.** No `*_types.go` body, no `*_controller.go` reconcile
-> logic, and no spec promotion may land until all 62 design docs AND all 13 spec
-> docs score ≥ 90/100 AND an architect-signed commit flips `gate_status: open`.
+> **Gate status: OPEN** as of 2026-04-22. All 62 designs and 13 specs reached
+> `status: current` with honest scores ≥ 90 (audit:
+> [gate-open-audit-2026-04-22.md](gate-open-audit-2026-04-22.md)). Controller
+> code may now land in `internal/controller/` and `api/`; spec promotion to
+> `status: implemented` proceeds via the test-engineer agent backlog enumerated
+> in the audit doc.
 > See [../designs/README.md](../designs/README.md) and [rubric.md](rubric.md).
 
 ## Phase index
