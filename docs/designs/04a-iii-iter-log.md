@@ -81,3 +81,39 @@ Iter-5 residual (not blocking gate):
 1. `tests/openfga/cross-tenant.yaml` assertion fixtures — test-engineer backlog (post-gate acceptable; existing pattern from `tests/openfga/*.yaml`).
 2. CrossTenantAgreement controller stub (D29) — controller phase backlog; depends on design 25 reaching `status: current`.
 3. Workflow controller's NATS topic provisioning + cross-tenant admission check — drives 03 iter-3 (in-flight).
+
+## Iteration 6 — 2026-04-21 (D28 spot-fix)
+
+> **In-place additive fix.** New `oidc_provider` leaf type + `tenant.uses_oidc_provider`
+> relation for per-tenant OIDC issuer gating. No score change vs iter-5 since the
+> addition strengthens Cat 2/3/5 and introduces no new gaps.
+
+Changes:
+
+- Added `oidc_provider` type to `model.fga` (cluster-scoped leaf; no relations).
+- Added `tenant.uses_oidc_provider: [oidc_provider]` relation to `tenant` type.
+- Added 1 tuple-shape row: `tenant:T#uses_oidc_provider@oidc_provider:P` written by Tenant controller.
+- Added `oidc_provider` to Types and relations table in 04a.
+- Added `tests/openfga/oidc-provider.yaml` with allow + deny assertion fixtures.
+- Cross-cuts (not modified, flagged only): `authz.operator.keese.ai-v1alpha1.md` §1.6; `tenancy.operator.keese.ai-v1alpha1-ii-tenant.md` (Tenant controller writes tuples per `spec.oidc.allowedProviders[]`).
+
+| # | Category | Weight | Ratio | Score | Δ vs iter-5 | Notes |
+|---|---|---:|---:|---:|---|---|
+| 1 | Scope clarity | 10 | 1.0 | 10 | — | OIDCProvider scope bounded; cluster-scoped leaf; no new cross-cutting concerns beyond flagged specs. |
+| 2 | Architecture fit | 10 | 1.0 | 10 | — | Leaf type pattern consistent with existing model; Tenant controller as sole writer maintains SPI boundary. |
+| 3 | Security posture | 15 | 1.0 | 15 | — | Fail-closed: missing tuple denies; no wildcard; cross-tenant issuer bleed impossible by type constraint. |
+| 4 | Automatability | 10 | 1.0 | 10 | — | Tuple written by Tenant controller reconcile loop; existing CI matrix covers (`fga model validate` + `fga model test`). |
+| 5 | Verifiability | 15 | 1.0 | 15 | — | `tests/openfga/oidc-provider.yaml` ships with this iter: allow + 2 deny assertions (no-tuple + wrong-issuer). |
+| 6 | Failure-mode awareness | 10 | 1.0 | 10 | — | Missing tuple → deny (fail-closed). Tuple deletion on OIDCProvider removal handled by Tenant controller finalizer path. |
+| 7 | Context efficiency | 10 | 1.0 | 10 | — | 04a stays at 198 lines (≤ 200); iter-6 detail in this companion file. |
+| 8 | Docs quality | 5 | 1.0 | 5 | — | Types table updated; cross-cuts flagged but not modified (correct scope discipline). |
+| 9 | Observability | 5 | 1.0 | 5 | — | Existing audit stream covers `uses_oidc_provider` check decisions; no new instrumentation needed. |
+| 10 | Operational readiness | 10 | 1.0 | 10 | — | Additive-only; no MODEL_MIGRATION window required (new type + relation, no changes to existing checks). |
+| | **Total** | 100 | | **97** | — | |
+
+Verdict: SHIP (97 ≥ 95 honest threshold). `status: current` retained.
+
+Iter-6 residual (not blocking gate):
+
+1. Tenant controller tuple-write implementation — controller phase backlog; depends on design gate opening.
+2. `authz.operator.keese.ai-v1alpha1.md` §1.6 `// +keese:rebac-tuple=uses_oidc_provider` marker — coordinate with `crd-author` via PR comment (marker already referenced in existing spec per task brief).

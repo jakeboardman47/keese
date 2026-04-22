@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# OpenFGA model test assertions for the oidc_provider type and
+# tenant.uses_oidc_provider relation (04a iter-6 / D28).
+#
+# Run with: fga model test --tests tests/openfga/oidc-provider.yaml
+#
+# Assertions:
+#   1. ALLOW  tenant:acme#uses_oidc_provider@oidc_provider:google
+#             — tuple explicitly written (simulates Tenant controller reconcile
+#               for Tenant.spec.oidc.allowedProviders: [google]).
+#   2. DENY   tenant:acme#uses_oidc_provider@oidc_provider:rogue-issuer
+#             — no tuple exists for this provider; ext_authz must deny.
+#   3. DENY   tenant:acme#uses_oidc_provider@oidc_provider:microsoft
+#             — provider exists in the store but is NOT in acme's allow-list
+#               (microsoft is in tenant:other's allow-list only); cross-tenant
+#               issuer bleed must be impossible.
+
+name: oidc-provider-gating
+model_path: ../../dev/bootstrap/openfga/model.fga
+
+tuples:
+  # acme allows google — Tenant controller tuple for spec.oidc.allowedProviders[0]
+  - user: oidc_provider:google
+    relation: uses_oidc_provider
+    object: tenant:acme
+  # other tenant allows microsoft — must NOT bleed to acme
+  - user: oidc_provider:microsoft
+    relation: uses_oidc_provider
+    object: tenant:other
+
+tests:
+  - name: allow - explicit tuple grants uses_oidc_provider for acme/google
+    check:
+      user: oidc_provider:google
+      relation: uses_oidc_provider
+      object: tenant:acme
+    expectation: true
+
+  - name: deny - no tuple for rogue-issuer on acme
+    check:
+      user: oidc_provider:rogue-issuer
+      relation: uses_oidc_provider
+      object: tenant:acme
+    expectation: false
+
+  - name: deny - microsoft in other tenant allow-list does not bleed to acme
+    check:
+      user: oidc_provider:microsoft
+      relation: uses_oidc_provider
+      object: tenant:acme
+    expectation: false

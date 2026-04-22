@@ -30,6 +30,12 @@
 #     CrossTenantAgreement controller (design 25) after both-side approval
 #   - workspace.messageable_from: [workspace] — workspace-pair grant for fine-grained
 #     cross-tenant a2a authz; ext_authz at NATS / a2a transport gates publish + subscribe
+#
+# 04a iter-6 (D28) additions for per-tenant OIDCProvider gating (2026-04-21):
+#   - oidc_provider type: cluster-scoped; identity = OIDCProvider.metadata.name
+#   - tenant.uses_oidc_provider: [oidc_provider] — written by Tenant controller per
+#     Tenant.spec.oidc.allowedProviders[]; ext_authz checks before validating tokens
+#     from any issuer for a given tenant
 
 model
   schema 1.1
@@ -53,6 +59,13 @@ type tenant
     # it is implicit via Workflow definition + NATS topic naming
     # (keese.tenant.<tenant-uid>.wf.<workflow-run-uid>.*).
     define allows_messaging: [tenant]
+    # uses_oidc_provider: per-tenant OIDCProvider allow-list (D28 / 04a iter-6).
+    # Tuple shape: tenant:T#uses_oidc_provider@oidc_provider:P. Written by the
+    # Tenant controller for each entry in Tenant.spec.oidc.allowedProviders[].
+    # ext_authz checks Check(tenant:T#uses_oidc_provider@oidc_provider:P) before
+    # accepting tokens from issuer P for tenant T. Issuer not in allow-list → deny.
+    # Cross-cut: authz.operator.keese.ai/v1alpha1 spec §1.6, D26/D24 Tenant CRD.
+    define uses_oidc_provider: [oidc_provider]
 
 type workspace
   relations
@@ -107,3 +120,8 @@ type memory
     define writer: [user, service_account] or owner from owner
     define can_read: reader
     define can_write: writer
+
+# oidc_provider: cluster-scoped entity; identity = OIDCProvider.metadata.name.
+# No relations defined on oidc_provider itself — it is a leaf type referenced
+# only via tenant.uses_oidc_provider.  CRD: authz.operator.keese.ai/v1alpha1/OIDCProvider (D28).
+type oidc_provider

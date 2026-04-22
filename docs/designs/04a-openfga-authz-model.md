@@ -50,6 +50,9 @@ Source of truth for DSL: `dev/bootstrap/openfga/model.fga`.
 | `service_account` | Per-workspace projected SA | K8s `ServiceAccount` |
 | `user` | Human operator or CI identity | OIDC identity |
 | `witness` | Supervision agent (D23) | Agent-supervision controller |
+| `oidc_provider` | OIDCProvider CR (D28) | `authz.operator.keese.ai/v1alpha1/OIDCProvider`; identity key `OIDCProvider.metadata.name` (cluster-scoped) |
+
+**Per-tenant OIDCProvider gating (D28 / iter-6).** `tenant.uses_oidc_provider: [oidc_provider]` — written by the Tenant controller per `Tenant.spec.oidc.allowedProviders[]`; ext_authz denies tokens from issuers not in the allow-list. Cross-cuts: `authz.operator.keese.ai-v1alpha1.md` §1.6; D26/D24.
 
 **Cross-tenant messaging relations (D29 / iter-5).** Two relations gate
 **cross-tenant a2a** at the workspace granularity. Intra-tenant a2a is
@@ -99,6 +102,7 @@ constrained by the workflow's owning tenant).
 | `memory:M#writer@service_account:SA` | Memory controller | SharedMemory write grant |
 | `tenant:T_to#allows_messaging@tenant:T_from` | CrossTenantAgreement controller (D29) | CRA reaches phase Approved |
 | `workspace:W_to#messageable_from@workspace:W_from` | CrossTenantAgreement controller (D29) | Per (from × to) workspace pair on Approved |
+| `tenant:T#uses_oidc_provider@oidc_provider:P` | Tenant controller (D24) | Per entry in `Tenant.spec.oidc.allowedProviders[]` |
 
 ## Check semantics and latency tiers
 
@@ -190,3 +194,5 @@ consistency, result}`, `keese_rebac_check_errors_total{check_type}`,
 ### Iter-4 2026-04-20 — 97 SHIP (reviewer-authorized cap override). Closed Cat 4/5/10 gaps; `status: current`. Detail + score table: [04a-iii-iter-log.md](04a-iii-iter-log.md).
 
 ### Iter-5 2026-04-21 — 97 SHIP (D29 spot-fix). Added `tenant.allows_messaging` + `workspace.messageable_from` relations + 2 tuple shapes for cross-tenant messaging. `status: current` retained. Detail + score table: [04a-iii-iter-log.md](04a-iii-iter-log.md).
+
+### Iter-6 2026-04-21 — 97 SHIP (D28 spot-fix). Added `oidc_provider` type + `tenant.uses_oidc_provider` relation + 1 tuple shape for per-tenant OIDC allow-list gating. `status: current` retained. Detail + score table: [04a-iii-iter-log.md](04a-iii-iter-log.md).
