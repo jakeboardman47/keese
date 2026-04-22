@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Full Workflow sample — multiple templates, cron trigger, S3 output, retry budget.
+apiVersion: workflow.operator.keese.ai/v1alpha1
+kind: Workflow
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: workflow-full-sample
+spec:
+  entrypoint: fetch
+  templates:
+    - name: fetch
+      image: alpine:3.18
+      command: [sh, -c]
+      args: ["wget -O /tmp/data.json https://httpbin.org/get"]
+      retryLimit: 2
+    - name: process
+      image: python:3.12-slim
+      command: [python, -c]
+      args: ["import json,sys; d=json.load(open('/tmp/data.json')); print(d)"]
+      transportRef:
+        name: my-transport
+      guardrailBindingRefs:
+        - name: my-guardrail
+  triggers:
+    - type: Cron
+      cron:
+        schedule: "0 6 * * *"
+        timezone: "UTC"
+  outputs:
+    - name: result-s3
+      type: S3
+      s3:
+        bucket: keese-workflow-artifacts
+        keyPrefix: workflow-full-sample/
+        credentialsSecretRef:
+          name: s3-credentials
+  defaultRetryBudget:
+    limit: 10
+    backoffSeconds: 30
+  concurrencyPolicy: Forbid
+  artifactStoreRef:
+    name: my-artifact-store

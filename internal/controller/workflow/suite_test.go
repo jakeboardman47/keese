@@ -1,7 +1,7 @@
+//go:build integration
+
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 keese-ai
-
-//go:build integration
 
 package workflow
 
@@ -26,8 +26,13 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
+// workflowCRDs is the narrow CRD load list for this package. Loading the full
+// config/crd/bases/ directory hits the 10 s envtest install timeout when 17
+// CRDs install concurrently on macOS arm64 (root cause documented in 6ddacf6).
+var workflowCRDs = []string{
+	"workflow.operator.keese.ai_workflows.yaml",
+	"workflow.operator.keese.ai_workflowruns.yaml",
+}
 
 var (
 	ctx       context.Context
@@ -39,26 +44,15 @@ var (
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
-
-	RunSpecs(t, "Controller Suite")
+	RunSpecs(t, "Workflow Controller Suite")
 }
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	ctx, cancel = context.WithCancel(context.TODO())
-
-	var err error
-	err = workflowv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	// +kubebuilder:scaffold:scheme
+	ctx, cancel = context.WithCancel(context.Background())
 
 	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
-	workflowCRDs := []string{
-		"workflow.operator.keese.ai_workflows.yaml",
-		"workflow.operator.keese.ai_workflowruns.yaml",
-	}
 	crdPaths := make([]string, 0, len(workflowCRDs))
 	for _, f := range workflowCRDs {
 		crdPaths = append(crdPaths, filepath.Join(crdBasePath, f))
@@ -66,22 +60,27 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
+		// Load only this package's CRDs (not the entire config/crd/bases/ directory)
+		// to prevent the 10 s CRD-install timeout when 17 CRDs install concurrently.
 		CRDDirectoryPaths:     crdPaths,
 		ErrorIfCRDPathMissing: true,
 		CRDInstallOptions: envtest.CRDInstallOptions{
+			// Belt-and-suspenders: raise the per-install timeout even with the
+			// narrow CRD list above, so a slow CI runner does not time out.
 			MaxTime: 120 * time.Second,
 		},
 	}
-
-	// Retrieve the first found binary directory to allow running tests from IDEs
-	if getFirstFoundEnvTestBinaryDir() != "" {
-		testEnv.BinaryAssetsDirectory = getFirstFoundEnvTestBinaryDir()
+	if dir := getFirstFoundEnvTestBinaryDir(); dir != "" {
+		testEnv.BinaryAssetsDirectory = dir
 	}
 
-	// cfg is defined in this file globally.
+	var err error
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
+
+	err = workflowv1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
@@ -91,23 +90,15 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 	cancel()
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
+	Expect(testEnv.Stop()).To(Succeed())
 })
 
-// getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.
-// ENVTEST-based tests depend on specific binaries, usually located in paths set by
-// controller-runtime. When running tests directly (e.g., via an IDE) without using
-// Makefile targets, the 'BinaryAssetsDirectory' must be explicitly configured.
-//
-// This function streamlines the process by finding the required binaries, similar to
-// setting the 'KUBEBUILDER_ASSETS' environment variable. To ensure the binaries are
-// properly set up, run 'make setup-envtest' beforehand.
+// getFirstFoundEnvTestBinaryDir locates envtest binaries.
 func getFirstFoundEnvTestBinaryDir() string {
 	basePath := filepath.Join("..", "..", "..", "bin", "k8s")
 	entries, err := os.ReadDir(basePath)
 	if err != nil {
-		logf.Log.Error(err, "Failed to read directory", "path", basePath)
+		logf.Log.Error(err, "failed to read envtest binary dir", "path", basePath)
 		return ""
 	}
 	for _, entry := range entries {
@@ -116,4 +107,15 @@ func getFirstFoundEnvTestBinaryDir() string {
 		}
 	}
 	return ""
+}
+
+// newFakes creates fresh fake dependencies for each test.
+func newFakes() (*FakeArgoProjector, *FakeNatsStreamProvisioner, *FakeNatsStreamDeleter, *FakeRebacWriter, *FakeCTAResolver) {
+	return &FakeArgoProjector{
+			StatusByName: map[string]*ArgoWorkflowStatus{},
+		},
+		&FakeNatsStreamProvisioner{},
+		&FakeNatsStreamDeleter{},
+		&FakeRebacWriter{TupleCount: 2},
+		&FakeCTAResolver{}
 }

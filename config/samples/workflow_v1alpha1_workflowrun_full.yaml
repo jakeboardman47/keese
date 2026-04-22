@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Full WorkflowRun sample — parameters, artifacts, supervision context, timeout.
+apiVersion: workflow.operator.keese.ai/v1alpha1
+kind: WorkflowRun
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: workflowrun-full-sample
+spec:
+  workspaceRef:
+    name: my-workspace
+  workflowRef:
+    name: workflow-full-sample
+  parameters:
+    - name: env
+      value: staging
+    - name: region
+      value: us-east-1
+  artifacts:
+    - name: input-dataset
+      path: s3://keese-workflow-artifacts/datasets/latest.parquet
+  retryBudget: 8
+  timeout: 2h0m0s
+  suspended: false
+  supervisionContext:
+    requireApproval: true
+    reviewerRef: platform-team
+    maxWaitSeconds: 3600
