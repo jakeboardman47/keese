@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -14,36 +16,312 @@ spec:
     singular: guardrailbinding
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: '.status.conditions[?(@.type=="Ready")].status'
+      name: Ready
+      type: string
+    - jsonPath: .metadata.labels.keese\.ai/binding-scope
+      name: Scope
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.observedGeneration
+      name: ObservedGen
+      type: integer
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: GuardrailBinding is the Schema for the guardrailbindings API.
+        description: |-
+          GuardrailBinding is the Schema for the guardrailbindings API.
+          It composes Kyverno policies, OpenFGA tuples, Envoy SecurityPolicy refs,
+          recipe hooks, and token budgets into a single CRD with a strictest-wins
+          merge lattice spanning Cluster / Tenant / Workspace scopes.
         properties:
           apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
           spec:
-            description: |-
-              GuardrailBindingSpec is intentionally empty at v1alpha1 until the design
-              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
-              GuardrailBindingSpec defines the desired state of GuardrailBinding.
+            description: GuardrailBindingSpec defines the desired state of GuardrailBinding.
+            properties:
+              envoy:
+                description: Envoy references the Envoy SecurityPolicy for this binding.
+                properties:
+                  securityPolicyRef:
+                    description: SecurityPolicyRef references an Envoy SecurityPolicy in the gateway namespace.
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    - namespace
+                    type: object
+                type: object
+              inherit:
+                description: Inherit lists parent GuardrailBindings resolved at merge time.
+                items:
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              kyverno:
+                description: Kyverno lists Kyverno ClusterPolicy references to compose.
+                items:
+                  properties:
+                    policyRef:
+                      type: string
+                  required:
+                  - policyRef
+                  type: object
+                type: array
+              openfga:
+                description: OpenFGA configures the OpenFGA tuple source.
+                properties:
+                  configMapRef:
+                    description: ConfigMapRef points to the ConfigMap holding the OpenFGA tuple definitions.
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    - namespace
+                    type: object
+                type: object
+              recipeHooks:
+                description: RecipeHooks registers pre- and post-flight hooks.
+                items:
+                  properties:
+                    event:
+                      description: Event names the trigger point.
+                      enum:
+                      - beforeToolCall
+                      - afterToolCall
+                      - onError
+                      type: string
+                    serviceRef:
+                      description: ServiceRef is required; URL field is rejected by VAP.
+                      properties:
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        path:
+                          type: string
+                        port:
+                          format: int32
+                          type: integer
+                      required:
+                      - name
+                      - namespace
+                      - path
+                      - port
+                      type: object
+                  required:
+                  - event
+                  - serviceRef
+                  type: object
+                type: array
+              scope:
+                description: Scope defines the tier and associated reference.
+                properties:
+                  tenantRef:
+                    description: TenantRef is required when Type == Tenant.
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    - namespace
+                    type: object
+                  type:
+                    description: Type is the scope tier. Immutable after creation (enforced by VAP).
+                    enum:
+                    - Cluster
+                    - Tenant
+                    - Workspace
+                    type: string
+                  workspaceRef:
+                    description: WorkspaceRef is required when Type == Workspace.
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                    required:
+                    - name
+                    - namespace
+                    type: object
+                required:
+                - type
+                type: object
+              tokenBudget:
+                description: TokenBudget defines per-resource token ceilings.
+                properties:
+                  input:
+                    default: 0
+                    format: int64
+                    type: integer
+                  output:
+                    default: 0
+                    format: int64
+                    type: integer
+                  total:
+                    default: 0
+                    format: int64
+                    type: integer
+                type: object
+              tools:
+                description: Tools configures MCP tool allow/deny lists and rate limits.
+                properties:
+                  allow:
+                    description: Allow is the allowlist of MCP tool names. Empty means allow all.
+                    items:
+                      type: string
+                    type: array
+                  deny:
+                    description: Deny is the denylist of MCP tool names.
+                    items:
+                      type: string
+                    type: array
+                  rateLimit:
+                    description: RateLimit applies a request-rate ceiling to all tools in this binding.
+                    properties:
+                      requests:
+                        default: 0
+                        format: int64
+                        type: integer
+                      scope:
+                        default: sa
+                        description: Scope controls per-tenant, per-workspace, or per-service-account limiting.
+                        enum:
+                        - tenant
+                        - workspace
+                        - sa
+                        type: string
+                      window:
+                        default: 1m
+                        type: string
+                    type: object
+                type: object
+            required:
+            - scope
             type: object
           status:
             description: GuardrailBindingStatus defines the observed state of GuardrailBinding.
+            properties:
+              conditions:
+                description: Conditions holds standard Kubernetes condition objects.
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              effectivePolicy:
+                description: EffectivePolicy is the merged output consumed by Recipe + Workspace admission.
+                properties:
+                  observedGeneration:
+                    format: int64
+                    type: integer
+                  tokenBudget:
+                    properties:
+                      input:
+                        format: int64
+                        type: integer
+                      output:
+                        format: int64
+                        type: integer
+                      total:
+                        format: int64
+                        type: integer
+                    type: object
+                  tools:
+                    properties:
+                      allow:
+                        items:
+                          type: string
+                        type: array
+                      deny:
+                        items:
+                          type: string
+                        type: array
+                      rateLimit:
+                        properties:
+                          requests:
+                            format: int64
+                            type: integer
+                          scope:
+                            enum:
+                            - tenant
+                            - workspace
+                            - sa
+                            type: string
+                          window:
+                            type: string
+                        type: object
+                    type: object
+                required:
+                - observedGeneration
+                type: object
+              lastMergeTime:
+                description: LastMergeTime is the wall-clock time of the last successful merge.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the generation of the binding last reconciled.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the high-level status.
+                enum:
+                - Ready
+                - Degraded
+                - Pending
+                type: string
+              rebacTupleCount:
+                description: RebacTupleCount records the number of OpenFGA tuples synced.
+                format: int32
+                type: integer
             type: object
         type: object
     served: true
