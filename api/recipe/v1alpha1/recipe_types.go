@@ -95,7 +95,7 @@ type RecipeSourceRef struct {
 
 // RecipeSpec defines the desired state of Recipe.
 //
-// +kubebuilder:validation:XValidation:rule="self.tools.size() == 0 || self.tools.all(t, t.name != '')",message="tool names must be non-empty"
+// +kubebuilder:validation:XValidation:rule="!has(self.tools) || self.tools.size() == 0 || self.tools.all(t, t.name != '')",message="tool names must be non-empty"
 type RecipeSpec struct {
 	// Instructions is the OCI layer path to the instructions.md file within the artifact.
 	// +kubebuilder:validation:MinLength=1

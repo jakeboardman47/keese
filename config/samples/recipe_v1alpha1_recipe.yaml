@@ -1,9 +1,54 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Minimal sample — Recipe referencing an OCI RecipeSource.
 apiVersion: recipe.operator.keese.ai/v1alpha1
 kind: Recipe
 metadata:
   labels:
     app.kubernetes.io/name: keese
     app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
   name: recipe-sample
 spec:
-  # TODO(user): Add fields here
+  instructions: instructions.md
+  model:
+    provider: anthropic
+    modelID: claude-sonnet-4-6
+  sourceRef:
+    name: recipesource-sample
+---
+# Fully populated sample — tools, extensions, parameters, hooks.
+apiVersion: recipe.operator.keese.ai/v1alpha1
+kind: Recipe
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: recipe-sample-full
+spec:
+  instructions: instructions.md
+  model:
+    provider: anthropic
+    modelID: claude-sonnet-4-6
+  tools:
+    - name: read_file
+    - name: web_search
+  extensions:
+    - name: code-interpreter
+      namespace: keese-system
+  parameters:
+    - name: REPO_URL
+      type: string
+      required: true
+    - name: MAX_RETRIES
+      type: int
+      required: false
+      default: "3"
+  preFlight:
+    cel: "request.spec.parameters.size() > 0"
+  postFlight:
+    shellRef: cleanup-workspace
+  sourceRef:
+    name: recipesource-sample

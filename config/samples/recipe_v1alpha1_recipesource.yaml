@@ -1,9 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Minimal sample — OCI source with digest pin (prod-safe).
 apiVersion: recipe.operator.keese.ai/v1alpha1
 kind: RecipeSource
 metadata:
   labels:
     app.kubernetes.io/name: keese
     app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
   name: recipesource-sample
 spec:
-  # TODO(user): Add fields here
+  oci:
+    registry: ghcr.io
+    repository: keese-ai/recipes/my-recipe
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+---
+# Fully populated sample — Git source with pinned SHA.
+apiVersion: recipe.operator.keese.ai/v1alpha1
+kind: RecipeSource
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: recipesource-sample-git
+spec:
+  git:
+    url: https://github.com/keese-ai/sample-recipes.git
+    revision: abcdef1234567890abcdef1234567890abcdef12
+    secretRef:
+      name: git-credentials

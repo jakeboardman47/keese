@@ -1,4 +1,6 @@
 ---
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -14,7 +16,23 @@ spec:
     singular: recipe
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.model.modelID
+      name: Model
+      type: string
+    - jsonPath: .spec.sourceRef.name
+      name: Source
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Recipe is the Schema for the recipes API.
@@ -24,26 +42,195 @@ spec:
               APIVersion defines the versioned schema of this representation of an object.
               Servers should convert recognized schemas to the latest internal value, and
               may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
             description: |-
               Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              Cannot be updated. In CamelCase.
             type: string
           metadata:
             type: object
           spec:
-            description: |-
-              RecipeSpec is intentionally empty at v1alpha1 until the design
-              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
-              RecipeSpec defines the desired state of Recipe.
+            description: RecipeSpec defines the desired state of Recipe.
+            properties:
+              extensions:
+                description: Extensions lists RuntimeExtensions required by this recipe.
+                items:
+                  description: RecipeExtension references a RuntimeExtension.
+                  properties:
+                    name:
+                      description: Name is the RuntimeExtension name.
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: Namespace is the RuntimeExtension namespace.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              instructions:
+                description: Instructions is the OCI layer path to the instructions.md file.
+                minLength: 1
+                type: string
+              model:
+                description: Model specifies the provider and model ID.
+                properties:
+                  modelID:
+                    description: ModelID is the provider-specific model identifier.
+                    minLength: 1
+                    type: string
+                  provider:
+                    description: Provider is the model provider name.
+                    minLength: 1
+                    type: string
+                required:
+                - modelID
+                - provider
+                type: object
+              parameters:
+                description: Parameters defines typed arguments injected as env vars.
+                items:
+                  description: RecipeParameter defines a typed recipe argument.
+                  properties:
+                    default:
+                      description: Default value when the parameter is not supplied.
+                      type: string
+                    name:
+                      description: Name is the parameter name.
+                      minLength: 1
+                      type: string
+                    required:
+                      description: Required indicates the parameter must be supplied.
+                      type: boolean
+                    type:
+                      description: Type is the parameter type.
+                      enum:
+                      - string
+                      - int
+                      - bool
+                      type: string
+                  required:
+                  - name
+                  - type
+                  type: object
+                type: array
+              postFlight:
+                description: PostFlight is an optional hook that runs after the recipe exits.
+                properties:
+                  cel:
+                    description: Cel is a CEL expression.
+                    type: string
+                  shellRef:
+                    description: ShellRef names a registered shell hook.
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of cel or shellRef must be set
+                  rule: has(self.cel) != has(self.shellRef)
+              preFlight:
+                description: PreFlight is an optional hook that runs before the recipe.
+                properties:
+                  cel:
+                    description: Cel is a CEL expression.
+                    type: string
+                  shellRef:
+                    description: ShellRef names a registered shell hook.
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of cel or shellRef must be set
+                  rule: has(self.cel) != has(self.shellRef)
+              sourceRef:
+                description: SourceRef is the reference to the RecipeSource.
+                properties:
+                  name:
+                    description: Name is the RecipeSource name.
+                    minLength: 1
+                    type: string
+                  namespace:
+                    description: Namespace is the RecipeSource namespace.
+                    type: string
+                required:
+                - name
+                type: object
+              tools:
+                description: Tools is the allowlist of tools this recipe may use.
+                items:
+                  description: RecipeTool defines a single allowed tool.
+                  properties:
+                    name:
+                      description: Name is the tool identifier.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+            required:
+            - instructions
+            - model
+            - sourceRef
             type: object
+            x-kubernetes-validations:
+            - message: tool names must be non-empty
+              rule: "!has(self.tools) || self.tools.size() == 0 || self.tools.all(t, t.name != '')"
           status:
             description: RecipeStatus defines the observed state of Recipe.
+            properties:
+              conditions:
+                description: Conditions contains detailed status conditions.
+                items:
+                  description: Condition contains details for one aspect of the current state.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the .metadata.generation last reconciled.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the current lifecycle phase.
+                enum:
+                - Pending
+                - Pulling
+                - Verified
+                - Ready
+                - Failed
+                - Terminating
+                type: string
+              rebacTupleCount:
+                description: RebacTupleCount is the number of OpenFGA tuples last synced.
+                format: int32
+                type: integer
+              resolvedDigest:
+                description: ResolvedDigest is the OCI digest of the cached artifact.
+                type: string
             type: object
         type: object
     served: true

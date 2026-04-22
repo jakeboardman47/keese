@@ -1,4 +1,6 @@
 ---
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -14,7 +16,17 @@ spec:
     singular: recipesource
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .status.sourceType
+      name: Type
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: RecipeSource is the Schema for the recipesources API.
@@ -22,28 +34,152 @@ spec:
           apiVersion:
             description: |-
               APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              Cannot be updated.
             type: string
           kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            description: Kind is a string value representing the REST resource this object represents.
             type: string
           metadata:
             type: object
           spec:
             description: |-
-              RecipeSourceSpec is intentionally empty at v1alpha1 until the design
-              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
               RecipeSourceSpec defines the desired state of RecipeSource.
+              Exactly one of oci, git, or configMap must be set.
+            properties:
+              configMap:
+                description: ConfigMap specifies an inline ConfigMap source (dev namespaces only).
+                properties:
+                  name:
+                    description: Name is the ConfigMap name.
+                    minLength: 1
+                    type: string
+                  namespace:
+                    description: Namespace is the ConfigMap namespace.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
+              git:
+                description: Git specifies a git repository source with a pinned commit SHA.
+                properties:
+                  revision:
+                    description: Revision is the full 40-character commit SHA.
+                    pattern: ^[0-9a-f]{40}$
+                    type: string
+                  secretRef:
+                    description: SecretRef references a Secret containing git credentials.
+                    properties:
+                      name:
+                        default: ""
+                        description: Name of the referent.
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  url:
+                    description: URL is the git repository URL.
+                    minLength: 1
+                    type: string
+                required:
+                - revision
+                - url
+                type: object
+              oci:
+                description: OCI specifies an OCI artifact source (preferred in production).
+                properties:
+                  digest:
+                    description: Digest is the immutable content-addressable digest.
+                    type: string
+                  registry:
+                    description: Registry is the OCI registry hostname.
+                    minLength: 1
+                    type: string
+                  repository:
+                    description: Repository is the image repository path.
+                    minLength: 1
+                    type: string
+                  secretRef:
+                    description: SecretRef references a Secret containing OCI pull credentials.
+                    properties:
+                      name:
+                        default: ""
+                        description: Name of the referent.
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  tag:
+                    description: Tag is the image tag (dev only; digest takes precedence).
+                    type: string
+                required:
+                - registry
+                - repository
+                type: object
             type: object
+            x-kubernetes-validations:
+            - message: exactly one of oci, git, or configMap must be set
+              rule: "(has(self.oci) ? 1 : 0) + (has(self.git) ? 1 : 0) + (has(self.configMap) ? 1 : 0) == 1"
           status:
             description: RecipeSourceStatus defines the observed state of RecipeSource.
+            properties:
+              cached:
+                description: Cached is true when the artifact is in the cluster-internal cache.
+                type: boolean
+              conditions:
+                description: Conditions contains detailed status conditions.
+                items:
+                  description: Condition contains details for one aspect of current state.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      type: integer
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastVerifiedTime:
+                description: LastVerifiedTime is the timestamp of the most recent successful verification.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the .metadata.generation last reconciled.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the current lifecycle phase.
+                enum:
+                - Pending
+                - Synced
+                - Failed
+                type: string
+              resolvedDigest:
+                description: ResolvedDigest is the content-addressable digest of the cached artifact.
+                type: string
+              sourceType:
+                description: SourceType records which source type is active.
+                enum:
+                - OCI
+                - Git
+                - ConfigMap
+                type: string
             type: object
         type: object
     served: true
