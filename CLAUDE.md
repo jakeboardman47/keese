@@ -104,7 +104,7 @@ Goal: keep this file small and stable so prompt caching stays warm across sessio
 - **Designs before specs.** No spec reaches `status: current` before its owning design
   does. Enforced by `scripts/check-design-gate.sh` (P3/P8).
 - **Design gate before controller code.** No non-stub body in `internal/controller/` or
-  `api/` until all 53 designs + 11 specs score ≥ 90 and the gate opens.
+  `api/` until all 62 designs + 11 specs score ≥ 90 and the gate opens.
 - **Server-Side Apply** with `fieldOwner = keese-<kind>-controller` for every
   controller write (rule 04.7).
 - **Multi-agent**: use git worktrees via `scripts/agent-dispatch.sh`; automated merge via

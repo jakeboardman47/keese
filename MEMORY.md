@@ -12,6 +12,21 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-04-21 — Final design batch (12, 13, 14a, 14b, 15, 16, 19, 21, 25)
+
+- 9 designs taken from `draft` to `current` via parallel architect dispatch.
+  All scored ≥ 90 honestly; design count 53 → 62 (8 new companions).
+- [12 network isolation](docs/designs/12-network-isolation.md) — NP-1 (default-deny) + NP-2 (egress to AI Gateway:443 + NATS:4222 only); SSA by Workspace controller; no Capsule overlap.
+- [13 CLI tunnel](docs/designs/13-cli-tunnel-wireguard.md) — keesectl tunnel via WireGuard; OIDC ephemeral peer keys (audience template `keese-tunnel-<tenant>`); routes only ClusterIPs (no K8s API).
+- [14a OLM channels](docs/designs/14a-olm-channels-upgrades.md) — three channels (stable/candidate/fast); replaces+skipRange upgrade graph; cosign verify + manual-only rollback.
+- [14b OLM dependencies](docs/designs/14b-olm-dependencies.md) — four hard OLM deps via GVK syntax (cert-manager, Capsule, Argo, ExternalSecrets); rest Helmfile-only with per-component justification.
+- [15 memory management](docs/designs/15-memory-management.md) — Memory + SharedMemory CRDs; 7-backend one-of (sqlite default + redis/qdrant/pgvector/neo4j/mem0/zep); EmbeddingDimImmutable VAP.
+- [16 recipe distribution](docs/designs/16-recipe-distribution.md) — OCI-first via oras + cosign; three-gate admission (tools/model/extensions); reads GuardrailBinding effective policy (TOCTOU guard).
+- [19 IDE + debugging](docs/designs/19-ide-and-debugging.md) — GoLand primary, VSCode secondary; dlv via SYS_PTRACE only (not privileged); ACP attach reuses 08b + D28.
+- [21 OpenTofu cloud deployment](docs/designs/21-opentofu-cloud-deployment.md) — per-cloud modules (EKS/GKE Autopilot/AKS); state in S3+DynamoDB / GCS versioning / Azure lease; Conftest Rego policies.
+- [25 CrossTenantAgreement CRD](docs/designs/25-cross-tenant-agreement.md) — full spec (4 files); resolves all five stub Qs; introduces NEW OpenFGA relation `tenant.can_approve_cra` (computed from admin); cosign or SA-token signature; TOFU snapshot for selectors.
+- **Score-honesty audit:** 6 of 9 agents self-reported 100/100; spot-audit found Cat 4/5 inflation pattern (test SPECS named in design ≠ test FILES committed). Honest rescores: 12 ≈95, 14a ≈92.5, 14b ≈95, 16 ≈92.5, 19 ≈92.5, 21 ≈95. All still ≥ 90; flipped to current. Iter-log scores left as-recorded; audit notes captured here for future reviewers.
+
 ### 2026-04-21 — D29 + a2a/cross-tenant messaging reframe
 
 - [D29 ratified](docs/plans/scaffolding-plan.md) — `CrossTenantAgreement` CRD (`tenancy.operator.keese.ai/v1alpha1`, cluster-scoped, cert-manager-style bilateral handshake). Kind count 16 → 17. Amends D23.

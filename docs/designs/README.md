@@ -13,7 +13,7 @@ last_verified: 2026-04-19
 # designs/ — WHY
 
 Design docs explain **why** the project is shaped the way it is.
-All 53 design docs must reach `status: current` and score ≥ 90/100
+All 62 design docs must reach `status: current` and score ≥ 90/100
 before any spec is authored and before any controller code is written.
 
 > **Gate status: CLOSED.** See [../plans/README.md](../plans/README.md).
@@ -57,25 +57,33 @@ before any spec is authored and before any controller code is written.
 | 10b-ii | [10b-ii-iter-log.md](10b-ii-iter-log.md) | Token Accounting: Iteration Log | observability | current |
 | 11 | [11-secrets-pluggable-vault.md](11-secrets-pluggable-vault.md) | Secrets Pluggable Vault | secrets | current |
 | 11-ii | [11-ii-examples.md](11-ii-examples.md) | Secrets: Canonical ExternalSecret YAML Examples + Iteration Log | secrets | current |
-| 12 | [12-network-isolation.md](12-network-isolation.md) | Network Isolation | security | draft |
-| 13 | [13-cli-tunnel-wireguard.md](13-cli-tunnel-wireguard.md) | CLI Tunnel (WireGuard) | developer-experience | draft |
-| 14a | [14a-olm-channels-upgrades.md](14a-olm-channels-upgrades.md) | OLM Channels and Upgrades | packaging | draft |
-| 14b | [14b-olm-dependencies.md](14b-olm-dependencies.md) | OLM Dependencies | packaging | draft |
-| 15 | [15-memory-management.md](15-memory-management.md) | Memory Management | memory | draft |
-| 16 | [16-recipe-distribution.md](16-recipe-distribution.md) | Recipe Distribution | recipes | draft |
+| 12 | [12-network-isolation.md](12-network-isolation.md) | Network Isolation | security | current |
+| 12-ii | [12-ii-iter-log.md](12-ii-iter-log.md) | Network Isolation: Iteration Log | security | current |
+| 13 | [13-cli-tunnel-wireguard.md](13-cli-tunnel-wireguard.md) | CLI Tunnel (WireGuard) | developer-experience | current |
+| 13b | [13b-cli-tunnel-ha-ops.md](13b-cli-tunnel-ha-ops.md) | CLI Tunnel: HA + ECMP + Iteration Log | developer-experience | current |
+| 14a | [14a-olm-channels-upgrades.md](14a-olm-channels-upgrades.md) | OLM Channels and Upgrades | packaging | current |
+| 14a-ii | [14a-ii-iterations.md](14a-ii-iterations.md) | OLM Channels: Iteration Log + kuttl Test Spec | packaging | current |
+| 14b | [14b-olm-dependencies.md](14b-olm-dependencies.md) | OLM Dependencies | packaging | current |
+| 15 | [15-memory-management.md](15-memory-management.md) | Memory Management | memory | current |
+| 16 | [16-recipe-distribution.md](16-recipe-distribution.md) | Recipe Distribution | recipes | current |
 | 17 | [17-credential-broker.md](17-credential-broker.md) | Credential Broker | egress | current |
 | 18 | [18-process-lifecycle.md](18-process-lifecycle.md) | Process Lifecycle | reliability | current |
-| 19 | [19-ide-and-debugging.md](19-ide-and-debugging.md) | IDE and Debugging | developer-experience | draft |
+| 19 | [19-ide-and-debugging.md](19-ide-and-debugging.md) | IDE and Debugging | developer-experience | current |
+| 19b | [19b-iter-log.md](19b-iter-log.md) | IDE and Debugging: Iteration Log | developer-experience | current |
 | 20 | [20-api-group-layout.md](20-api-group-layout.md) | API Group Layout (redirect) | api | superseded |
 | 20a | [20a-api-group-layout.md](20a-api-group-layout.md) | API Group Layout: Groups, Kinds, Shared Types, Versioning | api | current |
 | 20b | [20b-api-group-layout.md](20b-api-group-layout.md) | API Group Layout: Trade-offs, Failure Modes, Rollback, Observability | api | current |
-| 21 | [21-opentofu-cloud-deployment.md](21-opentofu-cloud-deployment.md) | OpenTofu Cloud Deployment | deployment | draft |
+| 21 | [21-opentofu-cloud-deployment.md](21-opentofu-cloud-deployment.md) | OpenTofu Cloud Deployment | deployment | current |
+| 21b | [21b-opentofu-iter-log.md](21b-opentofu-iter-log.md) | OpenTofu Cloud Deployment: Iteration Log | deployment | current |
 | 22 | [22-workflow-composition-examples.md](22-workflow-composition-examples.md) | Workflow Composition Examples | workflow | current |
 | 22-ii | [22-ii-samples.md](22-ii-samples.md) | Workflow Composition Examples: Full YAML Samples | workflow | current |
 | 23 | [23-agent-supervision.md](23-agent-supervision.md) | Agent Supervision (Patrol Pattern) | reliability | current |
 | 24 | [24-tenant-crd.md](24-tenant-crd.md) | Keese Tenant CRD: Spec, Reconcile, Admission, Migration | tenancy | current |
 | 24b | [24b-tenant-crd.md](24b-tenant-crd.md) | Keese Tenant CRD: Trade-offs, Failure Modes, Upgrade, Observability | tenancy | current |
-| 25 | [25-cross-tenant-agreement.md](25-cross-tenant-agreement.md) | CrossTenantAgreement CRD (D29) | tenancy | draft |
+| 25 | [25-cross-tenant-agreement.md](25-cross-tenant-agreement.md) | CrossTenantAgreement CRD (D29) | tenancy | current |
+| 25-ii | [25-ii-spec-schema.md](25-ii-spec-schema.md) | CrossTenantAgreement: Spec Schema + VAP CEL | tenancy | current |
+| 25-iii | [25-iii-approval-flow.md](25-iii-approval-flow.md) | CrossTenantAgreement: Approval Flow + Failure Modes + Samples | tenancy | current |
+| 25-iv | [25-iv-iter-log.md](25-iv-iter-log.md) | CrossTenantAgreement: Iteration Log | tenancy | current |
 
 ## Lifecycle
 
