@@ -24,6 +24,12 @@
 #   - workspace.can_revoke: automation-only (witness, service_account); not for user subjects
 #   - workspace.supervised_by: [witness] added
 #   - witness type added
+#
+# 04a iter-5 (D29) additions for cross-tenant a2a messaging (2026-04-21):
+#   - tenant.allows_messaging: [tenant] — directional bilateral grant, written by
+#     CrossTenantAgreement controller (design 25) after both-side approval
+#   - workspace.messageable_from: [workspace] — workspace-pair grant for fine-grained
+#     cross-tenant a2a authz; ext_authz at NATS / a2a transport gates publish + subscribe
 
 model
   schema 1.1
@@ -40,6 +46,13 @@ type tenant
   relations
     define admin: [user]
     define member: [user, service_account] or admin
+    # allows_messaging: directional, written by CrossTenantAgreement controller (D29)
+    # after both-side approval. Tuple shape: tenant:T_to#allows_messaging@tenant:T_from.
+    # Manual writes (out-of-band third-party authz) tolerated; controller no-ops on existing
+    # tuple and emits OutOfBandTupleObserved. Intra-tenant a2a does NOT use this relation —
+    # it is implicit via Workflow definition + NATS topic naming
+    # (keese.tenant.<tenant-uid>.wf.<workflow-run-uid>.*).
+    define allows_messaging: [tenant]
 
 type workspace
   relations
@@ -59,6 +72,12 @@ type workspace
     #   - supervision controller (D23): workspace:<name>#can_revoke@witness:<id>
     # NOT granted to user:* — humans use Workspace.spec.suspended for graceful suspension.
     define can_revoke: [witness, service_account]
+    # messageable_from: workspace-pair grant for cross-tenant a2a messaging (D29 / 04a iter-5).
+    # Tuple shape: workspace:W_to#messageable_from@workspace:W_from. Written by the
+    # CrossTenantAgreement controller after bilateral approval, expanded as the
+    # cartesian product of from.workspaceSelector × to.workspaceSelector. ext_authz at the
+    # NATS / a2a transport (design 09) calls Check before subscribe + first publish.
+    define messageable_from: [workspace]
 
 type tool
   relations

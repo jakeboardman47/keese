@@ -19,7 +19,7 @@ depends:
   - 24-tenant-crd.md
 related_skills: []
 status: current
-last_verified: 2026-04-20
+last_verified: 2026-04-21
 rollback: |
   Full rollback uses MODEL_MIGRATION drain-and-rollout in reverse: enter migration mode,
   drain new-model runs, swap ConfigMap to prior model ID, readiness gate, exit.
@@ -51,6 +51,26 @@ Source of truth for DSL: `dev/bootstrap/openfga/model.fga`.
 | `user` | Human operator or CI identity | OIDC identity |
 | `witness` | Supervision agent (D23) | Agent-supervision controller |
 
+**Cross-tenant messaging relations (D29 / iter-5).** Two relations gate
+**cross-tenant a2a** at the workspace granularity. Intra-tenant a2a is
+**implicit** via Workflow definition (NATS topic existence within
+`keese.tenant.<tenant-uid>.wf.<workflow-run-uid>.*` IS authz; topic
+provisioning happens in the Workflow controller per design 03 iter-3,
+constrained by the workflow's owning tenant).
+
+- `tenant.allows_messaging: [tenant]` — directional grant from
+  `T_to#allows_messaging@tenant:T_from`. Written exclusively by the
+  **CrossTenantAgreement controller (D29 / design 25)** after both-side
+  approval; manual writes via `fga write` are tolerated (out-of-band
+  third-party authz workflows) and the controller no-ops when a tuple
+  exists, emitting `OutOfBandTupleObserved`.
+- `workspace.messageable_from: [workspace]` — workspace-pair grant.
+  Written per (W_from, W_to) cartesian product expanded from each
+  approved CrossTenantAgreement's `from.workspaceSelector` ×
+  `to.workspaceSelector`. ext_authz at NATS / a2a transport (09)
+  enforces via `Check(workspace:W_to#messageable_from@workspace:W_from)`
+  before subscribe + first publish.
+
 **`extension` — justification.** A RuntimeExtension CR (D7) bundles N tools. `tool.owner: [extension]` (not `[tenant]`) preserves the D7 SPI boundary; sole writer is the RuntimeExtension controller. One ConfigMap update enables/disables an entire extension. Impact on D7: extension-to-tool registration protocol flagged.
 
 **`credential` — justification.** `Check(credential:C#can_use@SA)` gives the credential broker (D17) a single authz call. Every `credential.can_use` decision emits a token-accounting event consumed by `TokenBudget` per D10b. Impact on D5a, D5b, D10b, D17: each must cross-reference this tuple shape.
@@ -77,6 +97,8 @@ Source of truth for DSL: `dev/bootstrap/openfga/model.fga`.
 | `credential:C#bound_to@workspace:W` | Credential broker reconciler (D17) | BSP bound |
 | `memory:M#reader@service_account:SA` | Memory controller | SharedMemory read grant |
 | `memory:M#writer@service_account:SA` | Memory controller | SharedMemory write grant |
+| `tenant:T_to#allows_messaging@tenant:T_from` | CrossTenantAgreement controller (D29) | CRA reaches phase Approved |
+| `workspace:W_to#messageable_from@workspace:W_from` | CrossTenantAgreement controller (D29) | Per (from × to) workspace pair on Approved |
 
 ## Check semantics and latency tiers
 
@@ -165,30 +187,6 @@ consistency, result}`, `keese_rebac_check_errors_total{check_type}`,
 
 ### Iter-3 2026-04-20 — 94 SHIP held at `draft`. Gaps: no `tests/openfga/*.yaml`, no CI for `fga model test`, MODEL_MIGRATION controller not scaffolded, runbook absent.
 
-### Iteration 4 — 2026-04-20 (reviewer-authorized cap override)
+### Iter-4 2026-04-20 — 97 SHIP (reviewer-authorized cap override). Closed Cat 4/5/10 gaps; `status: current`. Detail + score table: [04a-iii-iter-log.md](04a-iii-iter-log.md).
 
-> **Iteration-cap override.** The rubric caps iterations at 3. The human
-> reviewer authorized a 4th iteration on 2026-04-20 to close the three
-> Cat 4 / Cat 5 / Cat 10 gaps that kept iter-3 at 94. This is a one-off
-> override; not a rubric amendment.
-
-| # | Category | Weight | Ratio | Score | Notes |
-|---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | Unchanged; bounded. |
-| 2 | Architecture fit | 10 | 1.0 | 10 | D10b cross-ref added (`credential.can_use` → token-accounting event). |
-| 3 | Security posture | 15 | 1.0 | 15 | Unchanged; all invariants hold. |
-| 4 | Automatability | 10 | 1.0 | 10 | CI automation matrix enumerates all 4 entry points with concrete script paths, CI hooks, fail conditions; MODEL_MIGRATION controller file named; e2e make target named. No hand-waving. |
-| 5 | Verifiability | 15 | 1.0 | 15 | 13 named tests in `04a-ii-testplan.md`: positive + negative for can_call chain, can_revoke admission, MODEL_MIGRATION drain/timeout/partial-rollout, audit-no-token, fail-closed. |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Unchanged; all modes + mitigations present. |
-| 7 | Context efficiency | 10 | 1.0 | 10 | Split: test table + runbook in companion docs; 04a stays ≤ 200 lines. |
-| 8 | Docs quality | 5 | 1.0 | 5 | D10b added to `depends`; companion docs indexed in README; no broken links. |
-| 9 | Observability | 5 | 1.0 | 5 | Unchanged. |
-| 10 | Operational readiness | 10 | 1.0 | 10 | Runbook authored at `docs/plans/runbook-model-migration.md` with pre-check, enter, drain, abort, swap, gate, exit, rollback steps. |
-| | **Total** | 100 | | **97** | |
-
-Verdict: SHIP (97 ≥ 95 honest threshold). `status` flipped to `current`.
-
-Residual (not blocking gate):
-1. `scripts/check-openfga-model.sh` and `scripts/check-openfga-assertions.sh` not yet implemented — test-engineer backlog, pre-gate acceptable.
-2. `status.observedModelID` on controller/ext_authz pods — hard requirement for MODEL_MIGRATION readiness gate; flagged for controller phase.
-3. `test/e2e/model_migration_drain_test.go` — e2e harness authored post-gate per `04a-ii-testplan.md` backlog.
+### Iter-5 2026-04-21 — 97 SHIP (D29 spot-fix). Added `tenant.allows_messaging` + `workspace.messageable_from` relations + 2 tuple shapes for cross-tenant messaging. `status: current` retained. Detail + score table: [04a-iii-iter-log.md](04a-iii-iter-log.md).
