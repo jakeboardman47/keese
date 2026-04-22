@@ -1,18 +1,7 @@
-/*
-Copyright 2026.
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 keese-ai
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+//go:build integration
 
 package workflow
 
@@ -21,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -64,10 +54,23 @@ var _ = BeforeSuite(func() {
 
 	// +kubebuilder:scaffold:scheme
 
+	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
+	workflowCRDs := []string{
+		"workflow.operator.keese.ai_workflows.yaml",
+		"workflow.operator.keese.ai_workflowruns.yaml",
+	}
+	crdPaths := make([]string, 0, len(workflowCRDs))
+	for _, f := range workflowCRDs {
+		crdPaths = append(crdPaths, filepath.Join(crdBasePath, f))
+	}
+
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     crdPaths,
 		ErrorIfCRDPathMissing: true,
+		CRDInstallOptions: envtest.CRDInstallOptions{
+			MaxTime: 120 * time.Second,
+		},
 	}
 
 	// Retrieve the first found binary directory to allow running tests from IDEs

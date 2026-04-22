@@ -95,9 +95,10 @@ test-unit:  ## go test -short ./... (CI)
 	@if [ -f go.mod ]; then go test -short -race ./...; else echo "go.mod not present yet (P6)"; fi
 
 .PHONY: test-integration
-test-integration: envtest-setup  ## envtest-backed integration tests (CI)
+test-integration: envtest-setup  ## envtest-backed integration tests (CI) — requires //go:build integration
 	@if [ -f go.mod ]; then \
-		KUBEBUILDER_ASSETS="$$(setup-envtest use $(K8S_VERSION) -p path)" go test -tags=integration ./... -timeout=20m; \
+		KUBEBUILDER_ASSETS="$$(setup-envtest use $(K8S_VERSION) -p path)" \
+		go test -v -race -tags=integration ./internal/controller/... -timeout=20m; \
 	else \
 		echo "go.mod not present yet (P6)"; \
 	fi

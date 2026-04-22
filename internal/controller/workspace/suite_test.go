@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 keese-ai
 
+//go:build integration
+
+// Package workspace contains envtest-backed integration tests for the Workspace,
+// WorkspaceShare, and WorkspaceSession controllers.
+//
+// Build tag: integration — excluded from the default `go test` (unit) tier.
+// Run via: make test-integration  (rule 06-testing.md §Build tags / test tiers)
+//
+// CRD allow-list: only workspace-group CRDs are loaded here to minimize
+// apiserver startup latency and improve isolation across packages.
+// Loading all 17 CRDs from config/crd/bases/ caused envtest CRD-install
+// timeouts (default 30 s) when all packages ran concurrently.
 package workspace
 
 import (
@@ -8,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -38,6 +51,26 @@ func TestControllers(t *testing.T) {
 	RunSpecs(t, "Workspace Controller Suite")
 }
 
+// workspaceCRDs lists only the CRD files this package's controllers require.
+// Do NOT add CRDs from other API groups here — keep envtest startup fast and
+// per-package isolated. See rule 04-kubernetes.md §16 and the CRD-install
+// timeout root-cause documented in this file's package comment.
+//
+// NOTE: workspace.operator.keese.ai_workspacesessions.yaml is intentionally
+// excluded. The WorkspaceSession reconciler is not registered in this suite
+// (it has no test coverage yet), and the CRD's CEL rule
+// `self.attachGraceSeconds >= 0` on an optional field without a `has()` guard
+// causes the kube-apiserver CRD controller to fail to register the type,
+// preventing it from appearing in API discovery and hanging the envtest
+// CRD-install wait. Schema fix required in the owning reconciler batch —
+// use `!has(self.attachGraceSeconds) || (self.attachGraceSeconds >= 0 && ...)`.
+// Similarly, workspace.operator.keese.ai/v1alpha1 with CEL rules on optional
+// fields in tenancy.operator.keese.ai_tenants.yaml uses the same pattern.
+var workspaceCRDs = []string{
+	"workspace.operator.keese.ai_workspaces.yaml",
+	"workspace.operator.keese.ai_workspaceshares.yaml",
+}
+
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
@@ -47,10 +80,23 @@ var _ = BeforeSuite(func() {
 	err = workspacev1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
+	crdPaths := make([]string, 0, len(workspaceCRDs))
+	for _, f := range workspaceCRDs {
+		crdPaths = append(crdPaths, filepath.Join(crdBasePath, f))
+	}
+
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
+		// Load only this package's CRDs (not the entire config/crd/bases/ directory)
+		// to prevent the 10 s CRD-install timeout when 17 CRDs install concurrently.
+		CRDDirectoryPaths:     crdPaths,
 		ErrorIfCRDPathMissing: true,
+		CRDInstallOptions: envtest.CRDInstallOptions{
+			// Belt-and-suspenders: raise the per-install timeout even with the
+			// narrow CRD list above, so a slow CI runner does not time out.
+			MaxTime: 120 * time.Second,
+		},
 	}
 	if dir := getFirstFoundEnvTestBinaryDir(); dir != "" {
 		testEnv.BinaryAssetsDirectory = dir

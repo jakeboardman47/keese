@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 keese-ai
 
+//go:build integration
+
 package authz
 
 import (
@@ -389,6 +391,14 @@ var _ = Describe("OIDCProviderReconciler", func() {
 				_ = k8sClient.Update(ctx, obj)
 				_ = k8sClient.Delete(ctx, obj)
 			}
+			// Wait for the object to be fully removed before the next It block's
+			// BeforeEach runs. Without this, the second It's BeforeEach Create fails
+			// with "object is being deleted" because the GC hasn't finished yet.
+			Eventually(func() bool {
+				var gone authzv1alpha1.OIDCProvider
+				return k8sClient.Get(ctx, nsn, &gone) != nil
+			}, eventuallyTimeout, eventuallyInterval).Should(BeTrue(),
+				"OIDCProvider %s must be fully deleted before next spec", nsn.Name)
 		})
 
 		It("verifies isBootstrapCR returns true for labeled CR", func() {
