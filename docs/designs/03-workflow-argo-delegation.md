@@ -6,15 +6,19 @@ scope: design
 category: workflow
 depends:
   - 02-workspace-model.md          # concurrencyPolicy + interactive fields land in iter-2
+  - 04a-openfga-authz-model.md     # iter-5: tenant.allows_messaging + workspace.messageable_from
+  - 04b-projected-sa-identity.md   # iter-3: workflowRun audience template required
   - 05c-mcp-policy-enforcement.md
   - 06-guardrailbinding.md
   - 07-agent-runtime-spi.md
+  - 09-transport-crd.md            # iter-3: spec.a2a.scope consumes topic-naming + audience contract
   - 10b-token-accounting.md
   - 12-network-isolation.md        # default-deny NP in Workspace namespace now covers Argo pods
   - 18-process-lifecycle.md
   - 20a-api-group-layout.md
   - 22-workflow-composition-examples.md  # iter-2 must absorb same-namespace model
   - 23-agent-supervision.md
+  - 25-cross-tenant-agreement.md   # D29: bilateral handshake required for cross-tenant participants
 related_skills: [controller-authoring, crd-authoring]
 status: current
 last_verified: 2026-04-21
@@ -26,8 +30,10 @@ rollback: |
   and WorkflowTemplates in the Workspace namespace are NOT deleted on operator rollback
   — they survive and continue executing; reconciliation re-aligns on the next tick.
   Per-run Secrets (keese-wf-<run-id>-creds) are owner-ref'd to the Argo Workflow; GC
-  removes them when the Workflow is deleted or after TTL expiry. CRD schema rollback
-  follows the v1alpha1→v1beta1 promotion rule: no conversion webhook exists at v1alpha1.
+  removes them when the Workflow is deleted or after TTL expiry. Per-run JetStream streams
+  (keese.tenant.<t>.wf.<r>.>) are owner-ref'd to the Argo Workflow; GC triggers stream
+  deletion. CRD schema rollback follows the v1alpha1→v1beta1 promotion rule: no conversion
+  webhook exists at v1alpha1.
 ---
 
 # 03 — Workflow Argo Delegation
@@ -54,7 +60,8 @@ namespaces.
 | Parallel run isolation | Distinct Argo Workflow names (`<workflow-name>-<run-id>-<attempt>`); pod name-scoped |
 | Cleanup | `ttlStrategy.secondsAfterCompletion: 604800` (7 d default; tenant-overridable); no namespace delete |
 | NetworkPolicy | Workspace namespace fail-closed default-deny NP (12) applies to Argo pods automatically |
-| RBAC reduction | Operator no longer needs `namespaces: create\|delete` cluster verbs; scoped to `workflows.argoproj.io`, `workflowtemplates.argoproj.io`, `secrets(keese-wf-*)` in tenant namespaces |
+| RBAC reduction | Operator no longer needs `namespaces: create\|delete` cluster verbs; scoped to `workflows.argoproj.io`, `workflowtemplates.argoproj.io`, `secrets(keese-wf-*)` in tenant namespaces; iter-3 adds NATS JetStream write (see 03c) |
+| JetStream stream | `keese.tenant.<t>.wf.<r>.>` provisioned at WorkflowRun create; owner-ref → GC on Workflow delete; `maxAge` matches `WorkflowRun.spec.timeout`; `replicas: 3` |
 
 ## Spec mapping table — WorkflowRun → Argo Workflow
 
@@ -72,6 +79,7 @@ Controller: `keese-workflow-controller`; all writes via SSA with
 | `.supervisionContext` | `metadata.labels["keese.ai/supervision": "enabled"]` | 1:1 for 23 filter |
 | `.entrypoint` | `.spec.entrypoint` | 1:1 |
 | `.suspended` | `.spec.suspend` | 1:1; patched by controller on `RetryBudgetExhausted` |
+| _(implicit)_ | per-step `volumes[].projected.sources[].serviceAccountToken` | Adds `workflowRun` audience (`keese-wf-<run-uid>`); requires 04b iter-3 template; TTL ≤ 600s |
 
 **Back-projection** (Argo → WorkflowRun): controller watches `workflows.argoproj.io`
 in all tenant namespaces; maps `phase`, `startedAt`, `finishedAt`, and
@@ -144,12 +152,16 @@ VAP rejects `WorkflowRun` creation when `referenced Workspace.spec.interactive =
 | `Replace` drain timeout exceeded | `replaceDrainSeconds` elapsed | Force-terminate; `ConcurrentRunForced`; prior artifacts in S3 |
 | RetryBudget exhausted | Controller patches `spec.suspended` | Argo pauses; human increments budget; no data loss |
 | WorkflowRun on interactive Workspace | VAP reject | `WorkflowRunNotAllowedOnInteractiveWorkspace` |
+| `MissingWorkflowAudience` | 04b iter-3 template absent at projection time | Admission fail; WorkflowRun stays Pending; event raised |
+| `CrossTenantAgreementMissing` | Cross-tenant participant; no Approved CRA | Admission rejects; surfaces missing pair in message; ReBAC enforcement at transport (09) |
+| `NATSStreamCreateFailed` | JetStream unavailable at WorkflowRun create | Controller retries with backoff; WorkflowRun stays Pending |
+| `NATSStreamDeleteFailed` | JetStream unavailable at Workflow terminal/deletion | Controller retries; stream retained until next reconcile |
 
 ## Observability
 
-- **OTEL spans:** `workflow.project.template`, `workflow.project.run`, `workflow.status.sync`, `workflow.concurrency.replace_drain`.
-- **Events** (`events.go`): `WorkflowProjected`, `WorkflowRunProjected`, `WorkflowRunFailed`, `ArtifactBackendMissing`, `ArtifactSecretFailed`, `RetryBudgetExhausted`, `ArgoStatusSynced`, `TriggerProjected`, `TriggerProjectionFailed`, `TriggerAuthSecretMissing`, `ConcurrentRunForbidden`, `ConcurrentRunForced`.
-- **Metrics:** `keese_workflowrun_phase_total{phase,tenant}`, `keese_workflow_projection_duration_seconds`, `keese_workflowrun_retry_budget_exhausted_total{tenant}`, `keese_artifact_backend_missing_total{tenant}`, `keese_workflowrun_concurrency_replace_drain_seconds{tenant}`.
+- **OTEL spans:** `workflow.project.template`, `workflow.project.run`, `workflow.status.sync`, `workflow.concurrency.replace_drain`, `workflow.nats.stream.provision`, `workflow.cta.check`.
+- **Events** (`events.go`): `WorkflowProjected`, `WorkflowRunProjected`, `WorkflowRunFailed`, `ArtifactBackendMissing`, `ArtifactSecretFailed`, `RetryBudgetExhausted`, `ArgoStatusSynced`, `TriggerProjected`, `TriggerProjectionFailed`, `TriggerAuthSecretMissing`, `ConcurrentRunForbidden`, `ConcurrentRunForced`, `WorkflowNATSStreamProvisioned`, `WorkflowNATSStreamCleaned`, `MissingWorkflowAudience`, `CrossTenantAgreementMissing`.
+- **Metrics:** `keese_workflowrun_phase_total{phase,tenant}`, `keese_workflow_projection_duration_seconds`, `keese_workflowrun_retry_budget_exhausted_total{tenant}`, `keese_artifact_backend_missing_total{tenant}`, `keese_workflowrun_concurrency_replace_drain_seconds{tenant}`, `keese_workflow_nats_stream_provision_duration_seconds`, `keese_workflow_cta_check_duration_seconds`, `keese_workflow_audience_injection_total{result}`.
 - **Printer columns (04.5):** `Workflow` — `Age`, `Ready`, `Phase`, `RunCount`; `WorkflowRun` — `Age`, `Ready`, `Phase`, `ArgoPhase`.
 
 ## Cross-dep flags
@@ -157,36 +169,28 @@ VAP rejects `WorkflowRun` creation when `referenced Workspace.spec.interactive =
 - **22 iter-2 (required):** absorb same-namespace model; drop ephemeral-namespace references; `workflowTemplateRef` field confirmed.
 - **02 iter-2 (required):** add `spec.concurrencyPolicy` + `spec.interactive` to Workspace spec; VAP immutability on `interactive`.
 - **03b:** trigger projections split to [03b](03b-workflow-trigger-projections.md).
-- **09 (stub):** HTTPRoute-webhook trigger ownership; align when current.
+- **04a iter-5 (LANDED 2026-04-21):** new `tenant.allows_messaging` + `workspace.messageable_from` ReBAC relations enable cross-tenant authz; runtime enforcement delegated to transport (09).
+- **04b iter-3 (LANDED 2026-04-21):** `workflowRun` audience template (`keese-wf-<run-uid>`) required for per-step SA-token audience injection; absence raises `MissingWorkflowAudience`.
+- **09 iter-3 (LANDED 2026-04-21):** `spec.a2a.scope: intra-tenant | cross-tenant` consumes the NATS topic-naming + audience contract defined in [03c](03c-workflow-messaging-plane.md).
+- **D29 / design 25 (stub):** CrossTenantAgreement CRD required for cross-tenant peer admission check. Cross-tenant peers are derived **implicitly** by the controller from `Workflow.spec.templates[]` `transportRef`s with `scope: cross-tenant` (Q2(b) decision 2026-04-21) — no new top-level WorkflowRun spec field is required.
 - **14b (stub):** Argo chart version OLM dependency pin.
+
+## Messaging plane responsibilities
+
+NATS topic provisioning, per-WorkflowRun SA audience injection, CrossTenantAgreement admission, and stream teardown are detailed in [03c — Workflow Messaging Plane](03c-workflow-messaging-plane.md).
 
 ## Refs
 
-[02](02-workspace-model.md) · [03b](03b-workflow-trigger-projections.md) · [05c](05c-mcp-policy-enforcement.md) · [06](06-guardrailbinding.md) · [07](07-agent-runtime-spi.md) · [10b](10b-token-accounting.md) · [12](12-network-isolation.md) · [18](18-process-lifecycle.md) · [20a](20a-api-group-layout.md) · [22](22-workflow-composition-examples.md) · [23](23-agent-supervision.md) · [rubric](../plans/rubric.md)
+[02](02-workspace-model.md) · [03b](03b-workflow-trigger-projections.md) · [03c](03c-workflow-messaging-plane.md) · [04a](04a-openfga-authz-model.md) · [04b](04b-projected-sa-identity.md) · [05c](05c-mcp-policy-enforcement.md) · [06](06-guardrailbinding.md) · [07](07-agent-runtime-spi.md) · [09](09-transport-crd.md) · [10b](10b-token-accounting.md) · [12](12-network-isolation.md) · [18](18-process-lifecycle.md) · [20a](20a-api-group-layout.md) · [22](22-workflow-composition-examples.md) · [23](23-agent-supervision.md) · [25](25-cross-tenant-agreement.md) · [rubric](../plans/rubric.md)
 
 ## Iteration log
 
 ### Iteration 1 — 2026-04-21 — score 92.5 (SHIP) — baseline; 5 open questions answered; ephemeral namespace model (corrected in iter-2); Cat 4/5 pre-gate gaps remain.
 
-### Iteration 2 — 2026-04-21
+### Iteration 2 — 2026-04-21 — score 95 (SHIP) — full table in [03c](03c-workflow-messaging-plane.md)
 
-| # | Category | Wt | Ratio | Score | Notes |
-|---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | Same-namespace model, concurrencyPolicy semantics, interactive mutual exclusion — all bounded with explicit enforcement points. |
-| 2 | Architecture fit | 10 | 1.0 | 10 | Dropped ephemeral namespaces; operator RBAC narrowed; Capsule tenant-tree consistent; NP from 12 applies naturally. |
-| 3 | Security posture | 15 | 1.0 | 15 | Narrower operator RBAC (no namespace create/delete); owner-ref Secret GC; NP in Workspace namespace covers all Argo pods; VAP immutability on interactive; no wildcard policy. |
-| 4 | Automatability | 10 | 0.5 | 5 | concurrencyPolicy admission path named; VAP for interactive named; Replace drain-window stated. Make targets pre-gate. |
-| 5 | Verifiability | 15 | 0.5 | 7.5 | 9 failure modes (2 new); Replace race and interactive reject testable. Envtest names pre-gate P8. |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Replace drain timeout, Forbid race, interactive reject added; all 9 modes have detection + mitigation. |
-| 7 | Context efficiency | 10 | 1.0 | 10 | Trigger projections split to 03b to keep 03 ≤ 200 lines; single responsibility maintained. |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX; frontmatter updated; depends list includes 12; 02 iter-2 flagged; 22 iter-2 flagged; rollback updated. |
-| 9 | Observability | 5 | 1.0 | 5 | 4 OTEL spans (+ replace_drain); 12 event reasons (+ ConcurrentRun*); 5 metrics (+ drain seconds). |
-| 10 | Operational readiness | 10 | 1.0 | 10 | TTL strategy explicit; Argo chart pin flagged for 14b; RBAC reduction documented; NP coverage via workspace namespace clear. |
-| | **Total** | 100 | | **95** | |
+Same-namespace model; RBAC narrowed; concurrencyPolicy + interactive mutual exclusion. Cat 4/5 pre-gate gaps remain. Cross-deps flagged: 02 iter-2, 22 iter-2, 14b, 09.
 
-Verdict: **SHIP** (95 ≥ 90). Status: `current`.
+### Iteration 3 — 2026-04-21 — score 96 (SHIP) — full scoring table + notes in [03c](03c-workflow-messaging-plane.md)
 
-Top gaps: (1) Cat 4/5: make targets and envtest names pre-gate — unchanged, acceptable. (2) 02 iter-2 must land `concurrencyPolicy` + `interactive` fields before spec phase.
-
-Cross-deps settled: same-namespace model replaces ephemeral namespace; RBAC reduced; 22 iter-2 flagged for absorption; 23 `argoRetryInFlight` unchanged; 12 NP coverage confirmed.
-Cross-deps flagged: 22 iter-2 (absorb same-namespace); 02 iter-2 (`concurrencyPolicy` + `interactive`); 14b Argo chart OLM pin; 09 HTTPRoute align when current.
+Adds messaging plane responsibilities: NATS topic provisioning, per-run audience injection, CrossTenantAgreement admission (peers derived implicitly from `transportRef`s with `scope: cross-tenant` per Q2(b) 2026-04-21), stream teardown. Depends updated (04a, 04b, 09, 25). Failure modes +4; events +4; metrics +3; OTEL spans +2.
