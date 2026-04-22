@@ -7,9 +7,14 @@ metadata:
     app.kubernetes.io/name: keese
     app.kubernetes.io/managed-by: kustomize
     keese.ai/managed: "true"
-  name: transport-sample
+  name: transport-a2a-full
   namespace: default
 spec:
-  type: stdio
-  stdio:
-    bridgeImage: ghcr.io/keese-ai/stdio-bridge:latest
+  type: a2a
+  a2a:
+    endpoint: grpcs://peer-agent.tenant-b.svc.cluster.local:8443
+    peerAuth: workspace-sa
+    scope: intra-tenant
+    workspaceSA:
+      audience: keese-wf-run789
+      authzTupleCheck: false

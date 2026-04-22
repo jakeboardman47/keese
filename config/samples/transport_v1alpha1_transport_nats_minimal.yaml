@@ -7,9 +7,13 @@ metadata:
     app.kubernetes.io/name: keese
     app.kubernetes.io/managed-by: kustomize
     keese.ai/managed: "true"
-  name: transport-sample
+  name: transport-nats-minimal
   namespace: default
 spec:
-  type: stdio
-  stdio:
-    bridgeImage: ghcr.io/keese-ai/stdio-bridge:latest
+  type: nats
+  nats:
+    clusterRef:
+      name: nats-cluster
+      namespace: nats-system
+    streamName: keese-tenant-abc123-wf-run456
+    consumerName: wf-run456-consumer
