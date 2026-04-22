@@ -12,6 +12,13 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-04-22 — Final 2 specs (tenancy + authz) close design-gate predicate
+
+- Tenancy spec (4 files: primary + ii-tenant + ii-cra + iter-log) — covers Tenant (D26) + CrossTenantAgreement (D29). Honest score 87.5/100 — at the rubric SHIP threshold (≥85) but below conventional ≥90 target. Cat 4 −5 + Cat 5 −7.5 = full pre-gate docks (Makefile + webhook impl deferred to P8; test scaffolding deferred). Flagged for review as the lowest score in the spec batch.
+- Authz spec (2 files: primary + iter-log) — covers OIDCProvider (D28). Honest 92.5/100 (Cat 4/5 −12.5 docked).
+- **ESCALATION:** `tenant.uses_oidc_provider` is a NEW ReBAC relation referenced at authz spec §1.6 but NOT yet in [model.fga](dev/bootstrap/openfga/model.fga). Needs `rebac-modeler` dispatch before OIDCProvider controller is implemented.
+- **Gate predicate state:** 27 specs all `status: current`, 0 draft. 62 designs all `current` (1 superseded). The architect-signed gate-open commit (flipping `gate_status: closed → open` in [docs/plans/README.md](docs/plans/README.md)) is now unblocked on the doc front; outstanding design-gate-related work: (a) the rebac-modeler dispatch for `tenant.uses_oidc_provider`, (b) optional human review of the lowest-scoring spec (tenancy at 87.5).
+
 ### 2026-04-22 — Spec batch (11 specs to current + 2 new draft stubs)
 
 - 11 spec architects dispatched in parallel; all returned with status: current.
