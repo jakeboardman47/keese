@@ -31,6 +31,12 @@ tests:
     - internal/controller/tenancy/tenant/suite_test.go
     - internal/controller/tenancy/crosstenanagreement/suite_test.go
     - test/envtest/admission/tenant_fields_test.go
+    - test/envtest/admission/tenant_retry_budget_test.go
+    - test/envtest/admission/tenant_artifact_store_ref_test.go
+    - internal/controller/tenancy/tenant/mode_transition_test.go
+    - internal/controller/tenancy/crosstenanagreement/cosign_approval_test.go
+    - internal/controller/tenancy/crosstenanagreement/tofu_drift_test.go
+    - internal/controller/tenancy/crosstenanagreement/expiry_race_test.go
   kuttl:
     - test/kuttl/tenancy/tenant-mode-switch/
     - test/kuttl/tenancy/cra-bilateral-approval/
