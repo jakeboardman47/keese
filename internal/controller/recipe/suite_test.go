@@ -15,19 +15,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	recipev1alpha1 "github.com/keese-ai/keese/api/recipe/v1alpha1"
-	// +kubebuilder:scaffold:imports
 )
-
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
 	ctx       context.Context
@@ -39,7 +38,6 @@ var (
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
-
 	RunSpecs(t, "Controller Suite")
 }
 
@@ -51,8 +49,6 @@ var _ = BeforeSuite(func() {
 	var err error
 	err = recipev1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
-
-	// +kubebuilder:scaffold:scheme
 
 	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
 	recipeCRDs := []string{
@@ -73,12 +69,10 @@ var _ = BeforeSuite(func() {
 		},
 	}
 
-	// Retrieve the first found binary directory to allow running tests from IDEs
 	if getFirstFoundEnvTestBinaryDir() != "" {
 		testEnv.BinaryAssetsDirectory = getFirstFoundEnvTestBinaryDir()
 	}
 
-	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
@@ -86,6 +80,38 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	// Start a manager with both reconcilers wired with fakes.
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme.Scheme,
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	fakeOCIFetcher := &FakeOCIFetcher{
+		PulledDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}
+
+	err = (&RecipeSourceReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("recipesource-controller"),
+		Fetcher:  fakeOCIFetcher,
+	}).SetupWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = (&RecipeReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("recipe-controller"),
+		Rebac:    &FakeRebacWriter{},
+		ExtAuthz: &FakeExtAuthzChecker{AllowedExtensions: map[string]bool{"my-ext": true}},
+	}).SetupWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	go func() {
+		defer GinkgoRecover()
+		Expect(mgr.Start(ctx)).To(Succeed())
+	}()
 })
 
 var _ = AfterSuite(func() {
@@ -95,14 +121,44 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 })
 
-// getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.
-// ENVTEST-based tests depend on specific binaries, usually located in paths set by
-// controller-runtime. When running tests directly (e.g., via an IDE) without using
-// Makefile targets, the 'BinaryAssetsDirectory' must be explicitly configured.
-//
-// This function streamlines the process by finding the required binaries, similar to
-// setting the 'KUBEBUILDER_ASSETS' environment variable. To ensure the binaries are
-// properly set up, run 'make setup-envtest' beforehand.
+// ensureDevNamespace creates (or fetches) a namespace with keese.ai/env=dev label.
+func ensureDevNamespace(nsName string) {
+	ns := &corev1.Namespace{}
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: nsName}, ns)
+	if err == nil {
+		return
+	}
+	ns = &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nsName,
+			Labels: map[string]string{
+				"keese.ai/env":    "dev",
+				"keese.ai/managed": "true",
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+}
+
+// ensureProdNamespace creates (or fetches) a namespace WITHOUT the dev label.
+func ensureProdNamespace(nsName string) {
+	ns := &corev1.Namespace{}
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: nsName}, ns)
+	if err == nil {
+		return
+	}
+	ns = &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nsName,
+			Labels: map[string]string{
+				"keese.ai/managed": "true",
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+}
+
+// getFirstFoundEnvTestBinaryDir locates the first binary directory for envtest.
 func getFirstFoundEnvTestBinaryDir() string {
 	basePath := filepath.Join("..", "..", "..", "bin", "k8s")
 	entries, err := os.ReadDir(basePath)
