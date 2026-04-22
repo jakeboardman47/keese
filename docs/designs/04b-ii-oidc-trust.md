@@ -7,7 +7,7 @@ category: authz
 depends: [04b-projected-sa-identity.md]
 related_skills: []
 status: current
-last_verified: 2026-04-20
+last_verified: 2026-04-21
 rollback: |
   Revert the OIDC provider configuration in the relevant OpenTofu module
   (deploy/opentofu/{aws,gcp,azure}/); re-apply via tofu apply. Cloud IAM changes
@@ -20,6 +20,18 @@ rollback: |
 Split from [04b-projected-sa-identity.md](04b-projected-sa-identity.md) per
 200-line rule. This doc holds the cloud-specific trust policy detail that 04b
 references by pointer.
+
+## Audience scope (04b iter-3)
+
+Only the **`egress`** audience template (`keese-egress-<tenant>`) is federated
+to cloud IAM. The other two named templates introduced in 04b iter-3 — **`workflowRun`**
+(`keese-wf-<workflow-run-uid>`) and **`supervisor`** (`keese-supervisor-<workspace-uid>`) —
+are consumed only by in-cluster services (the 09 NATS bridge and the 08b ACP bridge,
+respectively) and are NEVER configured as accepted audiences in any cloud-IAM trust
+policy. This separation is structural: a stolen `workflowRun` token cannot satisfy a
+cloud IAM trust policy because no cloud trust policy lists `keese-wf-*` as an allowed
+`aud`. The per-cloud configurations in the rest of this doc apply ONLY to the `egress`
+audience.
 
 ## OIDC Issuer
 

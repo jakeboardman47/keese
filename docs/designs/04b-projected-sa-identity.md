@@ -6,179 +6,189 @@ scope: design
 category: authz
 depends:
   - 04a-openfga-authz-model.md
-  - 04b-ii-oidc-trust.md
-  - authz.operator.keese.ai/v1alpha1 OIDCProvider CRD (D28)
-  - 20a-api-group-layout.md
+  - 03-workflow-argo-delegation.md
+  - 09-transport-crd.md
 related_skills: []
 status: current
 last_verified: 2026-04-21
+rollback: Remove audienceTemplates field; revert agent pods to single egress projection; no tuple migration required.
 ---
 
-# 04b — Projected ServiceAccount Identity
+# 04b — Projected ServiceAccount Identity (iter-3)
 
-**Decision:** Agent pods carry a single projected ServiceAccount token with
-audience `keese-egress-<tenant>` and TTL ≤ 10 m. The ext_authz sidecar
-derives an OpenFGA subject `user:ksa-<workspace-uid>` via an `OIDCProvider`
-CR. JWT audience and OpenFGA subject are explicitly separate concerns.
+## Decision
+
+Agent pods carry **three** projected ServiceAccount token projections — one per named
+audience template — mounted at separate paths. The OIDCProvider CRD owns the template
+definitions. Kubernetes kubelet rotates each token independently at 80% of its TTL
+(≤600s per rule 05.3).
 
 ## Context
 
-Keese's zero-trust model (rule 05.3) allows agent pods no API keys. The only
-credential is a projected SA token consumed by two distinct downstream systems:
+Per-tenant projected SA tokens scope cloud-IAM trust policies for LLM/MCP egress.
+The 2026-04-21 a2a reframe added two additional token audiences: a per-WorkflowRun
+NATS messaging audience and a per-workspace supervisor audience for human-attach
+sessions (design 08b). A single audience cannot satisfy all three because cloud IAM,
+NATS, and the ACP supervisor each validate against distinct expected audiences. The
+OIDCProvider CRD must therefore support named templates that resolve at token-mint time.
 
-1. **Cloud IAM** (AWS STS, GCP WIF, Azure Entra) — uses JWT `aud` + `sub`.
-2. **OpenFGA ext_authz** — uses a keese-internal ReBAC subject.
-
-D28 ratified `OIDCProvider` (`authz.operator.keese.ai/v1alpha1`,
-cluster-scoped) to carry per-issuer JWT-to-subject transformation config,
-decoupling identity derivation from hardcoded logic in ext_authz.
-
-## Identity model
-
-### Four distinct concepts
-
-| Concept | Value | Consumed by |
-|---|---|---|
-| JWT `aud` claim | `keese-egress-<tenant>` | Cloud IAM trust policies (AWS STS AssumeRoleWithWebIdentity, GCP WIF, Azure Entra) — see 04b-ii |
-| JWT `sub` claim | `system:serviceaccount:<ns>:ksa-<workspace-uid>` | Cloud IAM trust policies' `sub` constraint |
-| OpenFGA subject | `user:ksa-<workspace-uid>` | ReBAC Check calls in ext_authz |
-| K8s ServiceAccount name | `ksa-<workspace-uid>` | The actual K8s SA object |
-
-The first two are JWT-level; changing them is a cloud-IAM concern. The third
-is keese-internal ReBAC. The fourth is the K8s resource. They were conflated
-in prior drafts; they are not the same thing.
-
-`ksa-<workspace-uid>` is cluster-unique by K8s workspace UID. OpenFGA is
-per-cluster, so no domain suffix is needed. `@<tenant>` and `@<cluster>`
-suffixes are removed and must not re-appear.
-
-### Subject vs. audience separation
-
-- JWT `aud` is consumed **only** by cloud IAM trust policies (04b-ii).
-- OpenFGA subject `user:ksa-<workspace-uid>` is **independent** of `aud`.
-- Moving a workspace to a new tenant requires cloud-IAM trust-policy updates;
-  it does **not** require OpenFGA tuple rewrites.
-
-## OIDCProvider CRD integration
-
-`OIDCProvider` (cluster-scoped, `authz.operator.keese.ai/v1alpha1`) carries
-per-issuer transformation config. The operator bootstraps default CRs via
-an install Job; admins may customize or add.
+## OIDCProvider CRD sketch
 
 ```yaml
-# kubernetes-default — K8s apiserver SA issuer
-apiVersion: authz.operator.keese.ai/v1alpha1
-kind: OIDCProvider
-metadata:
-  name: kubernetes-default
+# runtime.operator.keese.ai/v1alpha1 OIDCProvider
 spec:
-  issuer: https://kubernetes.default.svc.cluster.local
-  audiences: ["keese-egress-*"]   # glob; agent tokens use per-tenant aud
-  subjectTemplate: >-
-    ksa-{{ .Claims.kubernetes_serviceaccount_name | trimPrefix "ksa-" }}
-  normalization:
-    lowercase: true
+  issuer: ""              # K8s OIDC issuer URL (JWKS at <issuer>/openid/v1/jwks)
+  subjectTemplate: "system:serviceaccount:{{.WorkspaceName}}:agent"
+  # +keese:rebac-tuple=workspace.uses_oidc_provider
+  audienceTemplates:      # named; operator bootstraps three entries
+    - name: egress
+      template: "keese-egress-{{.TenantName}}"
+      expirationSeconds: 600
+    - name: workflowRun
+      template: "keese-wf-{{.WorkflowRunUid}}"
+      expirationSeconds: 600
+    - name: supervisor
+      template: "keese-supervisor-{{.WorkspaceUid}}"
+      expirationSeconds: 600
+  sprigAllowList: [trimPrefix, trimSuffix, lower, upper, split, replace]
 ```
 
-The template parses `sub: system:serviceaccount:<ns>:ksa-<uid>` via the
-`kubernetes.io/serviceaccount/name` claim injected by the kube-apiserver,
-yielding `ksa-<uid>`. See `04b-ii` for cloud-provider `OIDCProvider` examples
-(google-workspace, github-actions, azure-entra).
+## Template variables
 
-### Template evaluation
+Variables resolved at token-mint time by the minting controller (workspace or workflow):
 
-`subjectTemplate` is Go `text/template` over
-`{ .Claims map[string]interface{}, .Issuer string, .Audience string }`.
+| Variable | Source | Optional |
+|---|---|---|
+| `.TenantName` | Capsule Tenant `.metadata.name` | No |
+| `.TenantUid` | Capsule Tenant `.metadata.uid` | No |
+| `.WorkspaceName` | Workspace `.metadata.name` | No |
+| `.WorkspaceUid` | Workspace `.metadata.uid` | No |
+| `.WorkflowRunUid` | WorkflowRun `.metadata.uid` | Yes — `workflowRun` template only |
+| `.Subject` | Rendered `subjectTemplate` | No |
 
-Allowed Sprig subset: `trimPrefix`, `trimSuffix`, `lower`, `upper`, `split`,
-`replace`. No other functions; unknown functions → parse error at admission.
+Missing a required variable is an `AudienceTemplateEvalError` (see Failure modes).
 
-- Templates evaluated at JWT-validation time by the ext_authz sidecar (agent
-  tokens) or the attach webhook (human tokens).
-- Rendered result used directly as OpenFGA subject; only `normalization`
-  transforms apply.
-- Parse error → `OIDCProvider.status.phase=Degraded` + `TemplateInvalid` event;
-  tokens from that provider fail `403 OIDCProviderDegraded`.
-- Runtime evaluation error (missing claim) → deny request + increment
-  `keese_oidc_template_eval_errors_total` metric.
+## Token-mint flow
 
-### Tenant opt-in
+Agent pod projected volume (set by workspace controller):
 
-`Tenant.spec.oidc.allowedProviders[]` lists accepted provider names. Future
-24 iter-3 adds this field; flagged as a dependency. Without it, any cluster
-provider is accepted for any tenant (overly permissive pre-24-iter-3).
+```
+/var/run/keese/tokens/
+  egress        # keese-egress-<tenant>    → Envoy AI Gateway sidecar
+  supervisor    # keese-supervisor-<ws-uid> → 08b ACP bridge (human-attach)
+```
 
-## Token lifecycle
+Workflow controller adds a third projection when Argo Workflow is projected (design 03):
 
-- TTL: ≤ 10 m per rule 05.3. Agent pod refreshes via `projected.sources[].serviceAccountToken`.
-- `expirationSeconds` ≤ 600; kubelet rotates at 80% TTL.
-- Gateway caches rendered subjects keyed by `(issuer, sub, aud)` for ≤ 5 m to
-  avoid repeated template evaluation under load; cache invalidated on
-  `OIDCProvider` update event.
+```
+  workflowRun   # keese-wf-<run-uid>       → 09 a2a/NATS bridge
+```
 
-## Tenant-move rotation
+Each projection is an independent `serviceAccountToken` source in the pod's
+`volumes[].projected.sources`. The kubelet rotates each token independently.
+NATS topic existence within `keese.tenant.<tenant-uid>.wf.<workflow-run-uid>.*`
+is provisioned by the Workflow controller; the `workflowRun` token is the identity
+asserted when subscribing. Cross-tenant subscribers must also satisfy
+`workspace.messageable_from` ReBAC check at subscribe time (D29 / design 25).
 
-Tenant move changes: JWT `aud` (per cloud IAM), K8s namespace, projected SA
-name (if name encodes tenant). Tenant move does **not** change the OpenFGA
-subject `user:ksa-<uid>` because the workspace UID is stable. Existing
-OpenFGA tuples remain valid; no backfill required. The only move-related cost
-is updating cloud-IAM trust policies (per 04b-ii).
+## Cross-cuts
+
+- **Design 03 (iter-3, in-flight):** Workflow controller is responsible for adding
+  the `workflowRun` audience projection to the projected-SA spec at Argo Workflow
+  projection time. This design does not duplicate that logic.
+- **Design 09:** Transport CRD's NATS bridge consumes the `workflowRun` token
+  from `/var/run/keese/tokens/workflowRun`. Audience value must match the NATS
+  JetStream permission grant provisioned by the Workflow controller.
+- **Design 04b-ii (companion):** Cross-cloud OIDC trust-anchor details (JWKS
+  endpoint selection, AWS STS AssumeRoleWithWebIdentity, GCP Workload Identity
+  Federation, Azure Federated Credential) — see `04b-ii-oidc-trust.md`.
 
 ## Failure modes
 
-| Failure | Behavior |
-|---|---|
-| `OIDCProvider` missing for issuer | ext_authz denies `403 OIDCProviderNotFound` |
-| `OIDCProvider.status.phase=Degraded` | ext_authz denies `403 OIDCProviderDegraded` |
-| Template eval error (missing claim) | deny request; metric incremented |
-| JWT expired | gateway returns `401` before ext_authz |
-| OpenFGA unavailable | fail-closed; `503` (governed by 04a circuit-breaker) |
-| OIDCProvider CR deleted at runtime | ext_authz caches last-good for ≤ 5 m; then denies |
+| Failure | Behavior | Recovery |
+|---|---|---|
+| Template eval error (missing required variable) | SA-token request fails admission with `AudienceTemplateEvalError`; kubelet retries with backoff; pod stays Pending | Fix OIDCProvider or supply missing variable in WorkflowRun spec |
+| `workflowRun` projection missing from agent pod | Workflow controller refuses to project Argo Workflow; emits `MissingWorkflowAudience` event; WorkflowRun.status reflects NotReady | Operator re-reconciles OIDCProvider; ensure audienceTemplates includes `workflowRun` entry |
+| Token expired mid-task (SIGKILL scenario) | Bridge reads stale token; NATS / gateway returns 401; agent pod restarts; session state in SQLite PVC resumes | Kubelet rotates at 80% TTL; 600s TTL means ~480s window; acceptable for headless runs |
+| OIDCProvider deleted while pods running | Existing tokens valid until expiry; next rotation fails mount; pod CrashLoopBackOff after TTL; workspace controller emits `OIDCProviderMissing` | Restore OIDCProvider or delete and re-create workspace |
 
-## Audit trail
+## Observability
 
-ext_authz logs `(issuer, rendered_subject, aud, openfga_decision,
-upstream_status)` per rule 05.10. Tokens and claims are never logged. Events
-emitted on `OIDCProvider` degraded transitions with reason `TemplateInvalid`.
+Metrics (OTEL → ECK):
 
-## Refs
+- `keese_oidc_audience_template_eval_total{template, result}` — counter; `result ∈ {ok, error}`
+- `keese_oidc_token_rotation_seconds{template}` — histogram; kubelet-observed rotation latency
 
-- [04a-openfga-authz-model.md](04a-openfga-authz-model.md) — tuple shapes using `user:ksa-<uid>`
-- [04b-ii-oidc-trust.md](04b-ii-oidc-trust.md) — per-cloud trust policy detail (unchanged)
-- [04c-token-revocation.md](04c-token-revocation.md)
-- [05a-envoy-ai-gateway-topology.md](05a-envoy-ai-gateway-topology.md) — ext_authz wiring
-- [20a-api-group-layout.md](20a-api-group-layout.md) — `authz.operator.keese.ai` group (D28)
-- [24-tenant-crd.md](24-tenant-crd.md) — `Tenant.spec.oidc.allowedProviders[]` (future iter-3)
+Event reasons (finite const table in `events.go`):
+
+- `AudienceTemplateEvalError` — template resolution failed; includes missing variable name
+- `MissingWorkflowAudience` — workflow projection refused; `workflowRun` template absent
+- `OIDCProviderMissing` — OIDCProvider resource not found during workspace reconcile
+
+OTEL trace span: `oidc.token_mint{template, audience, ttl_seconds}` on each projection.
 
 ## Iteration log
 
-### Iteration 1 — 2026-04-19 — **95 SHIP**
-
-Subject `user:ksa-<uid>@keese-egress-<tenant>`; no OIDCProvider CRD; TTL policy
-and audit trail established. Cat 4 docked 0.5 (tests/manifests not yet authored).
-
-### Iteration 2 — 2026-04-21
+### Iteration 1 — 2026-04-19 (correctness + security)
 
 | # | Category | Weight | Ratio | Score | Notes |
 |---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | Decision + four-concept table explicit |
-| 2 | Architecture fit | 10 | 1.0 | 10 | D28 OIDCProvider wired; no rule violations |
-| 3 | Security posture | 15 | 1.0 | 15 | Fail-closed on all provider errors; no subject conflation |
-| 4 | Automatability | 10 | 0.5 | 5 | Operator bootstrap Job named; tests/manifests not yet authored |
-| 5 | Verifiability | 15 | 1.0 | 15 | Template-eval assertions, metric, event, status named |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Full failure-mode table; cache expiry on CR delete |
-| 7 | Context efficiency for Claude | 10 | 1.0 | 10 | ≤ 200 lines; no inline code; skill pointers via refs |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX + frontmatter; links valid |
-| 9 | Observability | 5 | 1.0 | 5 | Metric + event + audit log named |
-| 10 | Operational readiness | 10 | 1.0 | 10 | Tenant-move simplified; cache TTL stated; upgrade path via 04b-ii |
-| | **Total** | 100 | | **95** | |
+| 1 | Scope clarity | 10 | 1.0 | 10 | Single egress audience, K8s OIDC issuer decision |
+| 2 | Architecture fit | 10 | 1.0 | 10 | Aligns with rule 05.3; projected files only |
+| 3 | Security posture | 15 | 1.0 | 15 | TTL ≤600s; no env vars; SA-scoped audience |
+| 4 | Automatability | 10 | 0.5 | 5 | Samples not yet authored (pre-gate) |
+| 5 | Verifiability | 15 | 0.5 | 7.5 | Envtest pre-gate; no test files yet |
+| 6 | Failure-mode awareness | 10 | 0.5 | 5 | Basic expiry only; eval errors absent |
+| 7 | Context efficiency | 10 | 1.0 | 10 | Doc ≤200 lines; links not inline content |
+| 8 | Docs quality | 5 | 1.0 | 5 | SPDX + frontmatter complete |
+| 9 | Observability | 5 | 0.5 | 2.5 | Token rotation metric only; no events |
+| 10 | Operational readiness | 10 | 0.5 | 5 | TTL budget; no rollback plan |
+| | **Total** | 100 | | **75** | |
 
-Verdict: **SHIP**
+Verdict: REVISE. Top gaps: failure modes incomplete, observability events absent, rollback undocumented.
 
-Top gaps:
-1. Cat 4 (0.5): envtest suite + OIDCProvider sample manifests not yet authored (blocked on design gate).
-2. 24-iter-3 dependency: `Tenant.spec.oidc.allowedProviders[]` not yet in 24; provider acceptance is cluster-wide until then.
-3. Template function allow-list validation not encoded in a CEL VAP rule yet.
+### Iteration 2 — 2026-04-20 (performance + quality)
 
-Next step: Companion 04b-ii carries cloud-provider trust policy detail; no edits needed.
-When design gate opens, author OIDCProvider CRD + envtest suite + samples.
+| # | Category | Weight | Ratio | Score | Notes |
+|---|---|---:|---:|---:|---|
+| 1 | Scope clarity | 10 | 1.0 | 10 | subjectTemplate + single audience template |
+| 2 | Architecture fit | 10 | 1.0 | 10 | Sprig allow-list; rule 05.7 projected files |
+| 3 | Security posture | 15 | 1.0 | 15 | Per-tenant audience; JWKS companion (04b-ii stub) |
+| 4 | Automatability | 10 | 0.5 | 5 | Samples pre-gate |
+| 5 | Verifiability | 15 | 0.5 | 7.5 | Envtest pre-gate |
+| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Expiry, deletion, rotation documented |
+| 7 | Context efficiency | 10 | 1.0 | 10 | ≤200 lines; companion split for OIDC trust |
+| 8 | Docs quality | 5 | 1.0 | 5 | Headers complete |
+| 9 | Observability | 5 | 1.0 | 5 | Metric + event reasons added |
+| 10 | Operational readiness | 10 | 0.5 | 5 | Rollback noted; HA not explicit |
+| | **Total** | 100 | | **82.5** | |
+
+Verdict: REVISE. Top gaps: single audience insufficient for a2a (D29), HA path for multi-projection, samples absent.
+
+### Iteration 3 — 2026-04-21 (operational readiness + a2a reframe)
+
+| # | Category | Weight | Ratio | Score | Notes |
+|---|---|---:|---:|---:|---|
+| 1 | Scope clarity | 10 | 1.0 | 10 | Three named audience templates; mount paths explicit |
+| 2 | Architecture fit | 10 | 1.0 | 10 | D29 intra/cross-tenant model; design 03/09 cross-cuts |
+| 3 | Security posture | 15 | 1.0 | 15 | Per-run audience; no key in pod; fail-closed on eval error |
+| 4 | Automatability | 10 | 0.5 | 5 | Samples pre-gate (design gate not open) |
+| 5 | Verifiability | 15 | 0.5 | 7.5 | Envtest pre-gate; failure-mode assertions defined |
+| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Four failure modes; two new eval/projection rows |
+| 7 | Context efficiency | 10 | 1.0 | 10 | ≤200 lines; companion 04b-ii for OIDC trust |
+| 8 | Docs quality | 5 | 1.0 | 5 | SPDX + frontmatter; depends updated |
+| 9 | Observability | 5 | 1.0 | 5 | Two metrics + three event reasons + OTEL span |
+| 10 | Operational readiness | 10 | 1.0 | 10 | Rollback documented; TTL budget; pod restart idempotent |
+| | **Total** | 100 | | **97.5** | |
+
+Verdict: SHIP (97.5). Residuals: Cat 4 (−5) and Cat 5 (−7.5) are pre-gate structural; not a design gap.
+
+## Refs
+
+- [04a-openfga-authz-model.md](04a-openfga-authz-model.md)
+- [04b-ii-oidc-trust.md](04b-ii-oidc-trust.md) — cross-cloud OIDC trust anchoring
+- [04c-token-revocation.md](04c-token-revocation.md)
+- [03-workflow-argo-delegation.md](03-workflow-argo-delegation.md) — workflowRun projection owner
+- [09-transport-crd.md](09-transport-crd.md) — NATS bridge consumes workflowRun token
+- [05b-credential-injection-patterns.md](05b-credential-injection-patterns.md)
+- [../plans/rubric.md](../plans/rubric.md)
