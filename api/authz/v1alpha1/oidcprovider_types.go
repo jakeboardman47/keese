@@ -136,7 +136,8 @@ type OIDCProviderStatus struct {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Issuer",type="string",JSONPath=".spec.issuer"
-// +kubebuilder:printcolumn:name="AudienceTemplates",type="integer",JSONPath=".spec.audienceTemplates"
+// +kubebuilder:printcolumn:name="AudienceTemplates",type="string",JSONPath=".spec.audienceTemplates[*].name"
+// +keese:rebac-tuple=tenant.uses_oidc_provider
 
 // OIDCProvider is the Schema for the oidcproviders API.
 // OIDCProvider is cluster-scoped and configures OIDC issuer trust for the Envoy AI Gateway
@@ -146,9 +147,9 @@ type OIDCProviderStatus struct {
 // Design: docs/designs/04b-projected-sa-identity.md + docs/designs/04b-ii-oidc-trust.md
 // Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md
 //
-// tenant.uses_oidc_provider OpenFGA relation lives in dev/bootstrap/openfga/model.fga
-// as of 04a iter-6 (2026-04-21); the Tenant controller writes tuples per
-// Tenant.spec.oidc.allowedProviders[].
+// tenant.uses_oidc_provider OpenFGA relation: the Tenant controller writes tuples
+// (tenant:<name>#uses_oidc_provider@oidc_provider:<spec.oidc.allowedProviders[]>) per
+// 04a iter-6; this controller owns OIDCProvider CRs only — tuples are written by Tenant.
 type OIDCProvider struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
