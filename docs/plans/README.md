@@ -14,7 +14,7 @@ last_verified: 2026-04-19
 # plans/ — HOW (phased)
 
 > **Gate status: CLOSED.** No `*_types.go` body, no `*_controller.go` reconcile
-> logic, and no spec promotion may land until all 62 design docs AND all 11 spec
+> logic, and no spec promotion may land until all 62 design docs AND all 13 spec
 > docs score ≥ 90/100 AND an architect-signed commit flips `gate_status: open`.
 > See [../designs/README.md](../designs/README.md) and [rubric.md](rubric.md).
 

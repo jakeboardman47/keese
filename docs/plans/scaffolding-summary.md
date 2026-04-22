@@ -49,7 +49,7 @@ Commits from `90395cd` (initial scaffold) to `2ac6094` (design-gate).
   `internal/controller/`
 - Design gate: **CLOSED** per `docs/plans/README.md`
   `gate_status: closed`. Controller code may not have non-stub bodies
-  until all 62 designs + 11 specs score ≥ 90/100 on the rubric and
+  until all 62 designs + 13 specs score ≥ 90/100 on the rubric and
   the gate commit opens it.
 
 ## Resume instructions (after moving or cloning the repo)
@@ -108,8 +108,8 @@ Recommended authoring order (dependency-free first):
 10. `19-ide-and-debugging`, `21-opentofu-cloud-deployment`,
     `22-workflow-composition-examples`
 
-Once all 62 designs are `current`, the 11 specs under `docs/specs/`
-are authored (each depends on 1–3 designs). When the 11 specs reach
+Once all 62 designs are `current`, the 13 specs under `docs/specs/`
+are authored (each depends on 1–3 designs). When the 13 specs reach
 `current`, an architect opens the gate with a commit flipping
 `gate_status: closed -> open` in
 [docs/plans/README.md](README.md). The gate-open commit must be

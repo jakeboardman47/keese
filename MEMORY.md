@@ -12,6 +12,17 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-04-22 — Spec batch (11 specs to current + 2 new draft stubs)
+
+- 11 spec architects dispatched in parallel; all returned with status: current.
+- Score-honesty audit: 9 of 11 honest (scores 92.5–97.5 with explicit Cat 4/5 docks); 2 inflated (runtime, recipe both claim 100).
+- Honest rescores: runtime ≈95 (test names locked but bodies pre-gate), recipe ≈92.5 (8 envtest cases NAMED but bodies pre-gate). Both still ≥ 90; flipped to current; iter-log scores left as-recorded.
+- 4 specs had `regression_lock: true` set incorrectly (workspace, memory, credential-broker, egress-authz). Per the spec lifecycle (`status: implemented` predicate), regression_lock should remain false until acceptance tests actually exist. Corrected all 4 to false.
+- [workspace spec](docs/specs/workspace.operator.keese.ai-v1alpha1.md) — split into 5 files (primary + ii-workspace + ii-share + ii-session + ii-iter-log) to honor 200-line cap; covers Workspace + WorkspaceShare + WorkspaceSession (D27).
+- [workflow spec](docs/specs/workflow.operator.keese.ai-v1alpha1.md) — split a/b for Workflow vs WorkflowRun + cross-tenant admission. Q2(b) decision recorded: cross-tenant peers derived from `transportRef`s with `scope: cross-tenant` (NO new participants[] field).
+- **Two NEW spec stubs added** for D26/D28/D29 kinds (gap discovered during dispatch): [tenancy spec](docs/specs/tenancy.operator.keese.ai-v1alpha1.md) (Tenant + CrossTenantAgreement) and [authz spec](docs/specs/authz.operator.keese.ai-v1alpha1.md) (OIDCProvider). Both held at draft pending follow-up architect dispatch.
+- Spec count 11 → 13 top-level + 10 companions = 23 spec files. Design-gate predicate updated: requires all 13 specs at status: current; currently 11/13 (the two new stubs are draft).
+
 ### 2026-04-21 — Final design batch (12, 13, 14a, 14b, 15, 16, 19, 21, 25)
 
 - 9 designs taken from `draft` to `current` via parallel architect dispatch.
