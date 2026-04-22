@@ -39,8 +39,12 @@ by test harnesses. Each spec is keyed to one or more design docs.
 | [observability.operator.keese.ai-v1alpha1-iter-log.md](observability.operator.keese.ai-v1alpha1-iter-log.md) | Observability spec iteration log | — | current |
 | [transport.operator.keese.ai-v1alpha1.md](transport.operator.keese.ai-v1alpha1.md) | `Transport` | 09, 09-ii, 04a, 04b, 03c, 25 | current |
 | [transport-ii-iter-log.md](transport-ii-iter-log.md) | Transport spec iteration log | — | current |
-| [tenancy.operator.keese.ai-v1alpha1.md](tenancy.operator.keese.ai-v1alpha1.md) | `Tenant` (D26), `CrossTenantAgreement` (D29) | 24, 24b, 25, 25-ii, 25-iii, 04a | draft |
-| [authz.operator.keese.ai-v1alpha1.md](authz.operator.keese.ai-v1alpha1.md) | `OIDCProvider` (D28) | 04b, 04b-ii, 04a | draft |
+| [tenancy.operator.keese.ai-v1alpha1.md](tenancy.operator.keese.ai-v1alpha1.md) | `Tenant` (D26), `CrossTenantAgreement` (D29) | 24, 24b, 25, 25-ii, 25-iii, 04a, 01 | current |
+| [tenancy.operator.keese.ai-v1alpha1-ii-tenant.md](tenancy.operator.keese.ai-v1alpha1-ii-tenant.md) | `Tenant` CRD detail | 24, 24b, 01 | current |
+| [tenancy.operator.keese.ai-v1alpha1-ii-cra.md](tenancy.operator.keese.ai-v1alpha1-ii-cra.md) | `CrossTenantAgreement` CRD detail | 25, 25-ii, 25-iii, 04a | current |
+| [tenancy.operator.keese.ai-v1alpha1-iter-log.md](tenancy.operator.keese.ai-v1alpha1-iter-log.md) | Tenancy spec iteration log | — | current |
+| [authz.operator.keese.ai-v1alpha1.md](authz.operator.keese.ai-v1alpha1.md) | `OIDCProvider` (D28) | 04b, 04b-ii, 04a | current |
+| [authz.operator.keese.ai-v1alpha1-ii-iter-log.md](authz.operator.keese.ai-v1alpha1-ii-iter-log.md) | Authz spec iteration log | — | current |
 | [egress-authz-protocol.md](egress-authz-protocol.md) | ext_authz contract (cross-cutting) | 04a, 04a-ii, 04a-iii, 04b, 04b-ii, 04c, 05a, 05b, 05c, 25 | current |
 | [egress-authz-protocol-iter-log.md](egress-authz-protocol-iter-log.md) | Egress authz protocol iteration log | — | current |
 | [agent-runtime-spi.md](agent-runtime-spi.md) | Go SPI interface contract | 07, 07b, 08a, 08b, 08c, 18, 23 | current |
