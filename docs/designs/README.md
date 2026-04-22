@@ -13,7 +13,7 @@ last_verified: 2026-04-19
 # designs/ — WHY
 
 Design docs explain **why** the project is shaped the way it is.
-All 48 design docs must reach `status: current` and score ≥ 90/100
+All 53 design docs must reach `status: current` and score ≥ 90/100
 before any spec is authored and before any controller code is written.
 
 > **Gate status: CLOSED.** See [../plans/README.md](../plans/README.md).
@@ -24,10 +24,13 @@ before any spec is authored and before any controller code is written.
 |---|---|---|---|---|
 | 01 | [01-tenancy-capsule.md](01-tenancy-capsule.md) | Tenancy via Capsule | tenancy | current |
 | 02 | [02-workspace-model.md](02-workspace-model.md) | Workspace Model | workspace | current |
+| 02-ii | [02-ii-iter-log.md](02-ii-iter-log.md) | Workspace Model: Iteration Log + Background | workspace | current |
 | 03 | [03-workflow-argo-delegation.md](03-workflow-argo-delegation.md) | Workflow Argo Delegation | workflow | current |
 | 03b | [03b-workflow-trigger-projections.md](03b-workflow-trigger-projections.md) | Workflow Trigger Projections | workflow | current |
+| 03c | [03c-workflow-messaging-plane.md](03c-workflow-messaging-plane.md) | Workflow Messaging Plane: NATS, Audience Injection, CTA Admission | workflow | current |
 | 04a | [04a-openfga-authz-model.md](04a-openfga-authz-model.md) | OpenFGA Authorization Model | authz | current |
 | 04a-ii | [04a-ii-testplan.md](04a-ii-testplan.md) | OpenFGA Auth Model: Test Plan and CI Automation | authz | current |
+| 04a-iii | [04a-iii-iter-log.md](04a-iii-iter-log.md) | OpenFGA Auth Model: Iteration Log (iter-4 + iter-5 detail) | authz | current |
 | 04b | [04b-projected-sa-identity.md](04b-projected-sa-identity.md) | Projected ServiceAccount Identity | authz | current |
 | 04b-ii | [04b-ii-oidc-trust.md](04b-ii-oidc-trust.md) | OIDC Trust Anchoring Per Cloud | authz | current |
 | 04c | [04c-token-revocation.md](04c-token-revocation.md) | Token Revocation | authz | current |
@@ -46,7 +49,8 @@ before any spec is authored and before any controller code is written.
 | 08b-ii | [08b-ii-session-crd-spec.md](08b-ii-session-crd-spec.md) | Goose ACP: WorkspaceSession CRD Spec + Attach Flow | runtime | current |
 | 08b-iii | [08b-iii-iter-log.md](08b-iii-iter-log.md) | Goose ACP: Iteration Log | runtime | current |
 | 08c | [08c-goose-subagents-limits.md](08c-goose-subagents-limits.md) | Goose Sub-Agents and Limits | runtime | current |
-| 09 | [09-transport-crd.md](09-transport-crd.md) | Transport CRD | transport | draft |
+| 09 | [09-transport-crd.md](09-transport-crd.md) | Transport CRD | transport | current |
+| 09-ii | [09-ii-iter-log.md](09-ii-iter-log.md) | Transport CRD: Iteration Log | transport | current |
 | 10a | [10a-otel-topology.md](10a-otel-topology.md) | OTEL Topology | observability | current |
 | 10a-ii | [10a-ii-iter-log.md](10a-ii-iter-log.md) | OTEL Topology: Iteration Log | observability | current |
 | 10b | [10b-token-accounting.md](10b-token-accounting.md) | Token Accounting | observability | current |
@@ -71,6 +75,7 @@ before any spec is authored and before any controller code is written.
 | 23 | [23-agent-supervision.md](23-agent-supervision.md) | Agent Supervision (Patrol Pattern) | reliability | current |
 | 24 | [24-tenant-crd.md](24-tenant-crd.md) | Keese Tenant CRD: Spec, Reconcile, Admission, Migration | tenancy | current |
 | 24b | [24b-tenant-crd.md](24b-tenant-crd.md) | Keese Tenant CRD: Trade-offs, Failure Modes, Upgrade, Observability | tenancy | current |
+| 25 | [25-cross-tenant-agreement.md](25-cross-tenant-agreement.md) | CrossTenantAgreement CRD (D29) | tenancy | draft |
 
 ## Lifecycle
 
