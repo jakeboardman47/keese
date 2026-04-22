@@ -5,16 +5,17 @@
 scope: design
 category: transport
 depends:
-  - 04a-openfga-authz-model.md          # workspace#can_message relation (iter-5 flag)
-  - 04b-projected-sa-identity.md        # audienceTemplates per-peer (iter-3 flag)
+  - 04a-openfga-authz-model.md          # tenant.allows_messaging + workspace.messageable_from (iter-5 landed)
+  - 04b-projected-sa-identity.md        # audienceTemplates.workflowRun (iter-3 in flight)
   - 05a-envoy-ai-gateway-topology.md
   - 05c-mcp-policy-enforcement.md
   - 08b-goose-acp-stdio-k8s.md
   - 12-network-isolation.md
   - 20a-api-group-layout.md
   - 22-workflow-composition-examples.md
+  - 25-cross-tenant-agreement.md        # CrossTenantAgreement CRD (D29; stub)
 related_skills: [doc-authoring, crd-authoring, controller-authoring]
-status: draft
+status: current
 last_verified: 2026-04-21
 rollback: |
   spec.type is immutable (VAP-enforced). Migration = new Transport CR + consumer
@@ -43,10 +44,23 @@ by `transportRef`; cross-namespace access requires `ReferenceGrant`.
 
 ## `spec.nats` — hybrid stream ownership model
 
-**Default (pre-existing):** admission queries NATS JetStream; rejects `NATSStreamNotFound`
-if stream absent. Stream lifecycle owned externally by NACK `Stream` CRD (preferred,
-multi-tenant) or direct NATS operator action (dev/test). `streamConfig` is ignored and
-emits `NATSStreamConfigIgnored` if set without opt-in annotation.
+**NATS as primary intra-tenant transport.** Topic naming pattern:
+`keese.tenant.<tenant-uid>.wf.<workflow-run-uid>.*` — provisioned by the Workflow
+controller (03 iter-3) at WorkflowRun creation. Topic existence within this prefix
+is itself the authorization signal for intra-tenant participants; no additional
+OpenFGA check is performed (saves one RTT per message). SA tokens for NATS
+publish/subscribe carry audience `keese-wf-<workflow-run-uid>` (04b iter-3
+`workflowRun` audience template); NATS server validates JWT before accepting
+publish or subscribe. The topic prefix enables tenant-scoped log/audit filtering:
+`grep keese.tenant.<tenant-uid>.*` in Elastic. Cross-tenant NATS messaging uses a
+separate prefix per CrossTenantAgreement (`keese.cta.<cta-uid>.*`) — flagged for
+design 25 to detail.
+
+**Default (pre-existing):** admission queries NATS JetStream; rejects
+`NATSStreamNotFound` if stream absent. Stream lifecycle owned externally by NACK
+`Stream` CRD (preferred, multi-tenant) or direct NATS operator action (dev/test).
+`streamConfig` is ignored and emits `NATSStreamConfigIgnored` if set without opt-in
+annotation.
 
 **Opt-in:** annotation `keese.ai/auto-create-stream: "true"` — controller calls NATS
 JetStream `AddStream` / `UpdateStream` / `DeleteStream`; finalizer deletes stream on
@@ -72,37 +86,36 @@ backfill; flagged for `docs/plans/runbook-nats-stream-migration.md`.
 
 Admission validates MCPRoute exists; emits `MCPRouteNotFound` if absent.
 
-## `spec.a2a` — workspace-SA peer auth (iter-2 decision)
+## `spec.a2a` — workspace-as-security-boundary (iter-3)
 
-Workspace is the security boundary. Default is `workspace-sa` (K8s SA identity,
-K8s API server as issuer). Human sessions use `user-oidc`; external peers use
-`mutual-tls`; `none` is dev-only (VAP-blocked in prod).
+Workspace is the security boundary. Two peer-auth modes only:
 
 | Field | Req | Default | VAP |
 |---|---|---|---|
 | `endpoint` | yes | — | `grpc://` or `grpcs://` |
-| `peerAuth` | no | `workspace-sa` | `workspace-sa\|user-oidc\|mutual-tls\|none` |
+| `peerAuth` | no | `workspace-sa` | `workspace-sa\|mutual-tls` |
+| `scope` | no | `intra-tenant` | `intra-tenant\|cross-tenant` |
 | `workspaceSA.audience` | if ws-sa | — | non-empty |
-| `workspaceSA.authzTupleCheck` | if ws-sa | — | non-empty |
-| `userOidc.oidcProviderRef.name` | if user-oidc | — | non-empty |
-| `userOidc.{audiences[],authzTupleCheck}` | if user-oidc | — | non-empty |
 | `mutualTLS.certificateRef.{name,namespace}` | if mtls | — | non-empty |
 | `mutualTLS.clientCaBundle` | no | — | PEM or empty |
 
-**`workspace-sa` (default):** caller presents projected SA token, aud = `keese-a2a-<peer-workspace-uid>`.
-Receiving Transport validates: `iss = kubernetes.default.svc.cluster.local` (OIDCProvider
-`kubernetes-default`, 04b); subject → `user:ksa-<caller-workspace-uid>` (04b iter-2 bare).
-Then: OpenFGA `Check(workspace:<peer>#can_message@user:ksa-<caller-uid>)`.
-`workspace#can_message` is a **new relation** — **flag 04a iter-5**. Writer: Workflow
-controller (03) at WorkflowRun create for cross-workspace DAG steps; deleted on completion.
-**Flag 04b iter-3:** per-peer aud `keese-a2a-<uid>` not in 04b iter-2 `keese-egress-*` glob;
-flag 04b iter-3 to add `spec.audienceTemplates.a2a: keese-a2a-{{.PeerWorkspaceUid}}`.
+**`workspace-sa` (default):** caller presents projected SA token with audience
+`keese-wf-<workflow-run-uid>` (04b iter-3 `workflowRun` template). Receiving
+Transport validates issuer = `kubernetes.default.svc.cluster.local`.
 
-**`user-oidc`:** D28 `OIDCProvider` + user JWT; authz via `workspace#editor` (04a). For
-programmatic human calls (CI); typical human path is 08b attach.
-**`mutual-tls`:** external gRPC peers, no K8s identity; ACL in `mutualTLS.aclRef`; no OpenFGA.
-**`none`:** VAP rejects in prod (`Tenant.spec.security.allowUnsafeTransports == false` →
-`UnsafeTransportForbidden`).
+- **`scope: intra-tenant`** (default): no OpenFGA check. Topic existence in
+  `keese.tenant.<tenant-uid>.wf.<workflow-run-uid>.*` is sufficient; Workflow
+  controller is the sole provisioner.
+- **`scope: cross-tenant`**: OpenFGA `Check(workspace:<peer>#messageable_from@workspace:<caller>)`
+  at subscribe + first publish. Caller must have a `CrossTenantAgreement` in
+  `Approved` phase covering the workspace pair (D29 controller writes the
+  `workspace.messageable_from` tuple as runtime evidence). VAP rejects
+  `scope: cross-tenant` when no matching CrossTenantAgreement exists:
+  `CrossTenantAgreementMissing`. Uses 04a iter-5 `tenant.allows_messaging` +
+  `workspace.messageable_from` relations.
+
+**`mutual-tls`:** external gRPC peers with no K8s identity; ACL in
+`mutualTLS.aclRef`; no OpenFGA lookup.
 
 ## Delivery guarantees
 
@@ -118,8 +131,8 @@ programmatic human calls (CI); typical human path is 08b attach.
 Transport **references** cert-manager `Certificate` CRs; does not create them.
 Admission validates existence; emits `CertificateNotFound` if absent. `mcp` delegates
 TLS to Envoy AI Gateway. `stdio` uses in-pod Unix socket (no TLS). Transport spec
-carries no credentials (rule 05.7). cert-manager is a soft dep — bootstrap must install
-it (helmfile or OLM dep via 14b).
+carries no credentials (rule 05.7). cert-manager is a soft dep — bootstrap must
+install it (helmfile or OLM dep via 14b).
 
 ## Lifecycle + failure modes
 
@@ -136,8 +149,8 @@ only (annotation-scoped).
 | ReferenceGrant missing | Admission `ReferenceGrantMissing` | Create ReferenceGrant |
 | MCPRoute not found | `MCPRouteNotFound`; Degraded | Guardrail-controller provisions MCPRoute |
 | Type change attempted | VAP `TransportTypeImmutable` | New Transport CR; migrate consumers |
-| a2a workspace-sa authz deny | `A2APeerAuthzDenied` event | Verify Workflow controller wrote `can_message` tuple |
-| `peerAuth: none` in prod | VAP `UnsafeTransportForbidden` | Set `peerAuth: workspace-sa` |
+| a2a cross-tenant authz deny | `A2APeerAuthzDenied` event | Verify D29 controller wrote `messageable_from` tuple |
+| cross-tenant with no CRA | VAP `CrossTenantAgreementMissing` | Create CrossTenantAgreement (design 25) |
 | Stdio buffer overflow | `StreamLagged`; drop oldest | Increase `outboundQueueDepth` |
 
 ## Observability
@@ -146,18 +159,19 @@ OTEL spans: `keese.transport.{provision,dep_resolve,degraded,terminating,a2a.aut
 Metrics: `keese_transport_messages_total{type,direction,tenant}`,
 `keese_transport_errors_total{type,reason,tenant}`,
 `keese_transport_dep_resolve_duration_seconds{type}`,
-`keese_transport_a2a_auth_duration_seconds{peer_auth_mode}`.
+`keese_transport_a2a_auth_duration_seconds{peer_auth_mode,scope}`.
 Events: `TransportProvisioned`, `TransportUnreachable`, `CertificateNotFound`,
 `MCPRouteNotFound`, `ReferenceGrantMissing`, `NATSStreamOwned`, `NATSStreamDeleteFailed`,
 `NATSStreamNotFound`, `NATSStreamConfigIgnored`, `NATSStreamMigrationRequired`,
-`A2APeerAuthzDenied`, `UnsafeTransportForbidden`.
+`A2APeerAuthzDenied`, `CrossTenantAgreementMissing`.
 Printer columns: `Age`, `Ready`, `Phase`, `Type`.
 
 ## Cross-dep flags
 
-- **04a iter-5 (blocks a2a ws-sa controller code):** add `workspace#can_message: [user, service_account]` to OpenFGA model; Workflow controller (03) writes/deletes tuples at WorkflowRun create/complete.
-- **04b iter-3 (blocks a2a ws-sa token minting):** add `spec.audienceTemplates.a2a` for per-peer audience template.
-- **03 iter-3 (follow-on):** explicit tuple-write protocol for `can_message` in Workflow controller.
+- **04a iter-5 (LANDED 2026-04-21):** `workspace#can_message` dropped; `tenant.allows_messaging: [tenant]` and `workspace.messageable_from: [workspace]` added. D29 controller writes both relations post bilateral approval.
+- **04b iter-3 (LANDED 2026-04-21):** `audienceTemplates.workflowRun` (`keese-wf-<workflow-run-uid>`) — required by `spec.a2a` workspace-sa and `spec.nats` JWT validation.
+- **03 iter-3 (LANDED 2026-04-21):** Workflow controller provisions NATS topics + mints WorkflowRun-scoped SA tokens + validates CrossTenantAgreement on WorkflowRun admission for cross-tenant peers — peers derived implicitly from `transportRef`s with `scope: cross-tenant` (Q2(b) 2026-04-21; no new WorkflowRun spec field).
+- **D29 / design 25 (stub):** CrossTenantAgreement CRD; required for `scope: cross-tenant`; also details `keese.cta.<cta-uid>.*` NATS prefix.
 - **12 iter-1 (required):** workspace NP must allow egress to NATS:4222 and Envoy AI GW:443.
 
 ## Refs
@@ -166,7 +180,8 @@ Printer columns: `Age`, `Ready`, `Phase`, `Type`.
 [05a](05a-envoy-ai-gateway-topology.md) · [05c](05c-mcp-policy-enforcement.md) ·
 [08b](08b-goose-acp-stdio-k8s.md) · [12](12-network-isolation.md) ·
 [20a](20a-api-group-layout.md) · [22](22-workflow-composition-examples.md) ·
-[rubric](../plans/rubric.md)
+[25](25-cross-tenant-agreement.md) · [rubric](../plans/rubric.md) ·
+[iter-log](09-ii-iter-log.md)
 
 ## Iteration log
 
@@ -175,25 +190,9 @@ delivery guarantees; cert-manager reference model; cross-namespace ReferenceGran
 lifecycle + failure modes; observability. NATS stream ownership and a2a peer-auth
 left ambiguous.
 
-### Iteration 2 — 2026-04-21
+Iter-2 (2026-04-21): **95 SHIP** — hybrid NATS stream ownership; 4-mode a2a peer-auth
+(`workspace-sa | user-oidc | mutual-tls | none`); `workspace#can_message` relation
+cross-dep; per-peer `keese-a2a-<uid>` audience flagged. Status held at draft (mismatch
+between score and new reframe; iter-3 lands final model).
 
-| # | Category | Weight | Ratio | Score | Notes |
-|---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | Hybrid NATS model + 4 a2a auth modes bounded with explicit enforcement points. |
-| 2 | Architecture fit | 10 | 1.0 | 10 | workspace-sa uses kubernetes-default OIDCProvider (04b); can_message cross-refs 04a; Workflow controller (03) writes tuples. |
-| 3 | Security posture | 15 | 1.0 | 15 | VAP blocks `none` in prod; JWT before OpenFGA; no keys in spec; streamConfig gated by annotation; rule-05 satisfied. |
-| 4 | Automatability | 10 | 0.5 | 5 | Admission checks named; make targets pre-gate. |
-| 5 | Verifiability | 15 | 0.5 | 7.5 | 10 failure modes; a2a auth testable in envtest (pre-gate). |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Hybrid stream paths split; P8 runbook flagged; a2a deny + unsafe-prod enumerated. |
-| 7 | Context efficiency | 10 | 1.0 | 10 | ≤ 200 lines; cross-dep flags section; no inline code blocks. |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX + frontmatter; depends includes 04a + 04b; refs valid. |
-| 9 | Observability | 5 | 1.0 | 5 | a2a auth span + metric added; 4 new events. |
-| 10 | Operational readiness | 10 | 1.0 | 10 | P8 runbook flagged; auto-create finalizer annotation-scoped; rollback unchanged. |
-| | **Total** | 100 | | **95** | |
-
-Verdict: **SHIP** (95 ≥ 95). `status` flipped to `current`.
-
-Top gaps:
-1. Cat 4/5: make targets + envtest pre-gate — acceptable, unchanged from iter-1.
-2. 04a iter-5 `can_message` relation not yet in model.fga; blocks a2a workspace-sa controller code.
-3. 04b iter-3 per-peer `audienceTemplates` not yet added; blocks SA token minting for a2a.
+Iter-3 (2026-04-21): see [09-ii-iter-log.md](09-ii-iter-log.md).
