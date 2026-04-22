@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -11,10 +13,28 @@ spec:
     kind: WorkspaceShare
     listKind: WorkspaceShareList
     plural: workspaceshares
+    shortNames:
+    - wss
     singular: workspaceshare
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.workspaceRef.name
+      name: Workspace
+      type: string
+    - jsonPath: .spec.targetNamespace
+      name: TargetNamespace
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .spec.readOnly
+      name: ReadOnly
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: WorkspaceShare is the Schema for the workspaceshares API.
@@ -24,7 +44,6 @@ spec:
               APIVersion defines the versioned schema of this representation of an object.
               Servers should convert recognized schemas to the latest internal value, and
               may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
             description: |-
@@ -32,18 +51,112 @@ spec:
               Servers may infer this from the endpoint the client submits requests to.
               Cannot be updated.
               In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
           spec:
-            description: |-
-              WorkspaceShareSpec is intentionally empty at v1alpha1 until the design
-              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
-              WorkspaceShareSpec defines the desired state of WorkspaceShare.
+            description: WorkspaceShareSpec defines the desired state of WorkspaceShare.
+            properties:
+              grantees:
+                description: Grantees lists user or service-account identifiers granted
+                  access via this share.
+                items:
+                  type: string
+                maxItems: 64
+                type: array
+              readOnly:
+                default: true
+                description: ReadOnly controls whether grantees receive viewer (true)
+                  or editor (false) access.
+                type: boolean
+              targetNamespace:
+                description: TargetNamespace is the namespace that will receive access
+                  to this workspace.
+                minLength: 1
+                type: string
+              workspaceRef:
+                description: WorkspaceRef references the Workspace to share.
+                properties:
+                  name:
+                    description: Name of the referenced object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - targetNamespace
+            - workspaceRef
             type: object
           status:
             description: WorkspaceShareStatus defines the observed state of WorkspaceShare.
+            properties:
+              conditions:
+                description: Conditions contains detailed status conditions.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the .metadata.generation that the
+                  controller last reconciled.
+                format: int64
+                type: integer
+              rebacTupleCount:
+                description: RebacTupleCount is the number of OpenFGA tuples owned
+                  by this share.
+                format: int32
+                type: integer
+              referenceGrantName:
+                description: ReferenceGrantName is the name of the Gateway API ReferenceGrant
+                  projected by this share.
+                type: string
             type: object
         type: object
     served: true

@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Fully-populated Workspace sample — satisfies rule 04.15.
+# Must pass: kubectl apply --dry-run=server
+apiVersion: workspace.operator.keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: workspace-sample-full
+spec:
+  runtimeRef:
+    name: goose-runtime
+  recipeRef:
+    name: summarize-recipe
+  tenantRef:
+    name: acme-tenant
+  guardrailBindingRefs:
+    - name: pii-guardrail
+  memoryRefs:
+    - name: session-memory
+  transportRefs:
+    - name: nats-transport
+  interactive: true
+  sessionMode: Always
+  attachPolicy: Reuse
+  attachGrace: 60s
+  concurrencyPolicy: Forbid
+  editors:
+    - alice
+    - bob
+  viewers:
+    - charlie
+  sessionStorage: "20Gi"

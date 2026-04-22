@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Fully-populated Tenant sample — Mode B (Capsule delegation), dedicated gateway,
+# quota, OIDC filter, retry budget, audit redaction.
+# Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-tenant.md
+apiVersion: tenancy.operator.keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: acme-corp
+  labels:
+    keese.ai/tier: enterprise
+spec:
+  capsuleTenantRef:
+    name: acme-capsule
+  adminSubjects:
+    - kind: User
+      name: admin@acme.example.com
+    - kind: Group
+      name: platform-engineers@acme.example.com
+  defaultGuardrailBindings:
+    - default-rate-limit
+    - pii-redact
+  tokenBudgetRef:
+    name: acme-budget
+    namespace: keese-system
+  credentialPoolRef:
+    name: acme-credentials
+    namespace: keese-system
+  defaultWorkspaceQuota:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+  dedicatedGateway: true
+  oidc:
+    allowedProviders:
+      - google
+      - azure-entra
+  security:
+    allowUnsafeTransports: false
+  defaultRetryBudget:
+    maxRetries: 3
+    perCallTimeout: 30s
+  artifactStoreRef:
+    name: acme-artifacts
+    namespace: keese-system
+  jwksCacheFailOpenSeconds: 60
+  auditArgumentsRedacted: true

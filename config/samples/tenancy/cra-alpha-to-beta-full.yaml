@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Fully-populated CrossTenantAgreement sample with workspace selectors, expiry,
+# bidirectional A2A, and multiple NATS subjects.
+# Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-cra.md
+apiVersion: tenancy.operator.keese.ai/v1alpha1
+kind: CrossTenantAgreement
+metadata:
+  name: alpha-to-beta-full
+spec:
+  from:
+    tenantRef:
+      name: alpha
+    workspaceSelector:
+      matchLabels:
+        keese.ai/cra-eligible: "true"
+  to:
+    tenantRef:
+      name: beta
+    workspaceSelector:
+      matchLabels:
+        keese.ai/cra-eligible: "true"
+  scope:
+    natsSubjects:
+      - "keese.cta.alpha.events"
+      - "keese.cta.beta.commands"
+      - "keese.cta.*.heartbeat"
+    a2aRoles:
+      - bidirectional
+  expiresAt: "2026-12-31T23:59:59Z"

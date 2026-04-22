@@ -1,9 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Minimal Workspace sample — satisfies rule 04.15.
+# Must pass: kubectl apply --dry-run=server
 apiVersion: workspace.operator.keese.ai/v1alpha1
 kind: Workspace
 metadata:
   labels:
     app.kubernetes.io/name: keese
     app.kubernetes.io/managed-by: kustomize
-  name: workspace-sample
+    keese.ai/managed: "true"
+  name: workspace-sample-minimal
 spec:
-  # TODO(user): Add fields here
+  runtimeRef:
+    name: default-runtime
+  tenantRef:
+    name: acme-tenant
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow

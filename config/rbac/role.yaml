@@ -5,6 +5,59 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - authz.operator.keese.ai
+  resources:
+  - oidcproviders
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - authz.operator.keese.ai
+  resources:
+  - oidcproviders/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - authz.operator.keese.ai
+  resources:
+  - oidcproviders/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - guardrail.operator.keese.ai
   resources:
   - guardrailbindings
@@ -144,6 +197,35 @@ rules:
   - patch
   - update
 - apiGroups:
+  - tenancy.operator.keese.ai
+  resources:
+  - crosstenanagreements
+  - tenants
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tenancy.operator.keese.ai
+  resources:
+  - crosstenanagreements/finalizers
+  - tenants/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - tenancy.operator.keese.ai
+  resources:
+  - crosstenanagreements/status
+  - tenants/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - transport.operator.keese.ai
   resources:
   - transports
@@ -202,6 +284,7 @@ rules:
   - workspace.operator.keese.ai
   resources:
   - workspaces
+  - workspacesessions
   - workspaceshares
   verbs:
   - create
@@ -215,6 +298,7 @@ rules:
   - workspace.operator.keese.ai
   resources:
   - workspaces/finalizers
+  - workspacesessions/finalizers
   - workspaceshares/finalizers
   verbs:
   - update
@@ -222,6 +306,7 @@ rules:
   - workspace.operator.keese.ai
   resources:
   - workspaces/status
+  - workspacesessions/status
   - workspaceshares/status
   verbs:
   - get

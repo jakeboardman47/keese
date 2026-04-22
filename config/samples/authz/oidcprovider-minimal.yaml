@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Minimal OIDCProvider sample — Kubernetes in-cluster OIDC.
+# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md
+apiVersion: authz.operator.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: kubernetes-default
+  labels:
+    keese.ai/bootstrap: "true"
+spec:
+  issuer: https://kubernetes.default.svc
+  audiences:
+    - keese-egress-*
+  subjectTemplate: "service_account:{{ .Claims.sub }}"
+  audienceTemplates:
+    - name: egress
+      template: "keese-egress-{{ .Claims.namespace }}"
+      expirationSeconds: 600

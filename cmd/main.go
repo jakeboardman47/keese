@@ -1,18 +1,5 @@
-/*
-Copyright 2026.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 keese-ai
 
 package main
 
@@ -37,19 +24,23 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	authzv1alpha1 "github.com/keese-ai/keese/api/authz/v1alpha1"
 	guardrailv1alpha1 "github.com/keese-ai/keese/api/guardrail/v1alpha1"
 	memoryv1alpha1 "github.com/keese-ai/keese/api/memory/v1alpha1"
 	observabilityv1alpha1 "github.com/keese-ai/keese/api/observability/v1alpha1"
 	recipev1alpha1 "github.com/keese-ai/keese/api/recipe/v1alpha1"
 	runtimev1alpha1 "github.com/keese-ai/keese/api/runtime/v1alpha1"
+	tenancyv1alpha1 "github.com/keese-ai/keese/api/tenancy/v1alpha1"
 	transportv1alpha1 "github.com/keese-ai/keese/api/transport/v1alpha1"
 	workflowv1alpha1 "github.com/keese-ai/keese/api/workflow/v1alpha1"
 	workspacev1alpha1 "github.com/keese-ai/keese/api/workspace/v1alpha1"
+	authzcontroller "github.com/keese-ai/keese/internal/controller/authz"
 	guardrailcontroller "github.com/keese-ai/keese/internal/controller/guardrail"
 	memorycontroller "github.com/keese-ai/keese/internal/controller/memory"
 	observabilitycontroller "github.com/keese-ai/keese/internal/controller/observability"
 	recipecontroller "github.com/keese-ai/keese/internal/controller/recipe"
 	runtimecontroller "github.com/keese-ai/keese/internal/controller/runtime"
+	tenancycontroller "github.com/keese-ai/keese/internal/controller/tenancy"
 	transportcontroller "github.com/keese-ai/keese/internal/controller/transport"
 	workflowcontroller "github.com/keese-ai/keese/internal/controller/workflow"
 	workspacecontroller "github.com/keese-ai/keese/internal/controller/workspace"
@@ -72,6 +63,8 @@ func init() {
 	utilruntime.Must(guardrailv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(observabilityv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(transportv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(tenancyv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(authzv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -312,6 +305,34 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Transport")
+		os.Exit(1)
+	}
+	if err := (&tenancycontroller.TenantReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Tenant")
+		os.Exit(1)
+	}
+	if err := (&tenancycontroller.CrossTenantAgreementReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "CrossTenantAgreement")
+		os.Exit(1)
+	}
+	if err := (&authzcontroller.OIDCProviderReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OIDCProvider")
+		os.Exit(1)
+	}
+	if err := (&workspacecontroller.WorkspaceSessionReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceSession")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

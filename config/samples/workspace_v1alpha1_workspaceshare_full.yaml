@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 #
-# Minimal WorkspaceShare sample — satisfies rule 04.15.
+# Fully-populated WorkspaceShare sample — satisfies rule 04.15.
 # Must pass: kubectl apply --dry-run=server
 apiVersion: workspace.operator.keese.ai/v1alpha1
 kind: WorkspaceShare
@@ -9,9 +9,12 @@ metadata:
   labels:
     app.kubernetes.io/name: keese
     app.kubernetes.io/managed-by: kustomize
-  name: workspaceshare-sample-minimal
+  name: workspaceshare-sample-full
 spec:
   workspaceRef:
-    name: workspace-sample-minimal
-  targetNamespace: team-b
-  readOnly: true
+    name: workspace-sample-full
+  targetNamespace: partner-ns
+  readOnly: false
+  grantees:
+    - dave
+    - eve

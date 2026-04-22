@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -11,10 +13,28 @@ spec:
     kind: Workspace
     listKind: WorkspaceList
     plural: workspaces
+    shortNames:
+    - ws
     singular: workspace
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .spec.runtimeRef.name
+      name: Runtime
+      type: string
+    - jsonPath: .spec.interactive
+      name: Interactive
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Workspace is the Schema for the workspaces API.
@@ -24,7 +44,6 @@ spec:
               APIVersion defines the versioned schema of this representation of an object.
               Servers should convert recognized schemas to the latest internal value, and
               may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
             description: |-
@@ -32,18 +51,259 @@ spec:
               Servers may infer this from the endpoint the client submits requests to.
               Cannot be updated.
               In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
           spec:
-            description: |-
-              WorkspaceSpec is intentionally empty at v1alpha1 until the design
-              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
-              WorkspaceSpec defines the desired state of Workspace.
+            description: WorkspaceSpec defines the desired state of Workspace.
+            properties:
+              attachGrace:
+                description: AttachGrace is the time to wait before considering a
+                  session detached.
+                type: string
+              attachPolicy:
+                default: Reuse
+                description: AttachPolicy controls how new sessions attach to running
+                  pods.
+                enum:
+                - New
+                - Reuse
+                type: string
+              concurrencyPolicy:
+                default: Allow
+                description: ConcurrencyPolicy controls how concurrent WorkflowRuns
+                  are handled.
+                enum:
+                - Allow
+                - Forbid
+                - Replace
+                type: string
+              editors:
+                description: Editors lists user identifiers granted editor access
+                  to this workspace.
+                items:
+                  type: string
+                type: array
+              guardrailBindingRefs:
+                description: GuardrailBindingRefs lists GuardrailBinding objects to
+                  enforce in this workspace.
+                items:
+                  description: LocalObjectReference is a name-only reference to an
+                    object in the same namespace.
+                  properties:
+                    name:
+                      description: Name of the referenced object.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              interactive:
+                default: false
+                description: Interactive indicates whether this workspace supports
+                  interactive sessions. Immutable after creation.
+                type: boolean
+              memoryRefs:
+                description: MemoryRefs lists Memory objects accessible within this
+                  workspace.
+                items:
+                  description: LocalObjectReference is a name-only reference to an
+                    object in the same namespace.
+                  properties:
+                    name:
+                      description: Name of the referenced object.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              recipeRef:
+                description: RecipeRef references the Recipe to execute in this workspace.
+                properties:
+                  name:
+                    description: Name of the referenced object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              runtimeRef:
+                description: RuntimeRef references the AgentRuntime that will power
+                  this workspace.
+                properties:
+                  name:
+                    description: Name of the referenced object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              sessionMode:
+                default: OnDemand
+                description: SessionMode controls when the agent runtime pod is active.
+                enum:
+                - Always
+                - OnDemand
+                type: string
+              sessionStorage:
+                anyOf:
+                - type: integer
+                - type: string
+                description: SessionStorage is the requested size of the PVC used
+                  for SQLite session state.
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+              tenantRef:
+                description: TenantRef identifies the owning Tenant for this workspace.
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: If referring to a piece of an object instead of an
+                      entire object, this string should contain a valid JSON/Go field
+                      access statement.
+                    type: string
+                  kind:
+                    description: Kind of the referent.
+                    type: string
+                  name:
+                    description: Name of the referent.
+                    type: string
+                  namespace:
+                    description: Namespace of the referent.
+                    type: string
+                  resourceVersion:
+                    description: Specific resourceVersion to which this reference is
+                      made, if any.
+                    type: string
+                  uid:
+                    description: UID of the referent.
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              transportRefs:
+                description: TransportRefs lists Transport objects accessible within
+                  this workspace.
+                items:
+                  description: LocalObjectReference is a name-only reference to an
+                    object in the same namespace.
+                  properties:
+                    name:
+                      description: Name of the referenced object.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              viewers:
+                description: Viewers lists user identifiers granted viewer access to
+                  this workspace.
+                items:
+                  type: string
+                type: array
+            required:
+            - runtimeRef
+            - tenantRef
             type: object
+            x-kubernetes-validations:
+            - message: spec.interactive is immutable after creation
+              rule: self.interactive == oldSelf.interactive
           status:
             description: WorkspaceStatus defines the observed state of Workspace.
+            properties:
+              conditions:
+                description: Conditions contains detailed status conditions.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              networkPolicyName:
+                description: NetworkPolicyName is the name of the primary NetworkPolicy
+                  for this workspace.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the .metadata.generation that the
+                  controller last reconciled.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the current lifecycle phase of the workspace.
+                enum:
+                - Pending
+                - Provisioning
+                - Running
+                - Idle
+                - Evicted
+                - Terminating
+                type: string
+              podRef:
+                description: PodRef is a reference to the agent runtime Pod (if Running).
+                properties:
+                  name:
+                    default: ""
+                    description: Name of the referent.
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              rebacTupleCount:
+                description: RebacTupleCount is the number of OpenFGA tuples currently
+                  owned by this workspace.
+                format: int32
+                type: integer
+              serviceAccountName:
+                description: ServiceAccountName is the name of the ServiceAccount
+                  created for this workspace.
+                type: string
             type: object
         type: object
     served: true

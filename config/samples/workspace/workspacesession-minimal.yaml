@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Minimal WorkspaceSession sample — namespace-scoped, per-user mode.
+# Parent Workspace must have spec.interactive: true.
+# Spec: docs/specs/workspace.operator.keese.ai-v1alpha1-ii-session.md
+apiVersion: workspace.operator.keese.ai/v1alpha1
+kind: WorkspaceSession
+metadata:
+  name: ws-dev-a1b2c3d4e5f6a7b8-default
+  namespace: tenant-alpha
+  labels:
+    keese.ai/workspace: ws-dev
+    keese.ai/subject-hash: a1b2c3d4e5f6a7b8
+    keese.ai/session-name: default
+spec:
+  workspaceRef: ws-dev
+  attachSubject: "user:alice@example.com"
+  sessionName: default
+  mode: per-user

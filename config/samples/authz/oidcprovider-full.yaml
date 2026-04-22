@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Fully-populated OIDCProvider sample — Google OIDC with three-token projection
+# (egress + supervisor + workflowRun audiences) and normalization.
+# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.7
+apiVersion: authz.operator.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: google
+  labels:
+    keese.ai/bootstrap: "true"
+spec:
+  issuer: https://accounts.google.com
+  jwksUri: https://www.googleapis.com/oauth2/v3/certs
+  audiences:
+    - keese-egress-*
+    - "*.svc.cluster.local"
+  subjectTemplate: "user:{{ lower .Claims.email }}"
+  audienceTemplates:
+    - name: egress
+      template: "keese-egress-{{ .Claims.tenant }}"
+      expirationSeconds: 600
+    - name: supervisor
+      template: "keese-supervisor-{{ .Claims.workspace_uid }}"
+      expirationSeconds: 600
+    - name: workflowRun
+      template: "keese-wf-{{ .Claims.run_uid }}"
+      expirationSeconds: 300
+  normalization:
+    lowercase: true
+    trim: true
