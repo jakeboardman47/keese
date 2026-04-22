@@ -129,6 +129,7 @@ book/site/
 sbom-*.spdx.json
 *.sarif
 
-# ===== Agent worktrees (sibling directories) =====
-# Worktrees live outside this tree; nothing to ignore here, but keep
-# this comment as a pointer: see scripts/agent-dispatch.sh
+# ===== Agent worktrees =====
+# Sub-Agent tool with isolation: worktree creates worktrees here; ignore them.
+# Worktrees launched via scripts/agent-dispatch.sh remain external (sibling dirs).
+.claude/worktrees/

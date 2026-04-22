@@ -64,16 +64,17 @@ Broken into **nine phases (P0–P8)**. Each scored against `docs/plans/rubric.md
 | D26 | **Keese `Tenant` CRD owns keese-specific tenancy config; delegates namespace aggregation to Capsule (Mode B) or derives from labels (Mode A).** New group `tenancy.operator.keese.ai/v1alpha1/Tenant`. Cluster-scoped. Spec: `guardrailBindings[]`, `tokenBudgetRef`, `credentialPoolRef`, `defaultQuota`, optional `capsuleTenantRef`. Does **not** reimplement namespace aggregation. Kind count 13 → 14 across 9 groups. | Partial amendment to D23 (Tenant was on the drop list). Rationale: tenants need a first-class K8s object for ReBAC backing, tenant-wide config (no ConfigMap sprawl), events, and finalizers. Capsule still owns namespace aggregation + quota in Mode B. Added 2026-04-20 after architectural review; migration plan: `docs/plans/migration-d23-tenant-crd.md` (to author). Detailed design: `docs/designs/24-tenant-crd.md`. |
 | D27 | **`WorkspaceSession` CRD represents one active interactive attach session.** Namespaced, lives in the Workspace's namespace. Created by the operator on `kubectl-keese attach` when `Workspace.spec.interactive: true`, keyed by `(workspaceRef, attachSubject, sessionName)` — default session name is `default`; additional named sessions allowed via API. Owner-ref to parent Workspace; finalizer drives pod drain + PVC release + tuple cleanup. Kind count 14 → 15; group count unchanged (stays in `workspace.operator.keese.ai`). | Kubectl-native delete + GitOps UX + independent RBAC + independent lifecycle from the template. `per-user`/`per-attach`/`shared` session modes handled by `(subject, sessionName)` uniqueness rules. Added 2026-04-21 after multi-session-per-user + interactive-vs-workflow-mutual-exclusion architectural review. Detailed spec: `docs/designs/02-workspace-model.md` iter-2 and `docs/designs/08b-goose-acp-stdio-k8s.md` iter-2. |
 | D28 | **`OIDCProvider` CRD carries per-issuer JWT-to-OpenFGA-subject transformation config.** New group `authz.operator.keese.ai/v1alpha1/OIDCProvider`. Cluster-scoped. Spec: `issuer`, `audiences[]`, `subjectTemplate` (Go template over JWT claims), `jwksUri`, `normalization`. Operator bootstraps defaults for google / github-actions / azure-entra / okta / keycloak / gitlab; tenants opt-in via `Tenant.spec.oidc.allowedProviders[]`. Kind count 15 → 16; group count 9 → 10 (new `authz.operator.keese.ai`). | Declarative + VAP-validated + GitOps-friendly. Not replicating OpenFGA primitives: OpenFGA sees only transformed subject strings; OIDCProvider is the config layer BEFORE OpenFGA. Agent SA subject form is `user:ksa-<workspace-uid>` (bare SA name; OpenFGA is per-cluster so no further domain disambiguation needed). Human subject form is `user:<email-or-sub@domain>` per provider template. Added 2026-04-21. Detailed spec: `docs/designs/04b-projected-sa-identity.md` iter-2. |
+| D29 | **`CrossTenantAgreement` CRD with cert-manager-style bilateral handshake gates cross-tenant a2a messaging.** New kind in `tenancy.operator.keese.ai/v1alpha1/CrossTenantAgreement`. Cluster-scoped (cross-tenant by definition). Spec: `from: {tenantRef, workspaceSelector}`, `to: {tenantRef, workspaceSelector}`, `scope: {natsSubjects[], a2aRoles[]}`, `expiresAt`. Status: `phase: Pending|Approved|Rejected|Expired`, `approvals[]: {tenant, approvedBy, approvedAt, signature}`. Controller writes `tenant:T_to#allows_messaging@tenant:T_from` + `workspace:W_to#messageable_from@workspace:W_from` ReBAC tuples ONLY after both-side approval. Manual tuple-writing supported (third-party authz workflows) — controller no-ops when tuple already exists out-of-band. Intra-tenant a2a is implicit via Workflow definition (NATS topic existence IS authz). Kind count 16 → 17; group count unchanged (stays in `tenancy.operator.keese.ai`). | Workspace-author UX requires a CRD (declarative, GitOps-friendly, kubectl-native). Cert-manager-style handshake (both tenants approve before tuple write) prevents unilateral cross-tenant escalation. Out-of-band tuple writing supported for third-party / out-of-cluster authz systems. Amends D23 (CrossTenantAgreement was on the drop list — now justified by the workspace-as-security-boundary reframe). Added 2026-04-21 after a2a/cross-tenant messaging architectural reframe. Detailed spec: `docs/designs/25-cross-tenant-agreement.md`. Drives 04a iter-5 (`tenant.allows_messaging` + `workspace.messageable_from` relations), 04b iter-3 (`audienceTemplates` including `workflowRun`), 09 iter-3 (a2a peer-auth modes reduced to 2 + scope field), 03 iter-3 (Workflow controller topic provisioning + cross-tenant admission check). |
 
 ---
 
-## Final kind list — **16 kinds across 10 groups** (+2 kinds, +1 group since D26)
+## Final kind list — **17 kinds across 10 groups** (+1 kind since D28)
 
 All groups under `*.operator.keese.ai`, all `v1alpha1`:
 
 | Group | Kinds | Count |
 |---|---|---:|
-| `tenancy.operator.keese.ai` | `Tenant` (D26) | 1 |
+| `tenancy.operator.keese.ai` | `Tenant` (D26), `CrossTenantAgreement` (D29) | 2 |
 | `workspace.operator.keese.ai` | `Workspace`, `WorkspaceShare`, `WorkspaceSession` (D27) | 3 |
 | `workflow.operator.keese.ai` | `Workflow`, `WorkflowRun` | 2 |
 | `runtime.operator.keese.ai` | `AgentRuntime`, `RuntimeExtension` | 2 |
@@ -83,7 +84,7 @@ All groups under `*.operator.keese.ai`, all `v1alpha1`:
 | `observability.operator.keese.ai` | `TokenBudget` | 1 |
 | `transport.operator.keese.ai` | `Transport` | 1 |
 | `authz.operator.keese.ai` | `OIDCProvider` (D28) | 1 |
-| **TOTAL** | | **16** |
+| **TOTAL** | | **17** |
 
 **Deferred / composed (no CRD):**
 - **Namespace aggregation** → Capsule `capsule.clastix.io/v1beta2/Tenant` (Mode B) or label selector on namespaces (Mode A). Keese `Tenant` (D26) holds keese-specific config and references Capsule's in Mode B.
@@ -541,7 +542,7 @@ Asserts tenant ready, workspace ready, workflow run succeeded, OpenFGA `check` r
 
 ## Phase 8 — Design-gate freeze enforcement
 
-**Goal:** No implementation lands until all 48 designs AND all 11 specs score ≥ 90 AND architect opens gate.
+**Goal:** No implementation lands until all 53 designs AND all 11 specs score ≥ 90 AND architect opens gate.
 
 ### `scripts/check-design-gate.sh`
 "Stub body" iff file contains `TODO(design-gate)` + ≤ 20 non-blank non-comment LOC. For every non-stub file, find matching design + spec in `docs/designs/` + `docs/specs/`, confirm `status: current` OR `regression_lock: true`, confirm top iter-log score ≥ 90. Exit non-zero with reason list. Additional check: if ANY `docs/specs/*.md` exists with `status != draft` BEFORE all `docs/designs/*.md` reach `current` → fail ("specs cannot be authored until designs complete").
@@ -556,9 +557,9 @@ Triggers on PRs touching `api/**`, `internal/controller/**`, `docs/{designs,spec
 Verifies `open-gate` commit signed by an architect identity (GPG key in org); bats tests at `test/scripts/check-design-gate.bats` run in `lint.yaml`.
 
 ### Exit criteria
-- All 48 designs + 11 specs score ≥ 90.
+- All 53 designs + 11 specs score ≥ 90.
 - `docs/plans/README.md` frontmatter flips `gate_status: open`.
-- Architect-signed commit: `docs(architecture): open design gate — 48 designs + 11 specs ≥ 90/100`.
+- Architect-signed commit: `docs(architecture): open design gate — 53 designs + 11 specs ≥ 90/100`.
 - Required check green on `main`.
 
 ### Iteration log — iter 3 total **91/100** (SHIP)
@@ -602,7 +603,7 @@ Verifies `open-gate` commit signed by an architect identity (GPG key in org); ba
 8. Writing non-stub body to `internal/controller/workspace/workspace_controller.go` → design-gate hook + CI block commit.
 9. `grep -rn 'TODO(design-gate)' api/ internal/` → 26 markers.
 10. SIGTERM drain test on operator pod → clean exit within 30s.
-11. Architect walks 48 designs + 11 specs, scores each ≥ 90, commits gate-open → gate flips to `open`.
+11. Architect walks 53 designs + 11 specs, scores each ≥ 90, commits gate-open → gate flips to `open`.
 
 ---
 
@@ -610,7 +611,7 @@ Verifies `open-gate` commit signed by an architect identity (GPG key in org); ba
 
 | # | Category | Wt | Ratio | Score | Notes |
 |---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | 9 phases + hard gate + 13 kinds + 48 designs + 11 specs explicit. |
+| 1 | Scope clarity | 10 | 1.0 | 10 | 9 phases + hard gate + 13 kinds + 53 designs + 11 specs explicit. |
 | 2 | Architecture fit | 10 | 1.0 | 10 | 23 locked decisions; composition-first; upstream primitives preserved. |
 | 3 | Security posture | 15 | 1.0 | 15 | Zero-trust, three-table credential decomposition, SIGTERM drain, SSA fieldOwner. |
 | 4 | Automatability | 10 | 1.0 | 10 | Every step behind make/script; CI 11-workflow matrix. |

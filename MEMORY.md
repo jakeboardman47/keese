@@ -12,6 +12,17 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-04-21 — D29 + a2a/cross-tenant messaging reframe
+
+- [D29 ratified](docs/plans/scaffolding-plan.md) — `CrossTenantAgreement` CRD (`tenancy.operator.keese.ai/v1alpha1`, cluster-scoped, cert-manager-style bilateral handshake). Kind count 16 → 17. Amends D23.
+- [04a iter-5](docs/designs/04a-openfga-authz-model.md) — added `tenant.allows_messaging` + `workspace.messageable_from` ReBAC relations; old proposed `workspace#can_message` dropped. Cross-tenant a2a authz is workspace-pair-scoped.
+- [04b iter-3](docs/designs/04b-projected-sa-identity.md) — `audienceTemplates` (`egress`, `workflowRun`, `supervisor`); agent pods now mount three projected SA tokens at `/var/run/keese/tokens/{egress,workflowRun,supervisor}`.
+- [09 iter-3](docs/designs/09-transport-crd.md) — a2a peer-auth modes 4 → 2 (`workspace-sa`, `mutual-tls`); dropped `user-oidc` + `none`; new `spec.a2a.scope: intra-tenant | cross-tenant`. NATS is the primary intra-tenant transport.
+- [03 iter-3 + 03c](docs/designs/03c-workflow-messaging-plane.md) — Workflow controller owns NATS topic provisioning (`keese.tenant.<t>.wf.<r>.*`), `workflowRun` audience injection, CRA admission, stream teardown.
+- [Q2(b) decision](docs/designs/03c-workflow-messaging-plane.md) — cross-tenant peers derived implicitly from `transportRef`s with `scope: cross-tenant`. NO new `WorkflowRun.spec.participants[]` field.
+- [Design 25 stub](docs/designs/25-cross-tenant-agreement.md) — CRD spec authoring deferred; full design pending (held at draft).
+- Design count 48 → 53 (added `02-ii`, `04a-iii`, `09-ii`, `03c`, `25` to index).
+
 ### 2026-04-20 — initial scaffolding (P0–P8)
 
 - [Scaffolding plan + 26 decisions](docs/plans/scaffolding-plan.md) —
