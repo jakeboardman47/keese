@@ -10,12 +10,27 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: AgentRuntime is the Schema for the agentruntimes API.
+    - description: |-
+        AgentRuntime is the Schema for the agentruntimes API.
+        Cluster-scoped; registers a runtime provider implementation.
       displayName: Agent Runtime
       kind: AgentRuntime
       name: agentruntimes.runtime.operator.keese.ai
       version: v1alpha1
-    - description: GuardrailBinding is the Schema for the guardrailbindings API.
+    - description: |-
+        CrossTenantAgreement is the Schema for the crosstenanagreements API.
+        CrossTenantAgreement is cluster-scoped; it governs cross-tenant NATS messaging and A2A roles.
+        Design: docs/designs/25-cross-tenant-agreement.md + 25-ii-spec-schema.md + 25-iii-approval-flow.md
+        Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-cra.md
+      displayName: Cross Tenant Agreement
+      kind: CrossTenantAgreement
+      name: crosstenantagreements.tenancy.operator.keese.ai
+      version: v1alpha1
+    - description: |-
+        GuardrailBinding is the Schema for the guardrailbindings API.
+        It composes Kyverno policies, OpenFGA tuples, Envoy SecurityPolicy refs,
+        recipe hooks, and token budgets into a single CRD with a strictest-wins
+        merge lattice spanning Cluster / Tenant / Workspace scopes.
       displayName: Guardrail Binding
       kind: GuardrailBinding
       name: guardrailbindings.guardrail.operator.keese.ai
@@ -24,6 +39,22 @@ spec:
       displayName: Memory
       kind: Memory
       name: memories.memory.operator.keese.ai
+      version: v1alpha1
+    - description: |-
+        OIDCProvider is the Schema for the oidcproviders API.
+        OIDCProvider is cluster-scoped and configures OIDC issuer trust for the Envoy AI Gateway
+        ext_authz pipeline. Bootstrap CRs (kubernetes-default, google, github-actions, etc.) are
+        created by the keese-oidcprovider-bootstrap Job at install time.
+
+        Design: docs/designs/04b-projected-sa-identity.md + docs/designs/04b-ii-oidc-trust.md
+        Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md
+
+        tenant.uses_oidc_provider OpenFGA relation: the Tenant controller writes tuples
+        (tenant:<name>#uses_oidc_provider@oidc_provider:<spec.oidc.allowedProviders[]>) per
+        04a iter-6; this controller owns OIDCProvider CRs only — tuples are written by Tenant.
+      displayName: OIDCProvider
+      kind: OIDCProvider
+      name: oidcproviders.authz.operator.keese.ai
       version: v1alpha1
     - description: Recipe is the Schema for the recipes API.
       displayName: Recipe
@@ -35,7 +66,9 @@ spec:
       kind: RecipeSource
       name: recipesources.recipe.operator.keese.ai
       version: v1alpha1
-    - description: RuntimeExtension is the Schema for the runtimeextensions API.
+    - description: |-
+        RuntimeExtension is the Schema for the runtimeextensions API.
+        Namespaced; bundles N tools for a runtime and manages ReBAC tuples.
       displayName: Runtime Extension
       kind: RuntimeExtension
       name: runtimeextensions.runtime.operator.keese.ai
@@ -44,6 +77,15 @@ spec:
       displayName: Shared Memory
       kind: SharedMemory
       name: sharedmemories.memory.operator.keese.ai
+      version: v1alpha1
+    - description: |-
+        Tenant is the Schema for the tenants API.
+        Tenant is cluster-scoped; its name IS the OpenFGA identity key.
+        Design: docs/designs/24-tenant-crd.md + docs/designs/24b-tenant-crd.md
+        Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-tenant.md
+      displayName: Tenant
+      kind: Tenant
+      name: tenants.tenancy.operator.keese.ai
       version: v1alpha1
     - description: TokenBudget is the Schema for the tokenbudgets API.
       displayName: Token Budget
@@ -55,12 +97,16 @@ spec:
       kind: Transport
       name: transports.transport.operator.keese.ai
       version: v1alpha1
-    - description: WorkflowRun is the Schema for the workflowruns API.
+    - description: |-
+        WorkflowRun is the Schema for the workflowruns API.
+        It projects an Argo Workflow and manages NATS streams, SA tokens, and CTA checks.
       displayName: Workflow Run
       kind: WorkflowRun
       name: workflowruns.workflow.operator.keese.ai
       version: v1alpha1
-    - description: Workflow is the Schema for the workflows API.
+    - description: |-
+        Workflow is the Schema for the workflows API.
+        It projects an Argo WorkflowTemplate and manages triggers and outputs.
       displayName: Workflow
       kind: Workflow
       name: workflows.workflow.operator.keese.ai
@@ -69,6 +115,16 @@ spec:
       displayName: Workspace
       kind: Workspace
       name: workspaces.workspace.operator.keese.ai
+      version: v1alpha1
+    - description: |-
+        WorkspaceSession is the Schema for the workspacesessions API.
+        WorkspaceSession is namespace-scoped (same namespace as parent Workspace).
+        Name pattern: <workspace>-<subject-hash-16>-<session-name>.
+        Design: docs/designs/08b-goose-acp-stdio-k8s.md + docs/designs/08b-ii-session-crd-spec.md
+        Spec: docs/specs/workspace.operator.keese.ai-v1alpha1-ii-session.md
+      displayName: Workspace Session
+      kind: WorkspaceSession
+      name: workspacesessions.workspace.operator.keese.ai
       version: v1alpha1
     - description: WorkspaceShare is the Schema for the workspaceshares API.
       displayName: Workspace Share

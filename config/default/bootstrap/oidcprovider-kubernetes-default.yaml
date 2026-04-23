@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Bootstrap OIDCProvider: kubernetes-default
+# Trusts in-cluster Kubernetes API server OIDC tokens (projected SA tokens).
+# keese.ai/bootstrap: "true" marks this CR as operator-owned; the
+# oidcprovider controller preserves user-managed fields via the
+# keese-oidcprovider-bootstrap SSA field manager.
+# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.5
+apiVersion: authz.operator.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: kubernetes-default
+  labels:
+    keese.ai/bootstrap: "true"
+spec:
+  issuer: https://kubernetes.default.svc.cluster.local
+  audiences:
+    - keese-egress-*
+  subjectTemplate: "ksa-{{ trimPrefix \"system:serviceaccount:\" .Claims.sub }}"
+  audienceTemplates:
+    - name: egress
+      template: "keese-egress-{{ .Claims.namespace }}"
+      expirationSeconds: 600
+    - name: workflowRun
+      template: "keese-wf-{{ .Claims.namespace }}"
+      expirationSeconds: 600
+    - name: supervisor
+      template: "keese-supervisor-{{ .Claims.namespace }}"
+      expirationSeconds: 600

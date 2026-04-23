@@ -14,7 +14,23 @@ spec:
     singular: recipe
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.model.modelID
+      name: Model
+      type: string
+    - jsonPath: .spec.sourceRef.name
+      name: Source
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Recipe is the Schema for the recipes API.
@@ -37,13 +53,239 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              RecipeSpec is intentionally empty at v1alpha1 until the design
-              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
-              RecipeSpec defines the desired state of Recipe.
+            description: RecipeSpec defines the desired state of Recipe.
+            properties:
+              extensions:
+                description: |-
+                  Extensions lists RuntimeExtensions required by this recipe.
+                  Each is checked via OpenFGA at admit: extension:E#enabled_in@workspace:W.
+                items:
+                  description: RecipeExtension references a RuntimeExtension that
+                    must be enabled for this recipe.
+                  properties:
+                    name:
+                      description: Name is the RuntimeExtension name.
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: Namespace is the RuntimeExtension namespace.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              instructions:
+                description: Instructions is the OCI layer path to the instructions.md
+                  file within the artifact.
+                minLength: 1
+                type: string
+              model:
+                description: Model specifies the provider and model ID.
+                properties:
+                  modelID:
+                    description: ModelID is the provider-specific model identifier.
+                    minLength: 1
+                    type: string
+                  provider:
+                    description: Provider is the model provider name, e.g. "anthropic".
+                    minLength: 1
+                    type: string
+                required:
+                - modelID
+                - provider
+                type: object
+              parameters:
+                description: Parameters defines typed arguments injected as env vars
+                  into the workspace.
+                items:
+                  description: RecipeParameter defines a typed recipe argument injected
+                    as an env var.
+                  properties:
+                    default:
+                      description: Default is the default value when the parameter
+                        is not required and not supplied.
+                      type: string
+                    name:
+                      description: Name is the parameter name (also used as the env
+                        var key).
+                      minLength: 1
+                      type: string
+                    required:
+                      description: Required indicates the parameter must be supplied
+                        at invocation time.
+                      type: boolean
+                    type:
+                      description: Type is the parameter type.
+                      enum:
+                      - string
+                      - int
+                      - bool
+                      type: string
+                  required:
+                  - name
+                  - type
+                  type: object
+                type: array
+              postFlight:
+                description: PostFlight is an optional hook that runs after the recipe
+                  exits or session ends.
+                properties:
+                  cel:
+                    description: Cel is a CEL expression evaluated before/after the
+                      recipe.
+                    type: string
+                  shellRef:
+                    description: ShellRef names a registered shell hook; no inline
+                      shell is permitted.
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of cel or shellRef must be set
+                  rule: has(self.cel) != has(self.shellRef)
+              preFlight:
+                description: PreFlight is an optional hook that runs before the recipe
+                  executes.
+                properties:
+                  cel:
+                    description: Cel is a CEL expression evaluated before/after the
+                      recipe.
+                    type: string
+                  shellRef:
+                    description: ShellRef names a registered shell hook; no inline
+                      shell is permitted.
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of cel or shellRef must be set
+                  rule: has(self.cel) != has(self.shellRef)
+              sourceRef:
+                description: SourceRef is the reference to the RecipeSource that provides
+                  the artifact.
+                properties:
+                  name:
+                    description: Name is the RecipeSource name.
+                    minLength: 1
+                    type: string
+                  namespace:
+                    description: Namespace is the RecipeSource namespace; defaults
+                      to the Recipe's namespace.
+                    type: string
+                required:
+                - name
+                type: object
+              tools:
+                description: |-
+                  Tools is the allowlist of tools this recipe may use. Checked at admit against
+                  GuardrailBinding.status.effectivePolicy.tools.allow.
+                items:
+                  description: RecipeTool defines a single tool allowed in the recipe.
+                  properties:
+                    name:
+                      description: Name is the tool identifier.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+            required:
+            - instructions
+            - model
+            - sourceRef
             type: object
+            x-kubernetes-validations:
+            - message: tool names must be non-empty
+              rule: '!has(self.tools) || self.tools.size() == 0 || self.tools.all(t,
+                t.name != '''')'
           status:
             description: RecipeStatus defines the observed state of Recipe.
+            properties:
+              conditions:
+                description: Conditions contains detailed status conditions.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the .metadata.generation last reconciled.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the current lifecycle phase.
+                enum:
+                - Pending
+                - Pulling
+                - Verified
+                - Ready
+                - Failed
+                - Terminating
+                type: string
+              rebacTupleCount:
+                description: RebacTupleCount is the number of OpenFGA tuples last
+                  synced for debuggability.
+                format: int32
+                type: integer
+              resolvedDigest:
+                description: |-
+                  ResolvedDigest is the OCI digest of the cached artifact, populated after
+                  the RecipeSource is Synced and cosign-verified.
+                type: string
             type: object
         type: object
     served: true

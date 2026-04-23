@@ -11,13 +11,30 @@ spec:
     kind: Workflow
     listKind: WorkflowList
     plural: workflows
+    shortNames:
+    - wf
     singular: workflow
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.runCount
+      name: RunCount
+      type: integer
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Workflow is the Schema for the workflows API.
+        description: |-
+          Workflow is the Schema for the workflows API.
+          It projects an Argo WorkflowTemplate and manages triggers and outputs.
         properties:
           apiVersion:
             description: |-
@@ -37,14 +54,423 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              WorkflowSpec is intentionally empty at v1alpha1 until the design
-              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
-              WorkflowSpec defines the desired state of Workflow.
+            description: WorkflowSpec defines the desired state of Workflow.
+            properties:
+              artifactStoreRef:
+                description: |-
+                  ArtifactStoreRef names an artifact backend Secret/ConfigMap.
+                  Falls back to Tenant.spec.artifactStoreRef when absent.
+                properties:
+                  name:
+                    description: Name of the referenced object.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              concurrencyPolicy:
+                default: Allow
+                description: |-
+                  ConcurrencyPolicy controls what happens when a new WorkflowRun
+                  arrives while an existing run is active.
+                enum:
+                - Allow
+                - Forbid
+                - Replace
+                type: string
+              defaultRetryBudget:
+                description: DefaultRetryBudget applies to all steps unless overridden
+                  per-step.
+                properties:
+                  backoffSeconds:
+                    default: 10
+                    description: BackoffSeconds is the base back-off between retries.
+                    format: int32
+                    maximum: 1000
+                    minimum: 1
+                    type: integer
+                  limit:
+                    default: 10
+                    description: Limit is the maximum number of step retries across
+                      the whole workflow.
+                    format: int32
+                    maximum: 50
+                    minimum: 1
+                    type: integer
+                required:
+                - limit
+                type: object
+              entrypoint:
+                description: Entrypoint names the template to run first.
+                minLength: 1
+                type: string
+              outputs:
+                description: Outputs declares where results are sent after completion.
+                items:
+                  description: WorkflowOutput is a discriminated one-of output configuration.
+                  properties:
+                    githubPR:
+                      description: GitHubPR configures a GitHub PR output.
+                      properties:
+                        repo:
+                          description: Repo is the GitHub repository in "owner/name"
+                            format.
+                          minLength: 1
+                          type: string
+                        tokenSecretRef:
+                          description: TokenSecretRef names a Secret containing the
+                            GitHub token.
+                          properties:
+                            name:
+                              description: Name of the referenced object.
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      required:
+                      - repo
+                      - tokenSecretRef
+                      type: object
+                    knativeSink:
+                      description: KnativeSink configures a Knative sink output.
+                      properties:
+                        ref:
+                          description: Ref is a reference to a Knative Addressable
+                            (Broker, Channel, Service).
+                          minLength: 1
+                          type: string
+                      required:
+                      - ref
+                      type: object
+                    name:
+                      description: Name is a unique identifier for this output.
+                      minLength: 1
+                      type: string
+                    natsPublish:
+                      description: NATSPublish configures a NATS publish output.
+                      properties:
+                        subject:
+                          description: Subject is the NATS subject to publish to.
+                          minLength: 1
+                          type: string
+                      required:
+                      - subject
+                      type: object
+                    s3:
+                      description: S3 configures S3 artifact output.
+                      properties:
+                        bucket:
+                          description: Bucket is the S3 bucket name.
+                          minLength: 1
+                          type: string
+                        credentialsSecretRef:
+                          description: CredentialsSecretRef names a Secret with S3
+                            credentials.
+                          properties:
+                            name:
+                              description: Name of the referenced object.
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        keyPrefix:
+                          description: KeyPrefix is the object key prefix.
+                          type: string
+                      required:
+                      - bucket
+                      type: object
+                    type:
+                      description: Type discriminates which variant is populated.
+                      enum:
+                      - KnativeSink
+                      - NATSPublish
+                      - S3
+                      - GitHubPR
+                      type: string
+                  required:
+                  - name
+                  - type
+                  type: object
+                  x-kubernetes-validations:
+                  - message: exactly one output variant must be set
+                    rule: '(has(self.knativeSink) ? 1 : 0) + (has(self.natsPublish)
+                      ? 1 : 0) + (has(self.s3) ? 1 : 0) + (has(self.githubPR) ? 1
+                      : 0) == 1'
+                type: array
+              templates:
+                description: |-
+                  Templates is the ordered list of step templates.
+                  Must contain at least one entry.
+                items:
+                  description: |-
+                    WorkflowTemplateStep is one step inside a WorkflowTemplate.
+                    It maps 1:1 onto an Argo WorkflowTemplate step.
+                  properties:
+                    args:
+                      description: Args supplies arguments to the container.
+                      items:
+                        type: string
+                      type: array
+                    command:
+                      description: Command overrides the container entrypoint.
+                      items:
+                        type: string
+                      type: array
+                    guardrailBindingRefs:
+                      description: GuardrailBindingRefs names GuardrailBinding CRs
+                        applied to this step.
+                      items:
+                        description: LocalObjectReference is a reference to an object
+                          in the same namespace.
+                        properties:
+                          name:
+                            description: Name of the referenced object.
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    image:
+                      description: Image is the container image to run for this step.
+                      minLength: 1
+                      type: string
+                    name:
+                      description: Name is a unique identifier for this step within
+                        the template.
+                      maxLength: 63
+                      minLength: 1
+                      type: string
+                    retryLimit:
+                      default: 3
+                      description: RetryLimit caps the number of retries for this
+                        step.
+                      format: int32
+                      maximum: 10
+                      minimum: 0
+                      type: integer
+                    transportRef:
+                      description: |-
+                        TransportRef names a Transport CR in the same namespace that
+                        provides the egress channel for this step.
+                      properties:
+                        name:
+                          description: Name of the referenced object.
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                  required:
+                  - image
+                  - name
+                  type: object
+                minItems: 1
+                type: array
+              triggers:
+                description: Triggers declares how this Workflow is activated.
+                items:
+                  description: |-
+                    WorkflowTrigger is a discriminated one-of trigger configuration.
+                    Exactly one of Cron / KnativeTrigger / NATSSubscription / HTTPWebhook must be set.
+                  properties:
+                    cron:
+                      description: Cron configures a CronJob-based trigger.
+                      properties:
+                        schedule:
+                          description: Schedule is a cron expression (e.g. "0 * *
+                            * *").
+                          minLength: 1
+                          type: string
+                        suspend:
+                          description: Suspend disables the CronJob without removing
+                            it.
+                          type: boolean
+                        timezone:
+                          description: Timezone in IANA format (e.g. "UTC", "America/New_York").
+                          type: string
+                      required:
+                      - schedule
+                      type: object
+                    httpWebhook:
+                      description: HTTPWebhook configures an HTTPRoute-based webhook
+                        trigger.
+                      properties:
+                        path:
+                          description: Path is the HTTP path that will activate this
+                            workflow (e.g. "/trigger").
+                          minLength: 1
+                          pattern: ^/
+                          type: string
+                        secretRef:
+                          description: SecretRef names a Secret containing the HMAC
+                            shared key for webhook verification.
+                          properties:
+                            name:
+                              description: Name of the referenced object.
+                              minLength: 1
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      required:
+                      - path
+                      type: object
+                    knativeTrigger:
+                      description: KnativeTrigger configures a Knative Eventing Trigger.
+                      properties:
+                        brokerRef:
+                          description: BrokerRef names the Knative Broker in the same
+                            namespace.
+                          minLength: 1
+                          type: string
+                        filter:
+                          additionalProperties:
+                            type: string
+                          description: Filter is a CloudEvent attribute filter (optional).
+                          type: object
+                      required:
+                      - brokerRef
+                      type: object
+                    natsSubscription:
+                      description: NATSSubscription configures a NATS JetStream trigger.
+                      properties:
+                        durable:
+                          description: Durable names the durable consumer.
+                          type: string
+                        streamName:
+                          description: StreamName is the JetStream stream to consume
+                            from.
+                          minLength: 1
+                          type: string
+                        subject:
+                          description: Subject is the NATS subject pattern.
+                          minLength: 1
+                          type: string
+                      required:
+                      - streamName
+                      - subject
+                      type: object
+                    type:
+                      description: Type discriminates which variant is populated.
+                      enum:
+                      - Cron
+                      - KnativeTrigger
+                      - NATSSubscription
+                      - HTTPWebhook
+                      type: string
+                  required:
+                  - type
+                  type: object
+                  x-kubernetes-validations:
+                  - message: exactly one trigger variant must be set
+                    rule: '(has(self.cron) ? 1 : 0) + (has(self.knativeTrigger) ?
+                      1 : 0) + (has(self.natsSubscription) ? 1 : 0) + (has(self.httpWebhook)
+                      ? 1 : 0) == 1'
+                type: array
+            required:
+            - entrypoint
+            - templates
             type: object
+            x-kubernetes-validations:
+            - message: spec.templates must have at least one entry
+              rule: size(self.templates) >= 1
           status:
             description: WorkflowStatus defines the observed state of Workflow.
+            properties:
+              conditions:
+                description: Conditions holds standard status conditions.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the .metadata.generation last fully
+                  reconciled.
+                format: int64
+                type: integer
+              phase:
+                description: Phase summarises the current lifecycle state.
+                enum:
+                - Pending
+                - Projecting
+                - Ready
+                - Degraded
+                - Deleting
+                type: string
+              runCount:
+                description: RunCount is the total number of WorkflowRuns created
+                  against this Workflow.
+                format: int64
+                type: integer
+              tupleCount:
+                description: TupleCount records the number of OpenFGA tuples last
+                  written.
+                format: int32
+                type: integer
+              workflowTemplateRef:
+                description: WorkflowTemplateRef is the name of the projected Argo
+                  WorkflowTemplate.
+                type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Bootstrap OIDCProvider CRs — operator-owned defaults installed at deploy time.
+# Labeled keese.ai/bootstrap: "true"; preserved across reconciles via
+# the keese-oidcprovider-bootstrap SSA field manager.
+# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.5
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- oidcprovider-kubernetes-default.yaml
+- oidcprovider-google.yaml
+- oidcprovider-github-actions.yaml
+- oidcprovider-azure-entra.yaml
+- oidcprovider-okta.yaml
+- oidcprovider-keycloak.yaml
+- oidcprovider-gitlab.yaml

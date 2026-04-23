@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Bootstrap OIDCProvider: keycloak
+# Trusts self-hosted Keycloak OIDC tokens.
+# ADMIN ACTION REQUIRED: replace <keycloak-host> and <realm> in spec.issuer
+# with the actual Keycloak hostname and realm name before enabling this
+# provider. The placeholder value will cause JWKS discovery to fail.
+# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.5
+apiVersion: authz.operator.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: keycloak
+  labels:
+    keese.ai/bootstrap: "true"
+spec:
+  issuer: https://<keycloak-host>/realms/<realm>
+  audiences:
+    - keese-egress-*
+  subjectTemplate: "{{ lower .Claims.preferred_username }}"
+  audienceTemplates:
+    - name: egress
+      template: "keese-egress-{{ .Claims.realm }}"
+      expirationSeconds: 600
+  normalization:
+    lowercase: true
+    trim: true

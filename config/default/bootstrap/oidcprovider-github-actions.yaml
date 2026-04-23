@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Bootstrap OIDCProvider: github-actions
+# Trusts GitHub Actions OIDC tokens for CI job identity.
+# The repository claim is "org/repo"; subject maps to
+# "github-actions:<org>/<repo>" for OpenFGA tuple lookup.
+# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.5
+apiVersion: authz.operator.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: github-actions
+  labels:
+    keese.ai/bootstrap: "true"
+spec:
+  issuer: https://token.actions.githubusercontent.com
+  audiences:
+    - keese-egress-*
+  subjectTemplate: "github-actions:{{ .Claims.repository }}"
+  audienceTemplates:
+    - name: egress
+      template: "keese-egress-{{ .Claims.repository_owner }}"
+      expirationSeconds: 600

@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Bootstrap OIDCProvider: okta
+# Trusts Okta SSO OIDC tokens.
+# ADMIN ACTION REQUIRED: replace <okta-domain> in spec.issuer with the
+# organization's real Okta domain (e.g. "example.okta.com") before
+# enabling this provider. The placeholder will cause JWKS discovery to fail.
+# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.5
+apiVersion: authz.operator.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: okta
+  labels:
+    keese.ai/bootstrap: "true"
+spec:
+  issuer: https://<okta-domain>.okta.com
+  audiences:
+    - keese-egress-*
+  subjectTemplate: "{{ lower .Claims.email }}"
+  audienceTemplates:
+    - name: egress
+      template: "keese-egress-{{ .Claims.tenant }}"
+      expirationSeconds: 600
+  normalization:
+    lowercase: true
+    trim: true

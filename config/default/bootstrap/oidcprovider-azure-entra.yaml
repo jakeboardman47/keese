@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Bootstrap OIDCProvider: azure-entra
+# Trusts Azure Entra ID (formerly AAD) OIDC tokens.
+# ADMIN ACTION REQUIRED: replace {tenant-id} in spec.issuer with the
+# organization's real Azure AD tenant GUID before enabling this provider.
+# The placeholder value will cause JWKS discovery to fail.
+# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.5
+apiVersion: authz.operator.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: azure-entra
+  labels:
+    keese.ai/bootstrap: "true"
+spec:
+  issuer: https://login.microsoftonline.com/{tenant-id}/v2.0
+  audiences:
+    - keese-egress-*
+  subjectTemplate: "{{ lower .Claims.preferred_username }}"
+  audienceTemplates:
+    - name: egress
+      template: "keese-egress-{{ .Claims.tid }}"
+      expirationSeconds: 600
+  normalization:
+    lowercase: true
+    trim: true

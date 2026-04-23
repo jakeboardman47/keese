@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Bootstrap OIDCProvider: gitlab
+# Trusts GitLab.com OIDC tokens for both human users and GitLab CI jobs.
+# Human tokens carry the "email" claim; CI job tokens carry "project_path".
+# The subjectTemplate uses project_path when present (CI), otherwise email.
+# For self-hosted GitLab, override spec.issuer to your GitLab instance URL.
+# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.5
+apiVersion: authz.operator.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: gitlab
+  labels:
+    keese.ai/bootstrap: "true"
+spec:
+  issuer: https://gitlab.com
+  audiences:
+    - keese-egress-*
+  subjectTemplate: "{{ if .Claims.project_path }}gitlab-ci:{{ .Claims.project_path }}{{ else }}{{ lower .Claims.email }}{{ end }}"
+  audienceTemplates:
+    - name: egress
+      template: "keese-egress-{{ .Claims.namespace_path }}"
+      expirationSeconds: 600
+  normalization:
+    lowercase: true
+    trim: true
