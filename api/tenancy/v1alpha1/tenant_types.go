@@ -91,7 +91,7 @@ type RetryBudget struct {
 //   - finalizers.tenant.operator.keese.ai/agreements  — drain CrossTenantAgreements before delete
 //
 // +kubebuilder:validation:XValidation:rule="size(self.adminSubjects) > 0",message="adminSubjects must be non-empty"
-// +kubebuilder:validation:XValidation:rule="self.jwksCacheFailOpenSeconds == 0 || (self.jwksCacheFailOpenSeconds >= 30 && self.jwksCacheFailOpenSeconds <= 600)",message="jwksCacheFailOpenSeconds must be in [30,600] when set"
+// +kubebuilder:validation:XValidation:rule="!has(self.jwksCacheFailOpenSeconds) || self.jwksCacheFailOpenSeconds == 0 || (self.jwksCacheFailOpenSeconds >= 30 && self.jwksCacheFailOpenSeconds <= 600)",message="jwksCacheFailOpenSeconds must be in [30,600] when set"
 type TenantSpec struct {
 	// CapsuleTenantRef delegates namespace aggregation to a Capsule Tenant (Mode B).
 	// Immutable while any namespace is live. When set, namespaceSelector is silently

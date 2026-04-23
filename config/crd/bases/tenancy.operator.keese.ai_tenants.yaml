@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -294,8 +296,9 @@ spec:
             - message: adminSubjects must be non-empty
               rule: size(self.adminSubjects) > 0
             - message: jwksCacheFailOpenSeconds must be in [30,600] when set
-              rule: self.jwksCacheFailOpenSeconds == 0 || (self.jwksCacheFailOpenSeconds
-                >= 30 && self.jwksCacheFailOpenSeconds <= 600)
+              rule: '!has(self.jwksCacheFailOpenSeconds) || self.jwksCacheFailOpenSeconds
+                == 0 || (self.jwksCacheFailOpenSeconds >= 30 && self.jwksCacheFailOpenSeconds
+                <= 600)'
           status:
             description: TenantStatus defines the observed state of Tenant.
             properties:

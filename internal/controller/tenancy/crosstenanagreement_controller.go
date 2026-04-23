@@ -112,9 +112,38 @@ func (r *CrossTenantAgreementReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// --- Process approval annotation (Pending only) ---
+	// BUG-FIX(batch-controller-approval): processApprovalAnnotation previously called
+	// r.Patch (spec/metadata patch) while holding the in-memory approval in
+	// cra.Status.Approvals. client.Patch updates the local object pointer with the
+	// server's response, which carries the old (pre-approval) status, discarding the
+	// appended approval before patchCRAStatus could persist it.
+	// Fix: validateApprovalAnnotation returns the verified approval without patching.
+	// We remove the annotations via a spec patch here, re-fetch so orig reflects server
+	// state, then append the approval to the fresh copy — exactly the pattern used by
+	// WorkspaceReconciler after its finalizer patch (workspace_controller.go §90-99).
 	if cra.Status.Phase == tenancyv1alpha1.CRAPhaseP {
 		if val := cra.Annotations[craApproveAnnotation]; val == "true" {
-			r.processApprovalAnnotation(ctx, &cra, orig)
+			if approval := r.validateApprovalAnnotation(ctx, &cra); approval != nil {
+				// Remove approval annotations from metadata (spec patch, no status touch).
+				delete(cra.Annotations, craApproveAnnotation)
+				delete(cra.Annotations, "keese.ai/cra-approving-tenant")
+				delete(cra.Annotations, "keese.ai/cra-approver")
+				delete(cra.Annotations, "keese.ai/cra-signature")
+				delete(cra.Annotations, "keese.ai/cra-signature-type")
+				if err := r.Patch(ctx, &cra, client.MergeFrom(orig)); err != nil {
+					log.Error(err, "failed to remove approval annotations")
+					return ctrl.Result{RequeueAfter: requeueAfterCRABackoff}, nil
+				}
+				// Re-fetch so orig matches server state (mirrors workspace controller
+				// finalizer pattern). The approval is appended to the fresh in-memory
+				// copy; patchCRAStatus at end of reconcile persists it via the status
+				// subresource.
+				if err := r.Get(ctx, req.NamespacedName, &cra); err != nil {
+					return ctrl.Result{}, client.IgnoreNotFound(err)
+				}
+				orig = cra.DeepCopy()
+				cra.Status.Approvals = append(cra.Status.Approvals, *approval)
+			}
 		}
 	}
 
@@ -162,14 +191,14 @@ func (r *CrossTenantAgreementReconciler) Reconcile(ctx context.Context, req ctrl
 	return result, r.patchCRAStatus(ctx, &cra, orig)
 }
 
-// processApprovalAnnotation reads the cra-approve annotation and records the approval.
-// The annotation value "true" triggers validation; real webhook handles admission.
-func (r *CrossTenantAgreementReconciler) processApprovalAnnotation(ctx context.Context, cra *tenancyv1alpha1.CrossTenantAgreement, orig *tenancyv1alpha1.CrossTenantAgreement) {
+// validateApprovalAnnotation reads and validates the cra-approve annotation, verifies
+// the signature, and returns a CRAApproval ready to append — or nil if validation fails.
+// It does NOT mutate cra or call Patch; all writes are the caller's responsibility.
+// The real webhook handles admission-time permission checks (can_approve_cra).
+func (r *CrossTenantAgreementReconciler) validateApprovalAnnotation(ctx context.Context, cra *tenancyv1alpha1.CrossTenantAgreement) *tenancyv1alpha1.CRAApproval {
 	log := logf.FromContext(ctx)
 
-	// Determine which tenant is approving. In a full implementation we inspect the
-	// annotation metadata (e.g. keese.ai/cra-approving-tenant). For now we derive
-	// from a secondary annotation.
+	// Determine which tenant is approving from secondary annotations.
 	approvingTenant := cra.Annotations["keese.ai/cra-approving-tenant"]
 	approver := cra.Annotations["keese.ai/cra-approver"]
 	signature := cra.Annotations["keese.ai/cra-signature"]
@@ -177,21 +206,21 @@ func (r *CrossTenantAgreementReconciler) processApprovalAnnotation(ctx context.C
 
 	if approvingTenant == "" || approver == "" || signature == "" {
 		log.Info("incomplete approval annotation, ignoring", "cra", cra.Name)
-		return
+		return nil
 	}
 
 	// Validate the approving tenant is a participant.
 	if approvingTenant != cra.Spec.From.TenantRef.Name && approvingTenant != cra.Spec.To.TenantRef.Name {
 		r.Recorder.Eventf(cra, corev1.EventTypeWarning, ReasonCRAApprovalInvalid,
 			"Approving tenant %q is not a participant in this CRA", approvingTenant)
-		return
+		return nil
 	}
 
 	// Check this tenant hasn't already approved.
 	for _, existing := range cra.Status.Approvals {
 		if existing.Tenant == approvingTenant {
 			log.Info("tenant already approved, ignoring duplicate", "tenant", approvingTenant)
-			return
+			return nil
 		}
 	}
 
@@ -210,26 +239,15 @@ func (r *CrossTenantAgreementReconciler) processApprovalAnnotation(ctx context.C
 			"Signature verification failed for approver %q on tenant %q: %v", approver, approvingTenant, verifyErr)
 		r.Recorder.Eventf(cra, corev1.EventTypeWarning, ReasonCRAApprovalInvalid,
 			"Approval from tenant %q rejected: signature invalid", approvingTenant)
-		return
+		return nil
 	}
 
-	// Record approval.
-	cra.Status.Approvals = append(cra.Status.Approvals, tenancyv1alpha1.CRAApproval{
+	return &tenancyv1alpha1.CRAApproval{
 		Tenant:        approvingTenant,
 		ApprovedBy:    approver,
 		ApprovedAt:    metav1.Now(),
 		Signature:     signature,
 		SignatureType: st,
-	})
-
-	// Remove the approval annotation to prevent re-processing.
-	delete(cra.Annotations, craApproveAnnotation)
-	delete(cra.Annotations, "keese.ai/cra-approving-tenant")
-	delete(cra.Annotations, "keese.ai/cra-approver")
-	delete(cra.Annotations, "keese.ai/cra-signature")
-	delete(cra.Annotations, "keese.ai/cra-signature-type")
-	if err := r.Patch(ctx, cra, client.MergeFrom(orig)); err != nil {
-		log.Error(err, "failed to remove approval annotations")
 	}
 }
 

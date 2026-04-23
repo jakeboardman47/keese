@@ -65,10 +65,8 @@ type TokenBudgetRef struct {
 //   SessionsPerUserLimitExceeded, ConcurrentAttachLimitExceeded
 //
 // Range [0,86400] is enforced per-field via +kubebuilder:validation:Minimum/Maximum markers.
-// A spec-level CEL rule on an optional int32 field is omitted here because kube-apiserver
-// CEL type-checking fails at CRD install time when the field is absent; the inline
-// minimum/maximum constraints are sufficient (TODO: spec-followup to add a CEL rule once
-// the field is a pointer type *int32 so has() works correctly).
+// Any spec-level CEL rule on optional int32 fields must use !has(self.field) guards to
+// avoid "no such key" errors at CRD install time when the field is absent (omitempty).
 type WorkspaceSessionSpec struct {
 	// WorkspaceRef is the name of the parent Workspace in the same namespace.
 	// The Workspace must have spec.interactive: true (VAP-enforced).

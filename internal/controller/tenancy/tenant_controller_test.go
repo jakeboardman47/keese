@@ -28,12 +28,9 @@ const (
 )
 
 // makeTenant returns a minimal cluster-scoped Tenant with the managed label.
-// JWKSCacheFailOpenSeconds is set to 30 (the minimum allowed non-zero value) to
-// satisfy the CEL rule `self.jwksCacheFailOpenSeconds == 0 || (>= 30 && <= 600)`.
-// The field is int32 omitempty, so zero is omitted from JSON and CEL raises
-// "no such key" — a known schema bug requiring `!has(...)` guard in the rule.
-// TODO(crd-schema-fix): update tenancy.operator.keese.ai_tenants.yaml rule to
-// `!has(self.jwksCacheFailOpenSeconds) || self.jwksCacheFailOpenSeconds == 0 || ...`
+// JWKSCacheFailOpenSeconds is left at its zero value (omitted from JSON) to exercise
+// the default path. The TenantSpec CEL rule guards with !has(self.jwksCacheFailOpenSeconds)
+// so absence is accepted without error.
 func makeTenant(name string) *tenancyv1alpha1.Tenant {
 	return &tenancyv1alpha1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
@@ -46,7 +43,6 @@ func makeTenant(name string) *tenancyv1alpha1.Tenant {
 			AdminSubjects: []tenancyv1alpha1.TenantSubject{
 				{Kind: "User", Name: "alice@example.com"},
 			},
-			JWKSCacheFailOpenSeconds: 30, // minimum non-zero value; see comment above
 		},
 	}
 }

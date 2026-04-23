@@ -97,11 +97,15 @@ var _ = Describe("RecipeSource Controller", func() {
 		const rsNS = "default"
 
 		BeforeEach(func() {
+			// No keese.ai/managed label: the suite's manager runs a RecipeSource
+			// reconciler with a SUCCESS-returning FakeOCIFetcher, which would race
+			// with this spec's failure-injecting fetcher. Omitting the label means
+			// the manager's predicate filters this CR out; only the manual
+			// Reconcile below exercises the cosign-fail-closed path.
 			rs := &recipev1alpha1.RecipeSource{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      rsName,
 					Namespace: rsNS,
-					Labels:    map[string]string{"keese.ai/managed": "true"},
 				},
 				Spec: recipev1alpha1.RecipeSourceSpec{
 					OCI: &recipev1alpha1.OCISource{

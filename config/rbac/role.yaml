@@ -22,6 +22,18 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - persistentvolumeclaims
+  - serviceaccounts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - pods
   verbs:
   - create
@@ -58,6 +70,53 @@ rules:
   - patch
   - update
 - apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificates
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - update
+- apiGroups:
+  - gateway.envoyproxy.io
+  resources:
+  - securitypolicies
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - referencegrants
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - guardrail.operator.keese.ai
   resources:
   - guardrailbindings
@@ -84,34 +143,36 @@ rules:
   - patch
   - update
 - apiGroups:
-  - memory.operator.keese.ai
+  - jetstream.nats.io
   resources:
-  - memories
-  - sharedmemories
+  - consumers
+  - streams
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - mcp.keese.ai
+  resources:
+  - mcproutes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
   verbs:
   - create
   - delete
   - get
   - list
   - patch
-  - update
   - watch
-- apiGroups:
-  - memory.operator.keese.ai
-  resources:
-  - memories/finalizers
-  - sharedmemories/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - memory.operator.keese.ai
-  resources:
-  - memories/status
-  - sharedmemories/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - observability.operator.keese.ai
   resources:
@@ -134,35 +195,6 @@ rules:
   - observability.operator.keese.ai
   resources:
   - tokenbudgets/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - recipe.operator.keese.ai
-  resources:
-  - recipes
-  - recipesources
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - recipe.operator.keese.ai
-  resources:
-  - recipes/finalizers
-  - recipesources/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - recipe.operator.keese.ai
-  resources:
-  - recipes/status
-  - recipesources/status
   verbs:
   - get
   - patch
