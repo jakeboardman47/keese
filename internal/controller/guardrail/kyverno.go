@@ -23,6 +23,11 @@ type KyvernoPolicyProjector interface {
 }
 
 // FakeKyvernoProjector is a no-op KyvernoPolicyProjector used in tests.
+//
+// TODO(fake-replacement): real Kyverno ClusterPolicy type now available via
+// github.com/kyverno/kyverno/api/kyverno/v2.ClusterPolicy (v1.14.x).
+// Replace with typed SSA call and controller owner-ref tracking.
+// See docs/specs/guardrail.operator.keese.ai-v1alpha1.md.
 type FakeKyvernoProjector struct {
 	Applied []string
 	Deleted []string

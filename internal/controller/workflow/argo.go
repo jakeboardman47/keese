@@ -105,6 +105,11 @@ type ArgoProjector interface {
 }
 
 // FakeArgoProjector is a test-only ArgoProjector.
+//
+// TODO(fake-replacement): real Argo types now available via
+// github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1
+// (WorkflowTemplate, Workflow). Replace with unstructured or typed SSA.
+// See docs/specs/workflow.operator.keese.ai-v1alpha1.md.
 type FakeArgoProjector struct {
 	// ProjectedTemplates accumulates ProjectWorkflowTemplate calls.
 	ProjectedTemplates []*workflowv1alpha1.Workflow
