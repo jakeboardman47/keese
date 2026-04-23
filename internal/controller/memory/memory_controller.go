@@ -36,10 +36,10 @@ const (
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 type MemoryReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	Recorder  record.EventRecorder
-	Backend   BackendProvisioner
-	Rebac     RebacWriter
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+	Backend  BackendProvisioner
+	Rebac    RebacWriter
 }
 
 // Reconcile implements the Memory reconciliation loop.

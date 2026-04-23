@@ -38,10 +38,10 @@ func makeSession(ns, name, wsName, subject, sessionName string, mode workspacev1
 			Namespace: ns,
 		},
 		Spec: workspacev1alpha1.WorkspaceSessionSpec{
-			WorkspaceRef: wsName,
+			WorkspaceRef:  wsName,
 			AttachSubject: subject,
-			SessionName:  sessionName,
-			Mode:         mode,
+			SessionName:   sessionName,
+			Mode:          mode,
 		},
 	}
 }

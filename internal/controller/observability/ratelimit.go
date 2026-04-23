@@ -41,10 +41,7 @@ type RateLimitProjector interface {
 // FakeRateLimitProjector is a test double for RateLimitProjector.
 // It records apply/delete calls for assertion.
 //
-// TODO(fake-replacement): real Envoy Gateway types now available via
-// github.com/envoyproxy/gateway/api/v1alpha1 (BackendTrafficPolicy carries
-// the rate-limit action). Replace with typed SSA.
-// See docs/specs/observability.operator.keese.ai-v1alpha1.md.
+// Kept for tests; see ratelimit_client.go for the production SSA impl.
 type FakeRateLimitProjector struct {
 	// Applied holds the most recent RateLimitPolicy per name.
 	Applied map[string]RateLimitPolicy

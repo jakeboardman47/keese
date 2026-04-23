@@ -553,7 +553,7 @@ func rebacTuplesFor(ws *workspacev1alpha1.Workspace) []RebacTuple {
 
 func resourceLabels(ws *workspacev1alpha1.Workspace) map[string]string {
 	return map[string]string{
-		"keese.ai/workspace":       ws.Name,
+		"keese.ai/workspace":           ws.Name,
 		"app.kubernetes.io/managed-by": fieldOwner,
 	}
 }

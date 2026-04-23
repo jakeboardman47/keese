@@ -47,10 +47,10 @@ const (
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 type RecipeReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	Recorder    record.EventRecorder
-	Rebac       RebacWriter
-	ExtAuthz    ExtAuthzChecker
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+	Rebac    RebacWriter
+	ExtAuthz ExtAuthzChecker
 }
 
 // Reconcile implements the Recipe reconciliation loop.

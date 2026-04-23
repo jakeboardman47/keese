@@ -22,9 +22,9 @@ const (
 type BindingPhase string
 
 const (
-	BindingPhaseReady   BindingPhase = "Ready"
+	BindingPhaseReady    BindingPhase = "Ready"
 	BindingPhaseDegraded BindingPhase = "Degraded"
-	BindingPhasePending BindingPhase = "Pending"
+	BindingPhasePending  BindingPhase = "Pending"
 )
 
 // RecipeHookEvent enumerates hook trigger points.

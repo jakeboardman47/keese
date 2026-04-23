@@ -25,14 +25,14 @@ const (
 	ReasonStaleParentStatus          = "StaleParentStatus"
 
 	// Namespace policy events.
-	ReasonDevSourceInProdNamespace    = "DevSourceInProdNamespace"
-	ReasonConfigMapSourceInNonDev     = "ConfigMapSourceInNonDev"
+	ReasonDevSourceInProdNamespace = "DevSourceInProdNamespace"
+	ReasonConfigMapSourceInNonDev  = "ConfigMapSourceInNonDev"
 
 	// Lifecycle events.
-	ReasonRecipeFinalizerAdded   = "RecipeFinalizerAdded"
-	ReasonRecipeCacheCleanup     = "RecipeCacheCleanup"
-	ReasonRecipeReady            = "RecipeReady"
-	ReasonRecipeFailed           = "RecipeFailed"
+	ReasonRecipeFinalizerAdded = "RecipeFinalizerAdded"
+	ReasonRecipeCacheCleanup   = "RecipeCacheCleanup"
+	ReasonRecipeReady          = "RecipeReady"
+	ReasonRecipeFailed         = "RecipeFailed"
 
 	// ReBAC events.
 	ReasonRebacTupleWritten      = "RebacTupleWritten"

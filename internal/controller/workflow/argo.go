@@ -6,8 +6,9 @@ package workflow
 import (
 	"context"
 
-	workflowv1alpha1 "github.com/keese-ai/keese/api/workflow/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	workflowv1alpha1 "github.com/keese-ai/keese/api/workflow/v1alpha1"
 )
 
 // ArgoWorkflowStatus mirrors the fields keese cares about from an Argo Workflow.
@@ -105,11 +106,7 @@ type ArgoProjector interface {
 }
 
 // FakeArgoProjector is a test-only ArgoProjector.
-//
-// TODO(fake-replacement): real Argo types now available via
-// github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1
-// (WorkflowTemplate, Workflow). Replace with unstructured or typed SSA.
-// See docs/specs/workflow.operator.keese.ai-v1alpha1.md.
+// Kept for tests; see argo_client.go for the production SSA impl.
 type FakeArgoProjector struct {
 	// ProjectedTemplates accumulates ProjectWorkflowTemplate calls.
 	ProjectedTemplates []*workflowv1alpha1.Workflow

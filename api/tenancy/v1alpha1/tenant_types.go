@@ -71,7 +71,7 @@ type TenantSecurityConfig struct {
 }
 
 // RetryBudget constrains per-call retry behaviour.
-// +kubebuilder:validation:XValidation:rule="self.perCallTimeout == '' || duration(self.perCallTimeout) >= duration('1s')",message="perCallTimeout must be >= 1s when set"
+// +kubebuilder:validation:XValidation:rule="!has(self.perCallTimeout) || duration(self.perCallTimeout) >= duration('1s')",message="perCallTimeout must be >= 1s when set"
 type RetryBudget struct {
 	// MaxRetries is the maximum number of retries per call. 0 = no retries.
 	// +kubebuilder:validation:Minimum=0

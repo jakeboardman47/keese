@@ -57,12 +57,14 @@ type TokenBudgetRef struct {
 // SSA fieldOwner: keese-workspacesession-controller
 //
 // Immutable fields (VAP on UPDATE):
-//   workspaceRef, attachSubject, sessionName, mode
+//
+//	workspaceRef, attachSubject, sessionName, mode
 //
 // VAP on CREATE checks (from design 08b-ii):
-//   AttachNotAllowedOnNonInteractiveWorkspace, DuplicateSession,
-//   AttachSessionNameForbidden, AttachGraceOutOfBounds,
-//   SessionsPerUserLimitExceeded, ConcurrentAttachLimitExceeded
+//
+//	AttachNotAllowedOnNonInteractiveWorkspace, DuplicateSession,
+//	AttachSessionNameForbidden, AttachGraceOutOfBounds,
+//	SessionsPerUserLimitExceeded, ConcurrentAttachLimitExceeded
 //
 // Range [0,86400] is enforced per-field via +kubebuilder:validation:Minimum/Maximum markers.
 // Any spec-level CEL rule on optional int32 fields must use !has(self.field) guards to

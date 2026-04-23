@@ -38,8 +38,8 @@ var (
 	k8sClient client.Client
 
 	// fakes shared across tests; reset in BeforeEach of each Describe block.
-	fakeQuerier  *FakePrometheusQuerier
-	fakeNats     *FakeNatsSignaler
+	fakeQuerier   *FakePrometheusQuerier
+	fakeNats      *FakeNatsSignaler
 	fakeRateLimit *FakeRateLimitProjector
 )
 

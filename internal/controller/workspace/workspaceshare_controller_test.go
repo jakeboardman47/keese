@@ -300,4 +300,3 @@ var _ = Describe("WorkspaceShareReconciler", func() {
 		})
 	})
 })
-

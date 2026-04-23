@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	memTestNS       = "default"
-	reconcileWait   = 5 * time.Second
-	reconcileTick   = 100 * time.Millisecond
+	memTestNS     = "default"
+	reconcileWait = 5 * time.Second
+	reconcileTick = 100 * time.Millisecond
 )
 
 var _ = Describe("Memory Controller", func() {

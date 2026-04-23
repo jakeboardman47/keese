@@ -451,9 +451,9 @@ func buildSessionPodObject(
 			Name:      podName,
 			Namespace: sess.Namespace,
 			Labels: map[string]string{
-				"keese.ai/workspace":         ws.Name,
-				"keese.ai/session":           sess.Name,
-				"keese.ai/session-mode":      string(sess.Spec.Mode),
+				"keese.ai/workspace":           ws.Name,
+				"keese.ai/session":             sess.Name,
+				"keese.ai/session-mode":        string(sess.Spec.Mode),
 				"app.kubernetes.io/managed-by": sessionFieldOwner,
 			},
 			// Owner reference keeps the pod garbage-collected when the WorkspaceSession is deleted.

@@ -12,7 +12,7 @@ import (
 type OIDCProviderPhase string
 
 const (
-	OIDCProviderPhaseActive  OIDCProviderPhase = "Active"
+	OIDCProviderPhaseActive   OIDCProviderPhase = "Active"
 	OIDCProviderPhaseDegraded OIDCProviderPhase = "Degraded"
 )
 
@@ -58,11 +58,11 @@ type AudienceTemplate struct {
 // SSA fieldOwner: keese-oidcprovider-controller
 //
 // VAP (ValidatingAdmissionPolicy) enforces:
-//   1. subjectTemplate parses without error
-//   2. Every audienceTemplates[].template parses without error
-//   3. Sprig allow-list: only trimPrefix, trimSuffix, lower, upper, split, replace
-//   4. audienceTemplates contains at least one entry named "egress"
-//   5. Every audienceTemplates[].expirationSeconds in [60,600]
+//  1. subjectTemplate parses without error
+//  2. Every audienceTemplates[].template parses without error
+//  3. Sprig allow-list: only trimPrefix, trimSuffix, lower, upper, split, replace
+//  4. audienceTemplates contains at least one entry named "egress"
+//  5. Every audienceTemplates[].expirationSeconds in [60,600]
 //
 // +kubebuilder:validation:XValidation:rule="self.audienceTemplates.exists(t, t.name == 'egress')",message="audienceTemplates must contain at least one entry named 'egress'"
 type OIDCProviderSpec struct {

@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	workflowv1alpha1 "github.com/keese-ai/keese/api/workflow/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,12 +15,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	workflowv1alpha1 "github.com/keese-ai/keese/api/workflow/v1alpha1"
 )
 
 const (
-	workflowFinalizer       = "finalizers.workflow.operator.keese.ai/cascade"
-	workflowFieldOwner      = "keese-workflow-controller"
-	conditionTypeReady      = "Ready"
+	workflowFinalizer        = "finalizers.workflow.operator.keese.ai/cascade"
+	workflowFieldOwner       = "keese-workflow-controller"
+	conditionTypeReady       = "Ready"
 	conditionTypeProgressing = "Progressing"
 )
 

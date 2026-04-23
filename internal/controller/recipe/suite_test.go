@@ -132,7 +132,7 @@ func ensureDevNamespace(nsName string) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nsName,
 			Labels: map[string]string{
-				"keese.ai/env":    "dev",
+				"keese.ai/env":     "dev",
 				"keese.ai/managed": "true",
 			},
 		},

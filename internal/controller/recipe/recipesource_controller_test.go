@@ -346,7 +346,7 @@ var _ = Describe("RecipeSource Controller", func() {
 // noopRecorder satisfies record.EventRecorder with no-ops.
 type noopRecorder struct{}
 
-func (noopRecorder) Event(_ runtime.Object, _, _, _ string) {}
+func (noopRecorder) Event(_ runtime.Object, _, _, _ string)                    {}
 func (noopRecorder) Eventf(_ runtime.Object, _, _, _ string, _ ...interface{}) {}
 func (noopRecorder) AnnotatedEventf(_ runtime.Object, _ map[string]string, _, _, _ string, _ ...interface{}) {
 }

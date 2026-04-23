@@ -428,7 +428,7 @@ func (c *capturingRecorder) hasReason(reason string) bool {
 // tenancyNoopRecorder satisfies record.EventRecorder without emitting anything.
 type tenancyNoopRecorder struct{}
 
-func (n *tenancyNoopRecorder) Event(_ runtime.Object, _, _, _ string)                      {}
-func (n *tenancyNoopRecorder) Eventf(_ runtime.Object, _, _, _ string, _ ...interface{})   {}
+func (n *tenancyNoopRecorder) Event(_ runtime.Object, _, _, _ string)                    {}
+func (n *tenancyNoopRecorder) Eventf(_ runtime.Object, _, _, _ string, _ ...interface{}) {}
 func (n *tenancyNoopRecorder) AnnotatedEventf(_ runtime.Object, _ map[string]string, _, _, _ string, _ ...interface{}) {
 }

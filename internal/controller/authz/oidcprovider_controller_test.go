@@ -218,11 +218,11 @@ var _ = Describe("OIDCProviderReconciler", func() {
 	// --- Spec 5: JWKS unreachable → JWKSReachable=False; phase stays Active ---
 	Describe("JWKS reachability: unreachable endpoint", func() {
 		var (
-			provider    *authzv1alpha1.OIDCProvider
-			nsn         types.NamespacedName
-			fakeJwks    *FakeJwksFetcher
-			recorder    *capturingOIDCRecorder
-			r           *OIDCProviderReconciler
+			provider *authzv1alpha1.OIDCProvider
+			nsn      types.NamespacedName
+			fakeJwks *FakeJwksFetcher
+			recorder *capturingOIDCRecorder
+			r        *OIDCProviderReconciler
 		)
 
 		BeforeEach(func() {
@@ -431,7 +431,7 @@ var _ = Describe("OIDCProviderReconciler", func() {
 // noopOIDCRecorder satisfies record.EventRecorder without emitting anything.
 type noopOIDCRecorder struct{}
 
-func (n *noopOIDCRecorder) Event(_ runtime.Object, _, _, _ string) {}
+func (n *noopOIDCRecorder) Event(_ runtime.Object, _, _, _ string)                    {}
 func (n *noopOIDCRecorder) Eventf(_ runtime.Object, _, _, _ string, _ ...interface{}) {}
 func (n *noopOIDCRecorder) AnnotatedEventf(_ runtime.Object, _ map[string]string, _, _, _ string, _ ...interface{}) {
 }

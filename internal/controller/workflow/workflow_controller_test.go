@@ -142,7 +142,7 @@ var _ = Describe("Workflow Controller", func() {
 					_ = k8sClient.Delete(ctx, &workflowv1alpha1.Workflow{
 						ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testWorkflowNamespace},
 					})
-				// Ensure the name variable is captured (not the loop var) — it's already captured by closure.
+					// Ensure the name variable is captured (not the loop var) — it's already captured by closure.
 				}()
 
 				key := types.NamespacedName{Name: wf.Name, Namespace: wf.Namespace}

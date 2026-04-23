@@ -8,10 +8,10 @@ package authz
 // See .claude/rules/04-kubernetes.md §11.
 const (
 	// Template lifecycle events.
-	ReasonTemplateInvalid              = "TemplateInvalid"
-	ReasonAudienceTemplateEvalError    = "AudienceTemplateEvalError"
-	ReasonMissingWorkflowAudience      = "MissingWorkflowAudience"
-	ReasonTemplateValidationSucceeded  = "TemplateValidationSucceeded"
+	ReasonTemplateInvalid             = "TemplateInvalid"
+	ReasonAudienceTemplateEvalError   = "AudienceTemplateEvalError"
+	ReasonMissingWorkflowAudience     = "MissingWorkflowAudience"
+	ReasonTemplateValidationSucceeded = "TemplateValidationSucceeded"
 
 	// OIDC provider reference events (used by Tenant controller cross-references).
 	ReasonOIDCProviderMissing  = "OIDCProviderMissing"

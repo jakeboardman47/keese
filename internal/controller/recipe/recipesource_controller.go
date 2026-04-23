@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	recipeSourceFinalizer = "finalizers.recipesource.operator.keese.ai/cache-cleanup"
+	recipeSourceFinalizer  = "finalizers.recipesource.operator.keese.ai/cache-cleanup"
 	recipeSourceFieldOwner = "keese-recipesource-controller"
 
 	// devEnvLabel is the namespace label that permits ConfigMap sources (VAP rule).

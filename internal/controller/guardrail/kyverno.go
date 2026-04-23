@@ -6,11 +6,9 @@ package guardrail
 import "context"
 
 // KyvernoPolicyProjector is the interface for applying Kyverno ClusterPolicy
-// objects via SSA. The real implementation (once kyverno.io/v1 is in go.mod)
-// will use the Kyverno API types; this interface keeps the controller testable
-// without that dependency.
-//
-// TODO(spec-followup): implement RealKyvernoProjector once kyverno.io/v1 is in go.mod.
+// objects via SSA. The production implementation (ClientKyvernoPolicyProjector
+// in kyverno_client.go) uses github.com/kyverno/kyverno/api/kyverno/v1.ClusterPolicy.
+// Tests use FakeKyvernoProjector.
 type KyvernoPolicyProjector interface {
 	// Apply SSA-patches a ClusterPolicy for the given binding+policyRef pair.
 	// The fieldOwner must be "keese-guardrailbinding-controller".
@@ -23,11 +21,7 @@ type KyvernoPolicyProjector interface {
 }
 
 // FakeKyvernoProjector is a no-op KyvernoPolicyProjector used in tests.
-//
-// TODO(fake-replacement): real Kyverno ClusterPolicy type now available via
-// github.com/kyverno/kyverno/api/kyverno/v2.ClusterPolicy (v1.14.x).
-// Replace with typed SSA call and controller owner-ref tracking.
-// See docs/specs/guardrail.operator.keese.ai-v1alpha1.md.
+// Kept for tests; see kyverno_client.go for the production SSA impl.
 type FakeKyvernoProjector struct {
 	Applied []string
 	Deleted []string

@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: oidcproviders.authz.operator.keese.ai
 spec:
   group: authz.operator.keese.ai
@@ -31,9 +31,9 @@ spec:
     - jsonPath: .spec.issuer
       name: Issuer
       type: string
-    - jsonPath: .spec.audienceTemplates
+    - jsonPath: .spec.audienceTemplates[*].name
       name: AudienceTemplates
-      type: integer
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -46,8 +46,9 @@ spec:
           Design: docs/designs/04b-projected-sa-identity.md + docs/designs/04b-ii-oidc-trust.md
           Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md
 
-          dev/bootstrap/openfga/model.fga before the controller phase opens.
-          Flag to rebac-modeler agent per spec §1.6 escalation note.
+          tenant.uses_oidc_provider OpenFGA relation: the Tenant controller writes tuples
+          (tenant:<name>#uses_oidc_provider@oidc_provider:<spec.oidc.allowedProviders[]>) per
+          04a iter-6; this controller owns OIDCProvider CRs only — tuples are written by Tenant.
         properties:
           apiVersion:
             description: |-
@@ -77,11 +78,11 @@ spec:
               SSA fieldOwner: keese-oidcprovider-controller
 
               VAP (ValidatingAdmissionPolicy) enforces:
-                1. subjectTemplate parses without error
-                2. Every audienceTemplates[].template parses without error
-                3. Sprig allow-list: only trimPrefix, trimSuffix, lower, upper, split, replace
-                4. audienceTemplates contains at least one entry named "egress"
-                5. Every audienceTemplates[].expirationSeconds in [60,600]
+               1. subjectTemplate parses without error
+               2. Every audienceTemplates[].template parses without error
+               3. Sprig allow-list: only trimPrefix, trimSuffix, lower, upper, split, replace
+               4. audienceTemplates contains at least one entry named "egress"
+               5. Every audienceTemplates[].expirationSeconds in [60,600]
             properties:
               audienceTemplates:
                 description: |-

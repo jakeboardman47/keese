@@ -1,11 +1,9 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright (c) 2026 keese-ai
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: workspacesessions.workspace.operator.keese.ai
 spec:
   group: workspace.operator.keese.ai
@@ -64,24 +62,19 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              WorkspaceSessionSpec defines the desired state of WorkspaceSession.
-
-              Name pattern: <workspace>-<subject-hash-16>-<session-name>.
-
-              Finalizer:
-                - finalizers.workspacesession.operator.keese.ai/cleanup
-                  Steps: Draining → AgentRuntime.Drain (90s) → delete Pod → remove OpenFGA tuples → remove finalizer.
-
-              SSA fieldOwner: keese-workspacesession-controller
-
-              Immutable fields (VAP on UPDATE):
-                workspaceRef, attachSubject, sessionName, mode
-
-              VAP on CREATE checks (from design 08b-ii):
-                AttachNotAllowedOnNonInteractiveWorkspace, DuplicateSession,
-                AttachSessionNameForbidden, AttachGraceOutOfBounds,
-                SessionsPerUserLimitExceeded, ConcurrentAttachLimitExceeded
+            description: "WorkspaceSessionSpec defines the desired state of WorkspaceSession.\n\nName
+              pattern: <workspace>-<subject-hash-16>-<session-name>.\n\nFinalizer:\n
+              \ - finalizers.workspacesession.operator.keese.ai/cleanup\n    Steps:
+              Draining → AgentRuntime.Drain (90s) → delete Pod → remove OpenFGA tuples
+              → remove finalizer.\n\nSSA fieldOwner: keese-workspacesession-controller\n\nImmutable
+              fields (VAP on UPDATE):\n\n\tworkspaceRef, attachSubject, sessionName,
+              mode\n\nVAP on CREATE checks (from design 08b-ii):\n\n\tAttachNotAllowedOnNonInteractiveWorkspace,
+              DuplicateSession,\n\tAttachSessionNameForbidden, AttachGraceOutOfBounds,\n\tSessionsPerUserLimitExceeded,
+              ConcurrentAttachLimitExceeded\n\nRange [0,86400] is enforced per-field
+              via +kubebuilder:validation:Minimum/Maximum markers.\nAny spec-level
+              CEL rule on optional int32 fields must use !has(self.field) guards to\navoid
+              \"no such key\" errors at CRD install time when the field is absent
+              (omitempty)."
             properties:
               attachGraceSeconds:
                 description: |-

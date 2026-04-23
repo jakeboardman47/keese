@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	agentRuntimeFinalizer    = "finalizers.agentruntime.operator.keese.ai/drain"
-	agentRuntimeFieldOwner   = "keese-agentruntime-controller"
-	managedLabel             = "keese.ai/managed"
-	managedLabelValue        = "true"
+	agentRuntimeFinalizer  = "finalizers.agentruntime.operator.keese.ai/drain"
+	agentRuntimeFieldOwner = "keese-agentruntime-controller"
+	managedLabel           = "keese.ai/managed"
+	managedLabelValue      = "true"
 )
 
 // AgentRuntimeReconciler reconciles a AgentRuntime object.

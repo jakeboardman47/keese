@@ -87,8 +87,8 @@ func TestMergeBindings(t *testing.T) {
 				makeBinding("cluster", nil, nil, &guardrailv1alpha1.TokenBudget{Input: 0, Total: 5000}, nil),
 				makeBinding("workspace", nil, nil, &guardrailv1alpha1.TokenBudget{Input: 1000, Total: 0}, nil),
 			},
-			wantInput: 1000,  // 0 = no limit, 1000 wins
-			wantTotal: 5000,  // 0 = no limit, 5000 wins
+			wantInput: 1000, // 0 = no limit, 1000 wins
+			wantTotal: 5000, // 0 = no limit, 5000 wins
 		},
 		{
 			name: "rate limit min requests",

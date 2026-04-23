@@ -43,11 +43,11 @@ const (
 //   - finalizers.tokenbudget.operator.keese.ai/envoy-ratelimit-cleanup
 type TokenBudgetReconciler struct {
 	client.Client
-	Scheme          *runtime.Scheme
-	Recorder        record.EventRecorder
-	PromQuerier     PrometheusQuerier
-	NatsSignaler    NatsSignaler
-	RateLimitProj   RateLimitProjector
+	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
+	PromQuerier   PrometheusQuerier
+	NatsSignaler  NatsSignaler
+	RateLimitProj RateLimitProjector
 }
 
 // +kubebuilder:rbac:groups=observability.operator.keese.ai,resources=tokenbudgets,verbs=get;list;watch;create;update;patch;delete

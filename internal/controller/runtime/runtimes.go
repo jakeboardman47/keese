@@ -10,8 +10,8 @@ import (
 // registeredImpls holds the set of implementation names registered via init().
 // Access is protected by registryMu; load-order-stable across packages.
 var (
-	registryMu        sync.RWMutex
-	registeredImpls   = map[string]struct{}{}
+	registryMu      sync.RWMutex
+	registeredImpls = map[string]struct{}{}
 )
 
 // RegisterImpl registers an implementation name into the global registry.

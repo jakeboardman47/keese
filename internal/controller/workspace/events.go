@@ -20,7 +20,7 @@ const (
 	ReasonPVCEnsured            = "PVCEnsured"
 
 	// ReBAC events.
-	ReasonRebacTupleWritten     = "RebacTupleWritten"
+	ReasonRebacTupleWritten      = "RebacTupleWritten"
 	ReasonRebacTupleDeleteFailed = "RebacTupleDeleteFailed"
 
 	// Runtime bootstrap.
@@ -32,13 +32,13 @@ const (
 	ReasonShareRebacTupleDeleteFailed = "ShareRebacTupleDeleteFailed"
 
 	// WorkspaceSession lifecycle events.
-	ReasonSessionAttaching                          = "SessionAttaching"
-	ReasonSessionActive                             = "SessionActive"
-	ReasonSessionDraining                           = "SessionDraining"
-	ReasonSessionEvicted                            = "SessionEvicted"
-	ReasonSessionAttachRejectedNonInteractive       = "SessionAttachRejectedNonInteractive"
-	ReasonSessionDuplicate                          = "SessionDuplicate"
-	ReasonSessionPodProvisioned                     = "SessionPodProvisioned"
-	ReasonSessionPodTornDown                        = "SessionPodTornDown"
-	ReasonSessionAttachedByTupleWritten             = "SessionAttachedByTupleWritten"
+	ReasonSessionAttaching                    = "SessionAttaching"
+	ReasonSessionActive                       = "SessionActive"
+	ReasonSessionDraining                     = "SessionDraining"
+	ReasonSessionEvicted                      = "SessionEvicted"
+	ReasonSessionAttachRejectedNonInteractive = "SessionAttachRejectedNonInteractive"
+	ReasonSessionDuplicate                    = "SessionDuplicate"
+	ReasonSessionPodProvisioned               = "SessionPodProvisioned"
+	ReasonSessionPodTornDown                  = "SessionPodTornDown"
+	ReasonSessionAttachedByTupleWritten       = "SessionAttachedByTupleWritten"
 )

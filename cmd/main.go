@@ -43,6 +43,7 @@ import (
 	argov1alpha1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	envoyaigatewayv1alpha1 "github.com/envoyproxy/ai-gateway/api/v1alpha1"
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	kyvernov2 "github.com/kyverno/kyverno/api/kyverno/v2"
 	eventingv1 "knative.dev/eventing/pkg/apis/eventing/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -83,11 +84,12 @@ func init() {
 	utilruntime.Must(observabilityv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(transportv1alpha1.AddToScheme(scheme))
 
-	// External operator API schemes — types are available but reconcilers still use
-	// Fake* projectors until follow-up per-package replacement work.
+	// External operator API schemes.
 	utilruntime.Must(argov1alpha1.AddToScheme(scheme))
 	utilruntime.Must(eventingv1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.AddToScheme(scheme))
+	// kyvernov1 hosts ClusterPolicy; kyvernov2 hosts PolicyException + CleanupPolicy.
+	utilruntime.Must(kyvernov1.AddToScheme(scheme))
 	utilruntime.Must(kyvernov2.AddToScheme(scheme))
 	utilruntime.Must(envoygatewayv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(envoyaigatewayv1alpha1.AddToScheme(scheme))
@@ -256,9 +258,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceShare")
 		os.Exit(1)
 	}
+	argoProjector := workflowcontroller.NewClientArgoProjector(mgr.GetClient())
 	if err := (&workflowcontroller.WorkflowReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Argo:   argoProjector,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Workflow")
 		os.Exit(1)
@@ -266,6 +270,7 @@ func main() {
 	if err := (&workflowcontroller.WorkflowRunReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Argo:   argoProjector,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WorkflowRun")
 		os.Exit(1)
@@ -313,15 +318,18 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&guardrailcontroller.GuardrailBindingReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("guardrailbinding-controller"),
+		Kyverno:  guardrailcontroller.NewClientKyvernoPolicyProjector(mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GuardrailBinding")
 		os.Exit(1)
 	}
 	if err := (&observabilitycontroller.TokenBudgetReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		RateLimitProj: observabilitycontroller.NewClientRateLimitProjector(mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TokenBudget")
 		os.Exit(1)

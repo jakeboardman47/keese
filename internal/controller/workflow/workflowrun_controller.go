@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 
-	workflowv1alpha1 "github.com/keese-ai/keese/api/workflow/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	workflowv1alpha1 "github.com/keese-ai/keese/api/workflow/v1alpha1"
 )
 
 const (
@@ -59,6 +60,7 @@ type WorkflowRunReconciler struct {
 //  7. Provision NATS JetStream stream.
 //  8. Project Argo Workflow via SSA (with SA audience injection + retry budget).
 //  9. Back-project Argo Workflow status → WorkflowRun.status.
+//
 // 10. Write ReBAC tuples.
 // 11. Patch status.
 func (r *WorkflowRunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -312,10 +314,10 @@ func (r *WorkflowRunReconciler) projectArgoWorkflow(ctx context.Context, wf *wor
 	}
 
 	labels := map[string]string{
-		"keese.ai/managed":               "true",
-		"keese.ai/workflow-run":          wfr.Name,
-		"keese.ai/workflow":              wf.Name,
-		"keese.ai/supervision-context":   "false",
+		"keese.ai/managed":             "true",
+		"keese.ai/workflow-run":        wfr.Name,
+		"keese.ai/workflow":            wf.Name,
+		"keese.ai/supervision-context": "false",
 	}
 	if wfr.Spec.SupervisionContext != nil && wfr.Spec.SupervisionContext.RequireApproval {
 		labels["keese.ai/supervision-context"] = "true"
