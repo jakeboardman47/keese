@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+apiVersion: runtime.operator.keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: agentruntime-goose-full
+spec:
+  implementation:
+    goose:
+      image: ghcr.io/block/goose@sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc123
+      imageTag: v1.2.3
+      migrationPolicy:
+        severity: high
+        maxDeferral: 24h
+      sidecars:
+        acpBridge:
+          image: ghcr.io/keese-ai/keese-acp-bridge@sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef

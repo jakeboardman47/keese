@@ -8,14 +8,15 @@ import (
 )
 
 // WorkspaceSessionPhase represents the lifecycle phase of a WorkspaceSession.
-// +kubebuilder:validation:Enum=Starting;Running;Idle;Draining;Terminating
+// +kubebuilder:validation:Enum=Pending;Attaching;Active;Draining;Evicted;Terminating
 type WorkspaceSessionPhase string
 
 const (
-	WorkspaceSessionPhaseStarting    WorkspaceSessionPhase = "Starting"
-	WorkspaceSessionPhaseRunning     WorkspaceSessionPhase = "Running"
-	WorkspaceSessionPhaseIdle        WorkspaceSessionPhase = "Idle"
+	WorkspaceSessionPhasePending     WorkspaceSessionPhase = "Pending"
+	WorkspaceSessionPhaseAttaching   WorkspaceSessionPhase = "Attaching"
+	WorkspaceSessionPhaseActive      WorkspaceSessionPhase = "Active"
 	WorkspaceSessionPhaseDraining    WorkspaceSessionPhase = "Draining"
+	WorkspaceSessionPhaseEvicted     WorkspaceSessionPhase = "Evicted"
 	WorkspaceSessionPhaseTerminating WorkspaceSessionPhase = "Terminating"
 )
 
@@ -63,7 +64,11 @@ type TokenBudgetRef struct {
 //   AttachSessionNameForbidden, AttachGraceOutOfBounds,
 //   SessionsPerUserLimitExceeded, ConcurrentAttachLimitExceeded
 //
-// +kubebuilder:validation:XValidation:rule="self.attachGraceSeconds >= 0 && self.attachGraceSeconds <= 86400",message="attachGraceSeconds must be in [0,86400]"
+// Range [0,86400] is enforced per-field via +kubebuilder:validation:Minimum/Maximum markers.
+// A spec-level CEL rule on an optional int32 field is omitted here because kube-apiserver
+// CEL type-checking fails at CRD install time when the field is absent; the inline
+// minimum/maximum constraints are sufficient (TODO: spec-followup to add a CEL rule once
+// the field is a pointer type *int32 so has() works correctly).
 type WorkspaceSessionSpec struct {
 	// WorkspaceRef is the name of the parent Workspace in the same namespace.
 	// The Workspace must have spec.interactive: true (VAP-enforced).
@@ -74,10 +79,10 @@ type WorkspaceSessionSpec struct {
 	WorkspaceRef string `json:"workspaceRef"`
 
 	// AttachSubject is the OpenFGA subject form for the attaching identity, e.g. "user:alice@example.com".
-	// Immutable after creation. The workspace controller writes the corresponding
-	// workspace:<workspaceRef>#editor@<attachSubject> tuple on first session creation.
+	// Immutable after creation. The controller writes session:<uid>#attached_by@<attachSubject>
+	// on Active transition and removes it on Terminating.
 	//
-	// +keese:rebac-tuple=workspace#editor
+	// +keese:rebac-tuple=session.attached_by
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="attachSubject is immutable (AttachSubjectImmutable)"
 	AttachSubject string `json:"attachSubject"`
@@ -153,7 +158,7 @@ type WorkspaceSessionStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Namespaced,shortName=wss,categories=keese
+// +kubebuilder:resource:scope=Namespaced,shortName=wsess,categories=keese
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"

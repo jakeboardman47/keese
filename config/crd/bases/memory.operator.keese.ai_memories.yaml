@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -11,39 +13,234 @@ spec:
     kind: Memory
     listKind: MemoryList
     plural: memories
+    shortNames:
+    - mem
     singular: memory
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.provider.type
+      name: Provider
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Memory is the Schema for the memories API.
         properties:
           apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            description: APIVersion defines the versioned schema of this representation of an object.
             type: string
           kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            description: Kind is a string value representing the REST resource this object represents.
             type: string
           metadata:
             type: object
           spec:
-            description: |-
-              MemorySpec is intentionally empty at v1alpha1 until the design
-              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
-              MemorySpec defines the desired state of Memory.
+            description: MemorySpec defines the desired state of Memory.
+            properties:
+              embeddingDim:
+                description: embeddingDim is the dimensionality of stored embeddings. Immutable after creation.
+                format: int32
+                maximum: 65536
+                minimum: 1
+                type: integer
+              provider:
+                description: provider is the discriminated one-of backend configuration.
+                properties:
+                  mem0:
+                    description: mem0 configures the Mem0 hosted provider.
+                    properties:
+                      apiEndpoint:
+                        type: string
+                      credentialSecretRef:
+                        minLength: 1
+                        type: string
+                    required:
+                    - credentialSecretRef
+                    type: object
+                  neo4j:
+                    description: neo4j configures the Neo4j graph backend.
+                    properties:
+                      credentialSecretRef:
+                        type: string
+                      uri:
+                        minLength: 1
+                        type: string
+                    required:
+                    - uri
+                    type: object
+                  pgvector:
+                    description: pgvector configures the PostgreSQL pgvector backend.
+                    properties:
+                      dsnSecretRef:
+                        minLength: 1
+                        type: string
+                      tableName:
+                        default: keese_memory
+                        type: string
+                    required:
+                    - dsnSecretRef
+                    type: object
+                  qdrant:
+                    description: qdrant configures the Qdrant vector backend.
+                    properties:
+                      collectionName:
+                        minLength: 1
+                        type: string
+                      credentialSecretRef:
+                        type: string
+                      endpoint:
+                        minLength: 1
+                        type: string
+                      replicas:
+                        default: 1
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    required:
+                    - collectionName
+                    - endpoint
+                    type: object
+                  redis:
+                    description: redis configures the Redis backend.
+                    properties:
+                      address:
+                        minLength: 1
+                        type: string
+                      credentialSecretRef:
+                        type: string
+                      replicas:
+                        default: 1
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    required:
+                    - address
+                    type: object
+                  sqlite:
+                    description: sqlite configures the SQLite-on-PVC backend.
+                    properties:
+                      reclaimPolicy:
+                        default: Retain
+                        enum:
+                        - Retain
+                        - Delete
+                        type: string
+                      storageClassName:
+                        type: string
+                      storageSize:
+                        default: 1Gi
+                        type: string
+                    type: object
+                  type:
+                    description: type discriminates the active provider field.
+                    enum:
+                    - sqlite
+                    - redis
+                    - qdrant
+                    - pgvector
+                    - neo4j
+                    - mem0
+                    - zep
+                    type: string
+                  zep:
+                    description: zep configures the Zep hosted provider.
+                    properties:
+                      apiEndpoint:
+                        type: string
+                      credentialSecretRef:
+                        minLength: 1
+                        type: string
+                    required:
+                    - credentialSecretRef
+                    type: object
+                required:
+                - type
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of sqlite|redis|qdrant|pgvector|neo4j|mem0|zep must be set
+                  rule: "[has(self.sqlite),has(self.redis),has(self.qdrant),has(self.pgvector),has(self.neo4j),has(self.mem0),has(self.zep)].exists_one(x,x)"
+              workspaceRef:
+                description: workspaceRef is the owning Workspace name in the same namespace.
+                minLength: 1
+                type: string
+            required:
+            - provider
+            - workspaceRef
             type: object
           status:
             description: MemoryStatus defines the observed state of Memory.
+            properties:
+              backendProvisioned:
+                description: backendProvisioned is true when the backend resource has been confirmed present.
+                type: boolean
+              conditions:
+                description: conditions holds standard Kubernetes status conditions.
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: observedGeneration is the .metadata.generation the controller last reconciled.
+                format: int64
+                type: integer
+              phase:
+                description: phase is the current lifecycle phase.
+                enum:
+                - Pending
+                - Provisioning
+                - Ready
+                - Degraded
+                - Terminating
+                type: string
+              rebacTupleCount:
+                description: rebacTupleCount is the number of OpenFGA tuples written for this Memory.
+                format: int32
+                type: integer
             type: object
         type: object
     served: true

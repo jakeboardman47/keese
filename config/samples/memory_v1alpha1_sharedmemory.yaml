@@ -1,9 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Minimal SharedMemory sample — SQLite backend, no sharedWith entries.
 apiVersion: memory.operator.keese.ai/v1alpha1
 kind: SharedMemory
 metadata:
   labels:
     app.kubernetes.io/name: keese
     app.kubernetes.io/managed-by: kustomize
-  name: sharedmemory-sample
+    keese.ai/managed: "true"
+  name: sharedmemory-sample-minimal
+  namespace: default
 spec:
-  # TODO(user): Add fields here
+  tenantRef: acme-tenant
+  provider:
+    type: sqlite
+    sqlite:
+      storageSize: "2Gi"
+      reclaimPolicy: Retain
+  embeddingDim: 768
+---
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Fully-populated SharedMemory sample — Qdrant HA backend with two workspace grants.
+apiVersion: memory.operator.keese.ai/v1alpha1
+kind: SharedMemory
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: sharedmemory-sample-full
+  namespace: default
+spec:
+  tenantRef: acme-tenant
+  provider:
+    type: qdrant
+    qdrant:
+      collectionName: shared-vectors
+      endpoint: "qdrant.qdrant.svc.cluster.local:6334"
+      replicas: 2
+      credentialSecretRef: qdrant-api-key
+  embeddingDim: 1536
+  sharedWith:
+  - name: workspace-alpha
+    namespace: team-alpha
+    access: writer
+  - name: workspace-beta
+    namespace: team-beta
+    access: reader

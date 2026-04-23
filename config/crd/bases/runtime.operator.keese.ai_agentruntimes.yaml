@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -12,38 +14,163 @@ spec:
     listKind: AgentRuntimeList
     plural: agentruntimes
     singular: agentruntime
-  scope: Namespaced
+  scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.provider
+      name: Provider
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: AgentRuntime is the Schema for the agentruntimes API.
+        description: AgentRuntime is the Schema for the agentruntimes API. Cluster-scoped;
+          registers a runtime provider implementation.
         properties:
           apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            description: APIVersion defines the versioned schema of this representation
+              of an object.
             type: string
           kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            description: Kind is a string value representing the REST resource this
+              object represents.
             type: string
           metadata:
             type: object
           spec:
-            description: |-
-              AgentRuntimeSpec is intentionally empty at v1alpha1 until the design
-              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
-              AgentRuntimeSpec defines the desired state of AgentRuntime.
+            description: AgentRuntimeSpec defines the desired state of AgentRuntime.
+            properties:
+              implementation:
+                description: Implementation selects and configures the runtime provider.
+                  Exactly one sub-field must be set (enforced by CEL XValidation).
+                properties:
+                  aider:
+                    description: Aider configures the aider runtime provider (stub
+                      at v1alpha1).
+                    type: object
+                  claudeCode:
+                    description: ClaudeCode configures the Claude Code runtime provider
+                      (stub at v1alpha1).
+                    type: object
+                  goose:
+                    description: Goose configures the goose headless runtime provider.
+                    properties:
+                      image:
+                        description: Image is the OCI reference for the goose runtime
+                          image. In production this must be digest-pinned.
+                        minLength: 1
+                        type: string
+                      imageTag:
+                        description: ImageTag is informational; admission validates
+                          it against SupportedImageVersions.
+                        type: string
+                      migrationPolicy:
+                        description: MigrationPolicy governs how migration severity
+                          gates upgrades.
+                        properties:
+                          maxDeferral:
+                            description: MaxDeferral is the maximum time this runtime
+                              can defer the migration.
+                            type: string
+                          severity:
+                            description: 'Severity of migration: critical|high|medium|low.'
+                            enum:
+                            - critical
+                            - high
+                            - medium
+                            - low
+                            type: string
+                        required:
+                        - severity
+                        type: object
+                      sidecars:
+                        description: Sidecars holds optional sidecar configuration.
+                        properties:
+                          acpBridge:
+                            description: AcpBridge configures the ACP bridge sidecar.
+                            properties:
+                              image:
+                                description: Image is the OCI reference for the ACP
+                                  bridge sidecar.
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - image
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of goose, claudeCode, or aider must be set
+                  rule: "(has(self.goose) ? 1 : 0) + (has(self.claudeCode) ? 1 : 0)\
+                    \ + (has(self.aider) ? 1 : 0) == 1"
+            required:
+            - implementation
             type: object
           status:
             description: AgentRuntimeStatus defines the observed state of AgentRuntime.
+            properties:
+              conditions:
+                description: Conditions holds standard meta/v1 condition entries.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                enum:
+                - Pending
+                - Ready
+                - Degraded
+                - Incompatible
+                type: string
+              provider:
+                type: string
             type: object
         type: object
     served: true

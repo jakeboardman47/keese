@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -14,7 +16,7 @@ spec:
     listKind: WorkspaceSessionList
     plural: workspacesessions
     shortNames:
-    - wss
+    - wsess
     singular: workspacesession
   scope: Namespaced
   versions:
@@ -92,8 +94,8 @@ spec:
               attachSubject:
                 description: |-
                   AttachSubject is the OpenFGA subject form for the attaching identity, e.g. "user:alice@example.com".
-                  Immutable after creation. The workspace controller writes the corresponding
-                  workspace:<workspaceRef>#editor@<attachSubject> tuple on first session creation.
+                  Immutable after creation. The controller writes session:<uid>#attached_by@<attachSubject>
+                  on Active transition and removes it on Terminating.
                 minLength: 1
                 type: string
                 x-kubernetes-validations:
@@ -142,9 +144,6 @@ spec:
             - sessionName
             - workspaceRef
             type: object
-            x-kubernetes-validations:
-            - message: attachGraceSeconds must be in [0,86400]
-              rule: self.attachGraceSeconds >= 0 && self.attachGraceSeconds <= 86400
           status:
             description: WorkspaceSessionStatus defines the observed state of WorkspaceSession.
             properties:
@@ -237,10 +236,11 @@ spec:
               phase:
                 description: Phase is the lifecycle phase of the session.
                 enum:
-                - Starting
-                - Running
-                - Idle
+                - Pending
+                - Attaching
+                - Active
                 - Draining
+                - Evicted
                 - Terminating
                 type: string
               podRef:

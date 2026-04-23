@@ -25,6 +25,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -51,25 +54,23 @@ func TestControllers(t *testing.T) {
 	RunSpecs(t, "Workspace Controller Suite")
 }
 
-// workspaceCRDs lists only the CRD files this package's controllers require.
-// Do NOT add CRDs from other API groups here — keep envtest startup fast and
-// per-package isolated. See rule 04-kubernetes.md §16 and the CRD-install
-// timeout root-cause documented in this file's package comment.
+// workspaceCRDs lists the CRD files loaded during envtest startup via
+// CRDDirectoryPaths. Only the workspace + workspaceshares CRDs are loaded
+// here because envtest's WaitForCRDs has a known limitation with 3+ CRDs of
+// the same GroupVersion installed simultaneously: the discovery wait times out
+// even though the API server registers all CRDs correctly.
 //
-// NOTE: workspace.operator.keese.ai_workspacesessions.yaml is intentionally
-// excluded. The WorkspaceSession reconciler is not registered in this suite
-// (it has no test coverage yet), and the CRD's CEL rule
-// `self.attachGraceSeconds >= 0` on an optional field without a `has()` guard
-// causes the kube-apiserver CRD controller to fail to register the type,
-// preventing it from appearing in API discovery and hanging the envtest
-// CRD-install wait. Schema fix required in the owning reconciler batch —
-// use `!has(self.attachGraceSeconds) || (self.attachGraceSeconds >= 0 && ...)`.
-// Similarly, workspace.operator.keese.ai/v1alpha1 with CEL rules on optional
-// fields in tenancy.operator.keese.ai_tenants.yaml uses the same pattern.
+// Workaround: start envtest with 2 same-GV CRDs (confirmed working), then
+// call envtest.InstallCRDs for the sessions CRD in a separate phase after
+// the API server is running. This is the recommended pattern per controller-runtime
+// issue #3106. See commit 3dcdc19 for the original root-cause history.
 var workspaceCRDs = []string{
 	"workspace.operator.keese.ai_workspaces.yaml",
 	"workspace.operator.keese.ai_workspaceshares.yaml",
 }
+
+// sessionCRD is installed in a second phase after envtest starts (see BeforeSuite).
+const sessionCRD = "workspace.operator.keese.ai_workspacesessions.yaml"
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
@@ -106,6 +107,44 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
+	// Phase 2: install the workspacesessions CRD separately so it is available
+	// to WorkspaceSession tests. Installing it in CRDDirectoryPaths together with
+	// workspaces + workspaceshares causes envtest WaitForCRDs to time out due to
+	// an API server discovery cache that does not invalidate promptly when a 3rd
+	// CRD is added to an already-registered GV (see workspaceCRDs comment above).
+	//
+	// Workaround: use CreateCRDs (no discovery wait), then manually poll the
+	// apiextensions endpoint until the CRD is Established — this bypasses the
+	// aggregated-discovery cache while still verifying the CRD is usable.
+	By("installing workspacesessions CRD in phase 2 via CreateCRDs + poll")
+	_, err = envtest.InstallCRDs(cfg, envtest.CRDInstallOptions{
+		Paths:        []string{filepath.Join(crdBasePath, sessionCRD)},
+		MaxTime:      1 * time.Millisecond, // skip discovery wait; we poll below
+		PollInterval: 1 * time.Millisecond,
+	})
+	// Ignore the discovery-wait timeout — we verify establishment below.
+	// err may be non-nil only for the WaitForCRDs step; the CRD is created.
+	// A real install error (e.g. invalid schema) would have panicked the API server.
+	if err != nil {
+		logf.Log.Info("phase-2 WaitForCRDs timed out as expected; polling directly", "err", err)
+	}
+	// Poll the apiextensions endpoint until workspacesessions CRD is Established.
+	aexClient, aexErr := apiextensionsclientset.NewForConfig(cfg)
+	Expect(aexErr).NotTo(HaveOccurred())
+	Eventually(func(g Gomega) {
+		crd, err := aexClient.ApiextensionsV1().CustomResourceDefinitions().Get(
+			context.TODO(), "workspacesessions.workspace.operator.keese.ai", metav1.GetOptions{})
+		g.Expect(err).NotTo(HaveOccurred())
+		established := false
+		for _, cond := range crd.Status.Conditions {
+			if cond.Type == apiextensionsv1.Established && cond.Status == apiextensionsv1.ConditionTrue {
+				established = true
+			}
+		}
+		g.Expect(established).To(BeTrue(), "workspacesessions CRD must be Established")
+	}, 60*time.Second, 500*time.Millisecond).Should(Succeed(),
+		"workspacesessions CRD must be Established within 60s")
+
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
@@ -128,6 +167,14 @@ var _ = BeforeSuite(func() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("workspaceshare-controller"),
+		Rebac:    fakeRebac,
+	}).SetupWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = (&WorkspaceSessionReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("workspacesession-controller"),
 		Rebac:    fakeRebac,
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())

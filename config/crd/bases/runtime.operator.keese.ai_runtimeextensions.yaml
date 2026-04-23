@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -14,36 +16,127 @@ spec:
     singular: runtimeextension
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.runtimeRef.name
+      name: Runtime
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: RuntimeExtension is the Schema for the runtimeextensions API.
+          Namespaced; bundles N tools for a runtime and manages ReBAC tuples.
         properties:
           apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            description: APIVersion defines the versioned schema of this representation
+              of an object.
             type: string
           kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            description: Kind is a string value representing the REST resource this
+              object represents.
             type: string
           metadata:
             type: object
           spec:
-            description: |-
-              RuntimeExtensionSpec is intentionally empty at v1alpha1 until the design
-              gate opens. See .claude/rules/04-kubernetes.md and the plan file.
-              RuntimeExtensionSpec defines the desired state of RuntimeExtension.
+            description: RuntimeExtensionSpec defines the desired state of RuntimeExtension.
+            properties:
+              description:
+                description: Description is a human-readable summary of this extension.
+                type: string
+              runtimeRef:
+                description: RuntimeRef points to the AgentRuntime this extension
+                  is bound to.
+                properties:
+                  name:
+                    description: Name of the AgentRuntime.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              tools:
+                description: Tools is the allow-list of tools this extension exposes.
+                items:
+                  description: ExtensionToolRef names a tool that this extension exposes.
+                  properties:
+                    name:
+                      description: Name must match a tool name permitted by the GuardrailBinding
+                        effective policy.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+            required:
+            - runtimeRef
             type: object
           status:
             description: RuntimeExtensionStatus defines the observed state of RuntimeExtension.
+            properties:
+              boundWorkspaces:
+                description: BoundWorkspaces is the count of active enabled_in tuples.
+                format: int32
+                type: integer
+              conditions:
+                description: Conditions holds standard meta/v1 condition entries.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                enum:
+                - Pending
+                - Ready
+                - Degraded
+                type: string
             type: object
         type: object
     served: true

@@ -7,9 +7,13 @@ metadata:
     app.kubernetes.io/name: keese
     app.kubernetes.io/managed-by: kustomize
     keese.ai/managed: "true"
-  name: runtimeextension-minimal
+  name: runtimeextension-full
   namespace: default
 spec:
   runtimeRef:
-    name: agentruntime-minimal
-  description: Minimal RuntimeExtension example
+    name: agentruntime-goose-full
+  description: Fully populated RuntimeExtension example with tool allow-list
+  tools:
+    - name: bash
+    - name: read_file
+    - name: write_file

@@ -1,18 +1,5 @@
-/*
-Copyright 2026.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 keese-ai
 
 package v1alpha1
 
@@ -20,22 +7,90 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// WorkspaceRef is a reference to a Workspace that receives shared access.
+type WorkspaceRef struct {
+	// name is the Workspace name.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 
-// TODO(design-gate): schema defined in docs/designs/15-memory-management.md
-// SharedMemorySpec is intentionally empty at v1alpha1 until the design
-// gate opens. See .claude/rules/04-kubernetes.md and the plan file.
+	// namespace is the namespace containing the Workspace.
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace"`
+
+	// access controls whether the workspace gets reader or writer access.
+	// The controller writes memory.reader or memory.writer ReBAC tuples accordingly.
+	// +keese:rebac-tuple=memory.reader
+	// +keese:rebac-tuple=memory.writer
+	// +kubebuilder:validation:Enum=reader;writer
+	// +kubebuilder:default=reader
+	// +optional
+	Access string `json:"access,omitempty"`
+}
+
 // SharedMemorySpec defines the desired state of SharedMemory.
+//
+// +kubebuilder:validation:XValidation:rule="[has(self.provider.sqlite),has(self.provider.redis),has(self.provider.qdrant),has(self.provider.pgvector),has(self.provider.neo4j),has(self.provider.mem0),has(self.provider.zep)].exists_one(x,x)",message="exactly one of sqlite|redis|qdrant|pgvector|neo4j|mem0|zep must be set"
 type SharedMemorySpec struct {
+	// tenantRef is the owning Tenant name (cluster-level reference).
+	// Only the tenant admin may mutate sharedWith[]; enforced by the
+	// SharedMemoryMutationAuthz VAP which calls OpenFGA (≤15ms 1-hop).
+	// +kubebuilder:validation:MinLength=1
+	TenantRef string `json:"tenantRef"`
+
+	// provider is the discriminated one-of backend configuration.
+	// Same semantics as Memory.spec.provider.
+	// +kubebuilder:validation:Required
+	Provider MemoryProvider `json:"provider"`
+
+	// embeddingDim is the dimensionality of stored embeddings.
+	// Immutable after creation; enforced by the EmbeddingDimImmutable VAP.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65536
+	// +optional
+	EmbeddingDim int32 `json:"embeddingDim,omitempty"`
+
+	// sharedWith is the list of Workspaces that receive access grants.
+	// Each element causes the controller to write memory.reader or memory.writer
+	// OpenFGA tuples for the workspace's ServiceAccount.
+	// Mutations require tenant admin authz (SharedMemoryMutationAuthz VAP).
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	SharedWith []WorkspaceRef `json:"sharedWith,omitempty"`
 }
 
 // SharedMemoryStatus defines the observed state of SharedMemory.
 type SharedMemoryStatus struct {
+	// observedGeneration is the .metadata.generation the controller last reconciled.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// phase is the current lifecycle phase.
+	// +optional
+	Phase MemoryPhase `json:"phase,omitempty"`
+
+	// conditions holds standard Kubernetes status conditions.
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// rebacTupleCount is the number of OpenFGA tuples currently written for this SharedMemory.
+	// +optional
+	RebacTupleCount int32 `json:"rebacTupleCount,omitempty"`
+
+	// backendProvisioned is true when the backend resource has been confirmed present.
+	// +optional
+	BackendProvisioned bool `json:"backendProvisioned,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Namespaced,shortName=smem
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Provider",type="string",JSONPath=".spec.provider.type"
 
 // SharedMemory is the Schema for the sharedmemories API.
 type SharedMemory struct {

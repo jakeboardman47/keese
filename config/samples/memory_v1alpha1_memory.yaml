@@ -1,9 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Minimal Memory sample — SQLite backend.
 apiVersion: memory.operator.keese.ai/v1alpha1
 kind: Memory
 metadata:
   labels:
     app.kubernetes.io/name: keese
     app.kubernetes.io/managed-by: kustomize
-  name: memory-sample
+    keese.ai/managed: "true"
+  name: memory-sample-sqlite
+  namespace: default
 spec:
-  # TODO(user): Add fields here
+  workspaceRef: my-workspace
+  provider:
+    type: sqlite
+    sqlite:
+      storageSize: "2Gi"
+      reclaimPolicy: Retain
+  embeddingDim: 768
+---
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Fully-populated Memory sample — Redis backend with HA.
+apiVersion: memory.operator.keese.ai/v1alpha1
+kind: Memory
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: memory-sample-redis
+  namespace: default
+spec:
+  workspaceRef: my-workspace
+  provider:
+    type: redis
+    redis:
+      address: "redis-master.redis.svc.cluster.local:6379"
+      replicas: 2
+      credentialSecretRef: redis-memory-creds
+  embeddingDim: 1536

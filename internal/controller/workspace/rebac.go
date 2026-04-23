@@ -49,3 +49,30 @@ func (f *FakeRebacWriter) Delete(_ context.Context, tuples []RebacTuple) error {
 }
 
 var _ RebacWriter = &FakeRebacWriter{}
+
+// sessionAttachedByTuple returns the OpenFGA tuple that records the attaching
+// identity for a WorkspaceSession:
+//
+//	session:<sessionUID>#attached_by@<attachSubject>
+//
+// It is written on the Active transition and deleted on Terminating.
+// The attachSubject already carries the FGA user-type prefix (e.g. "user:alice@example.com").
+func sessionAttachedByTuple(sessionUID, attachSubject string) RebacTuple {
+	return RebacTuple{
+		Object:   "session:" + sessionUID,
+		Relation: "attached_by",
+		User:     attachSubject,
+	}
+}
+
+// WriteSessionAttachedBy is a convenience wrapper that syncs the attached_by
+// tuple for the given session UID + subject.
+func WriteSessionAttachedBy(ctx context.Context, w RebacWriter, sessionUID, attachSubject string) error {
+	return w.Sync(ctx, []RebacTuple{sessionAttachedByTuple(sessionUID, attachSubject)})
+}
+
+// DeleteSessionAttachedBy is a convenience wrapper that removes the attached_by
+// tuple for the given session UID + subject.
+func DeleteSessionAttachedBy(ctx context.Context, w RebacWriter, sessionUID, attachSubject string) error {
+	return w.Delete(ctx, []RebacTuple{sessionAttachedByTuple(sessionUID, attachSubject)})
+}

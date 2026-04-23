@@ -27,7 +27,18 @@ const (
 	ReasonRuntimeBootstrapFailed = "RuntimeBootstrapFailed"
 
 	// WorkspaceShare events.
-	ReasonShareReferenceGrantEnsured = "ShareReferenceGrantEnsured"
-	ReasonShareRebacTupleWritten     = "ShareRebacTupleWritten"
+	ReasonShareReferenceGrantEnsured  = "ShareReferenceGrantEnsured"
+	ReasonShareRebacTupleWritten      = "ShareRebacTupleWritten"
 	ReasonShareRebacTupleDeleteFailed = "ShareRebacTupleDeleteFailed"
+
+	// WorkspaceSession lifecycle events.
+	ReasonSessionAttaching                          = "SessionAttaching"
+	ReasonSessionActive                             = "SessionActive"
+	ReasonSessionDraining                           = "SessionDraining"
+	ReasonSessionEvicted                            = "SessionEvicted"
+	ReasonSessionAttachRejectedNonInteractive       = "SessionAttachRejectedNonInteractive"
+	ReasonSessionDuplicate                          = "SessionDuplicate"
+	ReasonSessionPodProvisioned                     = "SessionPodProvisioned"
+	ReasonSessionPodTornDown                        = "SessionPodTornDown"
+	ReasonSessionAttachedByTupleWritten             = "SessionAttachedByTupleWritten"
 )
