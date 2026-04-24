@@ -426,6 +426,128 @@ var _ = Describe("OIDCProviderReconciler", func() {
 				"user-added label must survive reconcile")
 		})
 	})
+
+	// --- Spec 8: Bootstrap placeholder-issuer skip ---
+	// NOTE: this Describe was placed outside the outer var _ = Describe by the
+	// parallel controller-author agent; moved inside to fix compilation.
+	Describe("Bootstrap placeholder-issuer: skip reconcile until admin overrides", func() {
+		var (
+			provider *authzv1alpha1.OIDCProvider
+			nsn      types.NamespacedName
+			recorder *capturingOIDCRecorder
+			r        *OIDCProviderReconciler
+		)
+
+		BeforeEach(func() {
+			provider = makeOIDCProvider(fmt.Sprintf("oidcp-placeholder-%d", GinkgoRandomSeed()))
+			// Mark as bootstrap and set a placeholder issuer (azure-entra style).
+			provider.Labels[bootstrapLabel] = bootstrapLabelValue
+			provider.Spec.Issuer = "https://login.microsoftonline.com/{tenant-id}/v2.0"
+			Expect(k8sClient.Create(ctx, provider)).To(Succeed())
+			nsn = namespacedName(provider.Name)
+			recorder = &capturingOIDCRecorder{}
+			r = &OIDCProviderReconciler{
+				Client:       k8sClient,
+				Scheme:       k8sClient.Scheme(),
+				Recorder:     recorder,
+				JwksFetcher:  &FakeJwksFetcher{},
+				CacheFlusher: &FakeCacheFlusher{},
+			}
+		})
+
+		AfterEach(func() {
+			obj := &authzv1alpha1.OIDCProvider{}
+			if err := k8sClient.Get(ctx, nsn, obj); err == nil {
+				obj.Finalizers = nil
+				_ = k8sClient.Update(ctx, obj)
+				_ = k8sClient.Delete(ctx, obj)
+			}
+			Eventually(func() bool {
+				var gone authzv1alpha1.OIDCProvider
+				return k8sClient.Get(ctx, nsn, &gone) != nil
+			}, eventuallyTimeout, eventuallyInterval).Should(BeTrue(),
+				"OIDCProvider %s must be fully deleted before next spec", nsn.Name)
+		})
+
+		It("sets Degraded + BootstrapPlaceholderIssuer and does not fire TemplateInvalid", func() {
+			// Pass 1: adds finalizer.
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Pass 2: placeholder guard fires.
+			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(requeuePlaceholderInterval),
+				"should requeue at the placeholder interval")
+
+			var fresh authzv1alpha1.OIDCProvider
+			Expect(k8sClient.Get(ctx, nsn, &fresh)).To(Succeed())
+
+			// Phase must be Degraded.
+			Expect(fresh.Status.Phase).To(Equal(authzv1alpha1.OIDCProviderPhaseDegraded),
+				"placeholder issuer must set phase Degraded")
+
+			// Ready condition must be False with BootstrapPlaceholderIssuer reason.
+			var ready *metav1.Condition
+			for i := range fresh.Status.Conditions {
+				if fresh.Status.Conditions[i].Type == conditionReady {
+					ready = &fresh.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(ready).NotTo(BeNil(), "Ready condition must be set")
+			Expect(ready.Status).To(Equal(metav1.ConditionFalse))
+			Expect(ready.Reason).To(Equal(ReasonBootstrapPlaceholderIssuer))
+
+			// BootstrapPlaceholderIssuer event must be emitted.
+			Expect(recorder.HasReason(ReasonBootstrapPlaceholderIssuer)).To(BeTrue(),
+				"BootstrapPlaceholderIssuer event must be emitted")
+
+			// TemplateInvalid must NOT have fired — template validation was skipped.
+			Expect(recorder.HasReason(ReasonTemplateInvalid)).To(BeFalse(),
+				"template validation must be skipped for placeholder-issuer CRs")
+		})
+
+		It("transitions out of Degraded placeholder state after admin updates issuer", func() {
+			// Establish initial Degraded state.
+			_, _ = r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn}) // add finalizer
+			_, _ = r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn}) // placeholder guard
+
+			var obj authzv1alpha1.OIDCProvider
+			Expect(k8sClient.Get(ctx, nsn, &obj)).To(Succeed())
+			Expect(obj.Status.Phase).To(Equal(authzv1alpha1.OIDCProviderPhaseDegraded))
+
+			// Admin overrides the issuer with a real URL.
+			obj.Spec.Issuer = "https://login.microsoftonline.com/acme.onmicrosoft.com/v2.0"
+			// Also set JWKSUri so the JWKS probe succeeds without a live endpoint.
+			obj.Spec.JWKSUri = "https://login.microsoftonline.com/acme.onmicrosoft.com/discovery/v2.0/keys"
+			Expect(k8sClient.Update(ctx, &obj)).To(Succeed())
+
+			// Reconcile with real issuer — should exit placeholder path and proceed.
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
+			Expect(err).NotTo(HaveOccurred())
+
+			var fresh authzv1alpha1.OIDCProvider
+			Expect(k8sClient.Get(ctx, nsn, &fresh)).To(Succeed())
+
+			// Phase must no longer be Degraded due to placeholder (it will be Active
+			// after successful template validation, even if JWKS probe is faked).
+			Expect(fresh.Status.Phase).NotTo(Equal(authzv1alpha1.OIDCProviderPhaseDegraded),
+				"phase must transition out of Degraded after admin fixes placeholder issuer")
+
+			// Ready condition reason must no longer be BootstrapPlaceholderIssuer.
+			var ready *metav1.Condition
+			for i := range fresh.Status.Conditions {
+				if fresh.Status.Conditions[i].Type == conditionReady {
+					ready = &fresh.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(ready).NotTo(BeNil(), "Ready condition must be set")
+			Expect(ready.Reason).NotTo(Equal(ReasonBootstrapPlaceholderIssuer),
+				"Ready reason must change once placeholder is resolved")
+		})
+	})
 })
 
 // noopOIDCRecorder satisfies record.EventRecorder without emitting anything.

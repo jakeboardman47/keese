@@ -26,5 +26,6 @@ const (
 	ReasonCacheFlushTimeout  = "CacheFlushTimeout"
 
 	// Bootstrap events.
-	ReasonBootstrapCRPreserved = "BootstrapCRPreserved"
+	ReasonBootstrapCRPreserved       = "BootstrapCRPreserved"
+	ReasonBootstrapPlaceholderIssuer = "BootstrapPlaceholderIssuer"
 )

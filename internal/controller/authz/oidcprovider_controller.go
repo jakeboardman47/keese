@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -25,7 +26,19 @@ import (
 	authzv1alpha1 "github.com/keese-ai/keese/api/authz/v1alpha1"
 )
 
+// placeholderRe matches any substring of the form {token} or <token> where token
+// starts with a letter or underscore and contains only word-chars and hyphens.
+// Examples: {tenant-id}, <okta-domain>, <keycloak-host>, <realm>.
+// The regex uses a non-greedy interior so mismatched-bracket strings like
+// "https://{broken-" (no closing brace) do NOT match.
+var placeholderRe = regexp.MustCompile(`[{<][A-Za-z_][A-Za-z0-9_-]*[>}]`)
+
 const (
+	// requeuePlaceholderInterval is how often a bootstrap CR with a placeholder issuer
+	// is re-checked. The GenerationChangedPredicate will also trigger earlier if the
+	// admin updates the issuer.
+	requeuePlaceholderInterval = 1 * time.Hour
+
 	// oidcProviderFinalizer is placed on every OIDCProvider CR that has been
 	// reconciled, ensuring the cache-flush signal is sent to gateway pods before
 	// Kubernetes removes the object. Format per rule 04.10.
@@ -140,6 +153,28 @@ func (r *OIDCProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 		orig = provider.DeepCopy()
+	}
+
+	// --- Placeholder-issuer guard (bootstrap CRs) ---
+	// Bootstrap CRs may ship with template placeholders (e.g. {tenant-id}, <okta-domain>)
+	// that admins must override before the provider is usable. Skip the full reconcile
+	// path so we do not hammer unreachable placeholder URLs on every JWKS probe cycle.
+	if isBootstrapCR(&provider) && detectPlaceholderIssuer(provider.Spec.Issuer) {
+		provider.Status.Phase = authzv1alpha1.OIDCProviderPhaseDegraded
+		provider.Status.ObservedGeneration = provider.Generation
+		setOIDCCondition(&provider.Status.Conditions, metav1.Condition{
+			Type:               conditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             ReasonBootstrapPlaceholderIssuer,
+			Message:            fmt.Sprintf("issuer %q contains a placeholder; admin must override before first reconcile", provider.Spec.Issuer),
+			ObservedGeneration: provider.Generation,
+		})
+		r.Recorder.Eventf(&provider, corev1.EventTypeWarning, ReasonBootstrapPlaceholderIssuer,
+			"issuer %q contains a placeholder; admin must override before first reconcile", provider.Spec.Issuer)
+		if err := r.patchStatus(ctx, &provider, orig); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: requeuePlaceholderInterval}, nil
 	}
 
 	// --- Template validation ---
@@ -340,6 +375,21 @@ func (r *OIDCProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Named("authz-oidcprovider").
 		Complete(r)
+}
+
+// detectPlaceholderIssuer returns true when the issuer URL contains a template
+// placeholder token that an admin must replace before the provider is usable.
+// Recognized forms:
+//   - {token}  — curly-brace style (e.g. Azure Entra {tenant-id})
+//   - <token>  — angle-bracket style (e.g. Okta <okta-domain>, Keycloak <realm>)
+//
+// The token must start with a letter or underscore and contain only word chars
+// and hyphens — this prevents false positives on valid IPv6 addresses, HTML
+// entities, and template/regex syntax that would otherwise contain < or {.
+// Mismatched brackets (e.g. "https://{broken-" with no closing brace) do NOT
+// match because the regex requires a closing delimiter.
+func detectPlaceholderIssuer(issuer string) bool {
+	return placeholderRe.MatchString(issuer)
 }
 
 // setOIDCCondition upserts a condition into the slice (by Type).
