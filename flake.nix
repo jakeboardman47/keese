@@ -5,7 +5,7 @@
   description = "keese — reproducible dev environment";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -14,6 +14,13 @@
       let
         pkgs = import nixpkgs { inherit system; };
         isLinux = pkgs.lib.hasSuffix "-linux" system;
+
+        # Upstream nixpkgs ships open-policy-agent 1.6.0 with a broken test
+        # suite (v1/server/server_bench_test.go references undefined symbols
+        # `newReqV1` and `fixture`). Skip checks until the next bump.
+        open-policy-agent = pkgs.open-policy-agent.overrideAttrs (_: {
+          doCheck = false;
+        });
       in
       {
         devShells.default = pkgs.mkShell {
@@ -47,7 +54,7 @@
             # ===== Diagrams (text → SVG) =====
             d2
             graphviz
-            nodePackages.mermaid-cli
+            mermaid-cli
 
             # ===== Documentation (mkdocs) =====
             python312
@@ -101,7 +108,7 @@
             # tflint             # unverified naming in nixpkgs
             # terraform-ls       # works with tofu; verify naming
             conftest
-            opa
+            open-policy-agent
 
             # ===== Container tooling =====
             crane
