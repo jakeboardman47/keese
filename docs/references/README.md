@@ -26,6 +26,7 @@ or specs (what), references tell you **how** to do a recurring operation.
 | Agent dispatch (multi-agent worktree flow) | [agent-dispatch.md](agent-dispatch.md) |
 | Git worktree merging | [git-worktree-merging.md](git-worktree-merging.md) |
 | Model selection for subagents | [model-selection.md](model-selection.md) |
+| End-to-end kind smoke harness | [e2e-smoke.md](e2e-smoke.md) |
 
 Add a reference when you find yourself explaining the same "how" twice. Update it when
 a vendor or tool changes.

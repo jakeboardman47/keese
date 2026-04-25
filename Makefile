@@ -196,6 +196,10 @@ tilt-up:  ## tilt up (hot-reload operator)
 tilt-down:  ## tilt down
 	@tilt down
 
+.PHONY: e2e-smoke
+e2e-smoke:  ## End-to-end kind smoke (kind + bootstrap + operator + samples). Pass --no-keep to tear down.
+	@bash $(SCRIPTS_DIR)/dev/e2e-smoke.sh $(MAKEFLAGS)
+
 .PHONY: smoke
 smoke:  ## Post-gate smoke test
 	@$(GUARD_CONTEXT)
