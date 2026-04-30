@@ -35,6 +35,21 @@ last_verified: 2026-04-22
 | P7 | Local infra bootstrap (kind/tilt/full stack) | P6 | sonnet | 91 | planned |
 | P8 | Design-gate freeze enforcement | P4, P6 | opus+sonnet | 91 | planned |
 
+## Demo track (post-gate, time-boxed to Mon 2026-04-27 AM)
+
+Time-boxed phased plan to land the first end-to-end agent demo on a real
+cloud cluster. Targets SHIP ≥ 85; tech-debt register captures every
+shortcut. See [demo/README.md](demo/README.md) for the full index.
+
+| Phase | Title | Effort | Status |
+|---|---|---|---|
+| D1 | [Controller wiring + samples + bundle regen](demo/D1-controller-wiring.md) | 3–4 h | planned |
+| D2 | [Agent runtime minimum SPI](demo/D2-runtime-spi-minimum.md) | 5–7 h | planned |
+| D3 | [Cluster bootstrap + Anthropic LLM wiring](demo/D3-cluster-bootstrap.md) | 3–4 h | planned |
+| D4 | [Cloud deploy](demo/D4-cloud-deploy.md) | 3–4 h | planned |
+| D5 | [Demo smoke + runbook](demo/D5-demo-smoke.md) | 2 h | planned |
+| TD | [Tech-debt register (post-demo cleanup)](demo/tech-debt.md) | tracked | open |
+
 ## Parallel execution groups
 
 - **Group A (P0–P3):** sequential foundation; must all ship before Group B.
