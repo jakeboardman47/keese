@@ -1,7 +1,10 @@
+## SPDX-License-Identifier: Apache-2.0
+## Copyright (c) 2026 keese-ai
 ## Append samples of your project ##
 resources:
 - workspace_v1alpha1_workspace.yaml
 - workspace_v1alpha1_workspaceshare.yaml
+- workspace/workspacesession-minimal.yaml
 - workflow_v1alpha1_workflow.yaml
 - workflow_v1alpha1_workflowrun.yaml
 - runtime_v1alpha1_agentruntime.yaml
@@ -13,4 +16,7 @@ resources:
 - guardrail_v1alpha1_guardrailbinding.yaml
 - observability_v1alpha1_tokenbudget.yaml
 - transport_v1alpha1_transport.yaml
+- tenancy/tenant-minimal.yaml
+- tenancy/cra-alpha-to-beta-minimal.yaml
+- authz/oidcprovider-minimal.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

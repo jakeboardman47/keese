@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Bootstrap GuardrailBinding: keese-default
+# Cluster-scoped fallback binding installed at deploy time. Workspaces that
+# do not declare an explicit GuardrailBinding inherit this one through the
+# scope merge lattice (see docs/designs/06-guardrailbinding.md).
+#
+# Default posture: deny-by-default for known-dangerous tools, no token
+# budget, no rate-limit caps. Tenant- and Workspace-scoped bindings
+# tighten via the strictest-wins merge.
+#
+# keese.ai/bootstrap: "true" marks this CR as operator-owned; the
+# guardrailbinding controller preserves user-managed fields via the
+# keese-guardrailbinding-bootstrap SSA field manager.
+apiVersion: guardrail.operator.keese.ai/v1alpha1
+kind: GuardrailBinding
+metadata:
+  name: keese-default
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/binding-scope: Cluster
+spec:
+  scope:
+    type: Cluster
+  tools:
+    # Empty allow == allow all; deny baseline blocks the
+    # most-dangerous shell verbs by name.
+    deny:
+      - shell.exec
+      - filesystem.delete
+      - kubernetes.exec
+    rateLimit:
+      requests: 0   # 0 == unlimited at the cluster default
+      window: "1m"
+      scope: sa
+  tokenBudget:
+    input: 0   # 0 == unlimited
+    output: 0
+    total: 0

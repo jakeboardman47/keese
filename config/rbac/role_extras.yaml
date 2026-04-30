@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Supplemental ClusterRole rules that controller-gen v0.18.0 silently
+# drops from the recipe + memory packages despite the // +kubebuilder:rbac
+# markers being present (TD-P1: investigate controller-gen marker
+# loading). Mirrored verbatim from the markers in
+# internal/controller/{recipe,memory}/*_controller.go.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role-extras
+rules:
+  # ---- recipe.operator.keese.ai ----
+  - apiGroups: [recipe.operator.keese.ai]
+    resources: [recipes, recipesources]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [recipe.operator.keese.ai]
+    resources: [recipes/status, recipesources/status]
+    verbs: [get, update, patch]
+  - apiGroups: [recipe.operator.keese.ai]
+    resources: [recipes/finalizers, recipesources/finalizers]
+    verbs: [update]
+  # ---- memory.operator.keese.ai ----
+  - apiGroups: [memory.operator.keese.ai]
+    resources: [memories, sharedmemories]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [memory.operator.keese.ai]
+    resources: [memories/status, sharedmemories/status]
+    verbs: [get, update, patch]
+  - apiGroups: [memory.operator.keese.ai]
+    resources: [memories/finalizers, sharedmemories/finalizers]
+    verbs: [update]
+  # ---- core: PVC and ConfigMap reads (recipe + memory) ----
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list, watch]
+  # ---- tenancy.operator.keese.ai/crosstenantagreements ----
+  # The kubebuilder:rbac marker on crosstenanagreement_controller.go uses the
+  # typo'd plural "crosstenanagreements" (missing 't'). The actual CRD plural
+  # is "crosstenantagreements". Until the marker is corrected and regenerated
+  # the controller cannot list its own kind without these supplemental rules.
+  # TODO(TD-P1): rename marker + identifier to match CRD plural.
+  - apiGroups: [tenancy.operator.keese.ai]
+    resources: [crosstenantagreements]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [tenancy.operator.keese.ai]
+    resources: [crosstenantagreements/status]
+    verbs: [get, update, patch]
+  - apiGroups: [tenancy.operator.keese.ai]
+    resources: [crosstenantagreements/finalizers]
+    verbs: [update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: manager-role-extras-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-role-extras
+subjects:
+  - kind: ServiceAccount
+    name: keese-controller-manager
+    namespace: keese-system

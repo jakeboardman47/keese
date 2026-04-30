@@ -16,3 +16,4 @@ resources:
 - oidcprovider-okta.yaml
 - oidcprovider-keycloak.yaml
 - oidcprovider-gitlab.yaml
+- guardrailbinding-cluster-default.yaml

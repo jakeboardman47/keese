@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 resources:
 # All RBAC will be applied under this service account in
 # the deployment namespace. You may comment out this resource
@@ -7,6 +9,7 @@ resources:
 - service_account.yaml
 - role.yaml
 - role_binding.yaml
+- role_extras.yaml
 - leader_election_role.yaml
 - leader_election_role_binding.yaml
 # The following RBAC configurations are used to protect

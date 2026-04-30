@@ -7,6 +7,7 @@
 resources:
 - bases/workspace.operator.keese.ai_workspaces.yaml
 - bases/workspace.operator.keese.ai_workspaceshares.yaml
+- bases/workspace.operator.keese.ai_workspacesessions.yaml
 - bases/workflow.operator.keese.ai_workflows.yaml
 - bases/workflow.operator.keese.ai_workflowruns.yaml
 - bases/runtime.operator.keese.ai_agentruntimes.yaml
@@ -19,6 +20,8 @@ resources:
 - bases/observability.operator.keese.ai_tokenbudgets.yaml
 - bases/transport.operator.keese.ai_transports.yaml
 - bases/authz.operator.keese.ai_oidcproviders.yaml
+- bases/tenancy.operator.keese.ai_tenants.yaml
+- bases/tenancy.operator.keese.ai_crosstenantagreements.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

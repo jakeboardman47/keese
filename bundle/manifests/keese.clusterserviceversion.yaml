@@ -210,6 +210,64 @@ metadata:
           }
         },
         {
+          "apiVersion": "authz.operator.keese.ai/v1alpha1",
+          "kind": "OIDCProvider",
+          "metadata": {
+            "labels": {
+              "keese.ai/bootstrap": "true"
+            },
+            "name": "kubernetes-default"
+          },
+          "spec": {
+            "audienceTemplates": [
+              {
+                "expirationSeconds": 600,
+                "name": "egress",
+                "template": "keese-egress-{{ .Claims.namespace }}"
+              }
+            ],
+            "audiences": [
+              "keese-egress-*"
+            ],
+            "issuer": "https://kubernetes.default.svc",
+            "subjectTemplate": "service_account:{{ .Claims.sub }}"
+          }
+        },
+        {
+          "apiVersion": "guardrail.operator.keese.ai/v1alpha1",
+          "kind": "GuardrailBinding",
+          "metadata": {
+            "labels": {
+              "keese.ai/binding-scope": "Cluster",
+              "keese.ai/bootstrap": "true"
+            },
+            "name": "keese-keese-default",
+            "namespace": "keese-system"
+          },
+          "spec": {
+            "scope": {
+              "type": "Cluster"
+            },
+            "tokenBudget": {
+              "input": 0,
+              "output": 0,
+              "total": 0
+            },
+            "tools": {
+              "deny": [
+                "shell.exec",
+                "filesystem.delete",
+                "kubernetes.exec"
+              ],
+              "rateLimit": {
+                "requests": 0,
+                "scope": "sa",
+                "window": "1m"
+              }
+            }
+          }
+        },
+        {
           "apiVersion": "guardrail.operator.keese.ai/v1alpha1",
           "kind": "GuardrailBinding",
           "metadata": {
@@ -500,6 +558,48 @@ metadata:
           }
         },
         {
+          "apiVersion": "tenancy.operator.keese.ai/v1alpha1",
+          "kind": "CrossTenantAgreement",
+          "metadata": {
+            "name": "alpha-to-beta"
+          },
+          "spec": {
+            "from": {
+              "tenantRef": {
+                "name": "alpha"
+              }
+            },
+            "scope": {
+              "a2aRoles": [
+                "reader"
+              ],
+              "natsSubjects": [
+                "keese.cta.*.events"
+              ]
+            },
+            "to": {
+              "tenantRef": {
+                "name": "beta"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "tenancy.operator.keese.ai/v1alpha1",
+          "kind": "Tenant",
+          "metadata": {
+            "name": "alpha"
+          },
+          "spec": {
+            "adminSubjects": [
+              {
+                "kind": "User",
+                "name": "alice@example.com"
+              }
+            ]
+          }
+        },
+        {
           "apiVersion": "transport.operator.keese.ai/v1alpha1",
           "kind": "Transport",
           "metadata": {
@@ -590,6 +690,25 @@ metadata:
         },
         {
           "apiVersion": "workspace.operator.keese.ai/v1alpha1",
+          "kind": "WorkspaceSession",
+          "metadata": {
+            "labels": {
+              "keese.ai/session-name": "default",
+              "keese.ai/subject-hash": "a1b2c3d4e5f6a7b8",
+              "keese.ai/workspace": "ws-dev"
+            },
+            "name": "ws-dev-a1b2c3d4e5f6a7b8-default",
+            "namespace": "tenant-alpha"
+          },
+          "spec": {
+            "attachSubject": "user:alice@example.com",
+            "mode": "per-user",
+            "sessionName": "default",
+            "workspaceRef": "ws-dev"
+          }
+        },
+        {
+          "apiVersion": "workspace.operator.keese.ai/v1alpha1",
           "kind": "WorkspaceShare",
           "metadata": {
             "labels": {
@@ -608,7 +727,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    createdAt: "2026-04-23T20:41:49Z"
+    createdAt: "2026-04-26T16:00:19Z"
     operators.operatorframework.io/builder: operator-sdk-unknown
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
   name: keese.v0.0.1
@@ -623,6 +742,15 @@ spec:
       displayName: Agent Runtime
       kind: AgentRuntime
       name: agentruntimes.runtime.operator.keese.ai
+      version: v1alpha1
+    - description: |-
+        CrossTenantAgreement is the Schema for the crosstenanagreements API.
+        CrossTenantAgreement is cluster-scoped; it governs cross-tenant NATS messaging and A2A roles.
+        Design: docs/designs/25-cross-tenant-agreement.md + 25-ii-spec-schema.md + 25-iii-approval-flow.md
+        Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-cra.md
+      displayName: Cross Tenant Agreement
+      kind: CrossTenantAgreement
+      name: crosstenantagreements.tenancy.operator.keese.ai
       version: v1alpha1
     - description: |-
         GuardrailBinding is the Schema for the guardrailbindings API.
@@ -676,6 +804,15 @@ spec:
       kind: SharedMemory
       name: sharedmemories.memory.operator.keese.ai
       version: v1alpha1
+    - description: |-
+        Tenant is the Schema for the tenants API.
+        Tenant is cluster-scoped; its name IS the OpenFGA identity key.
+        Design: docs/designs/24-tenant-crd.md + docs/designs/24b-tenant-crd.md
+        Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-tenant.md
+      displayName: Tenant
+      kind: Tenant
+      name: tenants.tenancy.operator.keese.ai
+      version: v1alpha1
     - description: TokenBudget is the Schema for the tokenbudgets API.
       displayName: Token Budget
       kind: TokenBudget
@@ -704,6 +841,16 @@ spec:
       displayName: Workspace
       kind: Workspace
       name: workspaces.workspace.operator.keese.ai
+      version: v1alpha1
+    - description: |-
+        WorkspaceSession is the Schema for the workspacesessions API.
+        WorkspaceSession is namespace-scoped (same namespace as parent Workspace).
+        Name pattern: <workspace>-<subject-hash-16>-<session-name>.
+        Design: docs/designs/08b-goose-acp-stdio-k8s.md + docs/designs/08b-ii-session-crd-spec.md
+        Spec: docs/specs/workspace.operator.keese.ai-v1alpha1-ii-session.md
+      displayName: Workspace Session
+      kind: WorkspaceSession
+      name: workspacesessions.workspace.operator.keese.ai
       version: v1alpha1
     - description: WorkspaceShare is the Schema for the workspaceshares API.
       displayName: Workspace Share
@@ -1091,7 +1238,11 @@ spec:
             matchLabels:
               app.kubernetes.io/name: keese
               control-plane: controller-manager
-          strategy: {}
+          strategy:
+            rollingUpdate:
+              maxSurge: 1
+              maxUnavailable: 0
+            type: RollingUpdate
           template:
             metadata:
               annotations:
@@ -1109,11 +1260,12 @@ spec:
                 - /manager
                 image: controller:latest
                 livenessProbe:
+                  failureThreshold: 3
                   httpGet:
                     path: /healthz
                     port: 8081
-                  initialDelaySeconds: 15
-                  periodSeconds: 20
+                  initialDelaySeconds: 30
+                  periodSeconds: 10
                 name: manager
                 readinessProbe:
                   httpGet:
@@ -1138,7 +1290,7 @@ spec:
                 seccompProfile:
                   type: RuntimeDefault
               serviceAccountName: keese-controller-manager
-              terminationGracePeriodSeconds: 10
+              terminationGracePeriodSeconds: 60
       permissions:
       - rules:
         - apiGroups:
