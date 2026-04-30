@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Stable Service alias for the Envoy AI Gateway. The envoy-ai-gateway
+# helm chart releases the actual gateway pods under a hashed Service
+# name (e.g. envoy-keese-system-keese-aigateway-<hash>) in the
+# envoy-gateway-system namespace. This ExternalName alias gives
+# Workspace pods (and the egress NetworkPolicy in
+# workspace_controller.go) a deterministic Service name to dial.
+#
+# A selector-based Service WOULD NOT WORK here: K8s Services can only
+# select pods in their own namespace. The gateway pods live in
+# envoy-gateway-system; the operator deploys agent pods in tenant
+# namespaces that need a stable name in keese-system.
+#
+# When the gateway hash rotates (e.g. on chart upgrade), update the
+# externalName below. A future operator-side controller can fan this
+# out automatically based on Gateway resource introspection.
+apiVersion: v1
+kind: Service
+metadata:
+  name: envoy-ai-gateway
+  namespace: keese-system
+  labels:
+    app.kubernetes.io/name: envoy-ai-gateway
+    keese.ai/bootstrap: "true"
+spec:
+  type: ExternalName
+  externalName: envoy-keese-system-keese-aigateway-a46fa648.envoy-gateway-system.svc.cluster.local
+  ports:
+    - name: https
+      port: 443
+      protocol: TCP

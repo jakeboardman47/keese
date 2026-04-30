@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Apply with: kubectl apply -k dev/bootstrap/aigateway
+# Run AFTER helmfile sync brings up cert-manager, envoy-gateway,
+# envoy-ai-gateway, openbao, and external-secrets.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - keese-system-namespace.yaml
+  - cluster-secret-store.yaml
+  - service-alias.yaml
+  - anthropic-llm-stack.yaml

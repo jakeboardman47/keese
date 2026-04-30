@@ -11,6 +11,50 @@ config:
         default: info
     gateway:
       controllerName: gateway.envoyproxy.io/gatewayclass-controller
+    # Enable the Backend resource type so AI Gateway's
+    # `envoy-ai-gateway-extproc-backend` (UDS) Backend gets accepted
+    # and the extProc sidecar is injected into the proxy pod.
+    # Without this, AIGatewayRoute requests fall through to the
+    # "unreachable" rule and return direct_response 500.
+    extensionApis:
+      enableBackend: true
+      enableEnvoyPatchPolicy: true
+    # Register the AI Gateway controller as an EG xDS-translator extension
+    # so it can patch generated clusters with the upstream-phase ext_proc
+    # filter (cluster.upstream_http_filters[]). Without this hook the BSP
+    # `AnthropicAPIKey` injection (`x-api-key`) and the Anthropic-schema
+    # path rewrite (`/anthropic/v1/messages` -> `/v1/messages`) never fire,
+    # because both happen in the AI Gateway upstream processor — which
+    # only runs if envoy is configured to call extproc on the upstream
+    # filter chain. Mirrors the contract in
+    # https://github.com/envoyproxy/ai-gateway/blob/v0.5.0/manifests/envoy-gateway-values.yaml.
+    #
+    # Note: the AI Gateway controller's gRPC extension server on :1063 is
+    # plaintext (its `--tlsCertDir` is for the mutating webhook on :9443).
+    # See cmd/controller/main.go in the v0.5.0 source — the gRPC server is
+    # constructed with `grpc.NewServer(...)` without `grpc.Creds(...)`.
+    # If you set `tls:` here EG will fail with
+    # `tls: first record does not look like a TLS handshake`.
+    extensionManager:
+      hooks:
+        xdsTranslator:
+          translation:
+            listener:
+              includeAll: true
+            route:
+              includeAll: true
+            cluster:
+              includeAll: true
+            secret:
+              includeAll: true
+          post:
+            - Translation
+            - Cluster
+            - Route
+      service:
+        fqdn:
+          hostname: ai-gateway-controller.envoy-ai-gateway-system.svc.cluster.local
+          port: 1063
 
 # Create the GatewayClass so the AI Gateway can reference it immediately.
 extraObjects:

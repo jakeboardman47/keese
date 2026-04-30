@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Cluster-wide self-signed Issuer used by external-secrets, OpenBao,
+# and any other release that requests a webhook serving cert from
+# cert-manager via ClusterIssuer reference.
+#
+# Applied AFTER cert-manager is healthy (cannot live in cert-manager
+# release values: chicken-and-egg with the cert-manager.io CRD).
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-cluster-issuer
+spec:
+  selfSigned: {}

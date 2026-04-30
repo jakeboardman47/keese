@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Namespace for keese gateway + bootstrap CRs. The operator deploys
+# into this namespace via the OLM bundle; the AI Gateway stack also
+# lives here so BSP/AIGatewayRoute references stay local (no
+# ReferenceGrant required).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keese-system
+  labels:
+    kubernetes.io/metadata.name: keese-system
+    keese.ai/bootstrap: "true"

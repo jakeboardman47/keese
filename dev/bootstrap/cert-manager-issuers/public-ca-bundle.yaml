@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# trust-manager Bundle that aggregates the public Mozilla root CA list
+# and exposes it to keese-system as a ConfigMap. Consumers
+# (BackendTLSPolicy → api.anthropic.com TLS verification, future
+# upstream LLM providers) reference the ConfigMap by name.
+#
+# Why this exists: envoy-gateway v1.4 BackendTLSPolicy with
+# `wellKnownCACertificates: System` expects an SDS-supplied secret
+# that the gateway in this version doesn't auto-provide. trust-manager
+# lets us materialize the bundle as a normal ConfigMap that EG
+# consumes via `caCertificateRefs`.
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: public-ca-bundle
+spec:
+  sources:
+    - useDefaultCAs: true
+  target:
+    configMap:
+      key: ca.crt
+    namespaceSelector:
+      matchLabels:
+        # Distribute to namespaces that need to verify public TLS.
+        # keese-system is labeled by the bootstrap namespace manifest.
+        kubernetes.io/metadata.name: keese-system

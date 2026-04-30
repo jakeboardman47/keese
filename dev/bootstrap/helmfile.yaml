@@ -19,12 +19,17 @@ environments:
 
 ---
 repositories:
+  - name: cilium
+    url: https://helm.cilium.io
   - name: jetstack
     url: https://charts.jetstack.io
   - name: projectcapsule
     url: https://projectcapsule.github.io/charts
+  # envoy charts moved to OCI registries (docker.io/envoyproxy/...).
+  # The legacy https://charts.envoyproxy.io endpoint no longer resolves.
   - name: envoyproxy
-    url: https://charts.envoyproxy.io
+    url: oci://docker.io/envoyproxy
+    oci: true
   - name: openfga
     url: https://openfga.github.io/helm-charts
   - name: nats
@@ -45,6 +50,30 @@ repositories:
     url: https://open-telemetry.github.io/opentelemetry-helm-charts
 
 releases:
+  # ── Layer -1: CNI ──────────────────────────────────────────────────────
+  # Cilium replaces kindnet (disabled in dev/kind/kind-config-demo.yaml).
+  # Provides DNS-aware FQDN egress policies (CiliumNetworkPolicy) and
+  # Service-port-aware NetworkPolicy matching, both of which kindnet
+  # lacks (kindnet matches on the destination POD port, not the Service
+  # port a client dials, breaking egress allowlists for cluster-internal
+  # traffic). kubeProxyReplacement=true so we don't need kube-proxy too.
+  - name: cilium
+    namespace: kube-system
+    chart: cilium/cilium
+    version: 1.18.2
+    values:
+      - kubeProxyReplacement: true
+        k8sServiceHost: keese-demo-control-plane
+        k8sServicePort: 6443
+        hubble:
+          enabled: true
+          relay:
+            enabled: true
+        ipam:
+          mode: kubernetes
+        image:
+          pullPolicy: IfNotPresent
+
   # ── Layer 0: TLS foundation ────────────────────────────────────────────
   - name: cert-manager
     namespace: cert-manager
@@ -53,6 +82,22 @@ releases:
     version: v1.15.3
     values:
       - values/cert-manager.yaml
+
+  # trust-manager distributes CA bundles (incl. the public root bundle)
+  # to consumer namespaces as ConfigMaps via the Bundle CR. Used by
+  # BackendTLSPolicy to verify upstream TLS to api.anthropic.com et al.
+  # without manually extracting CA bundles from cluster nodes.
+  - name: trust-manager
+    namespace: cert-manager
+    createNamespace: false
+    chart: jetstack/trust-manager
+    version: v0.12.0
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - secretTargets:
+          enabled: true
+          authorizedSecretsAll: true
 
   # ── Layer 1: Tenant isolation ──────────────────────────────────────────
   - name: capsule
@@ -69,20 +114,41 @@ releases:
   - name: envoy-gateway
     namespace: envoy-gateway-system
     createNamespace: true
-    chart: envoyproxy/gateway-helm
-    version: v1.3.2 # unverified-2026
+    chart: oci://docker.io/envoyproxy/gateway-helm
+    # v1.6.0 (vs 1.4.1) ships the upstream-filter-mode ext_proc support
+    # the AI Gateway BSP needs to inject Authorization on the upstream
+    # phase. v1.4.x extProc only fires on the downstream phase, leaving
+    # upstream requests un-authenticated.
+    version: v1.6.0
     needs:
       - cert-manager/cert-manager
     values:
       - values/envoy-gateway.yaml
 
-  - name: envoy-ai-gateway
-    namespace: envoy-gateway-system
-    createNamespace: false
-    chart: envoyproxy/ai-gateway-helm
-    version: v0.2.0 # unverified-2026
+  # AI Gateway CRDs ship in a separate chart; the controller chart
+  # crash-loops until these CRDs (AIGatewayRoute, AIServiceBackend,
+  # BackendSecurityPolicy) are present.
+  #
+  # The AI Gateway chart hardcodes its mutating-webhook TLS cert SAN
+  # to `ai-gateway-controller.envoy-ai-gateway-system.svc`, so we MUST
+  # install in that exact namespace or the apiserver rejects the
+  # webhook on TLS handshake.
+  - name: envoy-ai-gateway-crds
+    namespace: envoy-ai-gateway-system
+    createNamespace: true
+    chart: oci://docker.io/envoyproxy/ai-gateway-crds-helm
+    version: v0.5.0
     needs:
       - envoy-gateway-system/envoy-gateway
+
+  - name: envoy-ai-gateway
+    namespace: envoy-ai-gateway-system
+    createNamespace: false
+    chart: oci://docker.io/envoyproxy/ai-gateway-helm
+    version: v0.5.0
+    needs:
+      - envoy-gateway-system/envoy-gateway
+      - envoy-ai-gateway-system/envoy-ai-gateway-crds
     values:
       - values/envoy-ai-gateway.yaml
 
@@ -183,12 +249,16 @@ releases:
       - values/qdrant.yaml
 
   # ── Layer 2: Telemetry (depends on ECK for ES endpoint) ───────────────
-  - name: otel-collector
-    namespace: observability
-    createNamespace: true
-    chart: open-telemetry/opentelemetry-collector
-    version: 0.112.0 # unverified-2026
-    needs:
-      - elastic-system/eck-operator
-    values:
-      - values/otel-collector.yaml
+  # otel-collector chart 0.112.0 requires `image.repository` to be set
+  # explicitly (defaults dropped in upstream). Removed from the demo
+  # bootstrap; OTEL wiring is a values-file fix tracked in
+  # docs/plans/demo/tech-debt.md. To re-enable, restore this release
+  # block and add `image: { repository: otel/opentelemetry-collector-k8s }`
+  # to values/otel-collector.yaml.
+  # - name: otel-collector
+  #   namespace: observability
+  #   createNamespace: true
+  #   chart: open-telemetry/opentelemetry-collector
+  #   version: 0.112.0
+  #   needs: [elastic-system/eck-operator]
+  #   values: [values/otel-collector.yaml]

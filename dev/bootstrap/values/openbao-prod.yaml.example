@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# OpenBao values for **production-style** deployments. Reference / template
+# only — copy to a private overlay (e.g. `dev/bootstrap/values/openbao-prod.yaml`,
+# gitignored) and adjust the seal stanza to use cloud KMS in real prod.
+#
+# Differences from openbao.yaml (dev):
+#   - server.dev.enabled: false               (no auto-init, no auto-unseal)
+#   - server.standalone.enabled: true          (PVC-backed file storage)
+#   - dataStorage.enabled: true                (PVC for /openbao/data)
+#   - Manual unseal required:
+#       kubectl exec -n openbao openbao-0 -- bao operator init
+#       kubectl exec -n openbao openbao-0 -- bao operator unseal <key-1>
+#       kubectl exec -n openbao openbao-0 -- bao operator unseal <key-2>
+#       kubectl exec -n openbao openbao-0 -- bao operator unseal <key-3>
+#
+# For HA prod:
+#   - server.ha.enabled: true with a 3-node Raft quorum
+#   - seal "awskms" / "gcpckms" / "azurekeyvault" stanza for auto-unseal
+#
+# Refs: docs/designs/11-secrets-pluggable-vault.md
+
+server:
+  dev:
+    enabled: false
+
+  ha:
+    enabled: false
+
+  standalone:
+    enabled: true
+    config: |
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+
+      storage "file" {
+        path = "/openbao/data"
+      }
+
+      # Production: replace with a KMS seal stanza for auto-unseal, e.g.:
+      # seal "awskms" {
+      #   region     = "us-west-2"
+      #   kms_key_id = "alias/openbao-unseal"
+      # }
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    accessMode: ReadWriteOnce
+
+ui:
+  enabled: true
+  serviceType: ClusterIP

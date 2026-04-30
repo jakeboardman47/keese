@@ -1,0 +1,43 @@
+version: v1.1.0
+dependencies:
+  - name: argo-workflows
+    repository: https://argoproj.github.io/argo-helm
+    version: 0.42.5
+  - name: capsule
+    repository: https://projectcapsule.github.io/charts
+    version: 0.7.2
+  - name: cert-manager
+    repository: https://charts.jetstack.io
+    version: v1.15.3
+  - name: cilium
+    repository: https://helm.cilium.io
+    version: 1.18.2
+  - name: eck-operator
+    repository: https://helm.elastic.co
+    version: 2.13.0
+  - name: external-secrets
+    repository: https://charts.external-secrets.io
+    version: 0.10.5
+  - name: kyverno
+    repository: https://kyverno.github.io/kyverno
+    version: 3.2.6
+  - name: nack
+    repository: https://nats-io.github.io/k8s/helm/charts
+    version: 0.26.0
+  - name: nats
+    repository: https://nats-io.github.io/k8s/helm/charts
+    version: 1.2.6
+  - name: openbao
+    repository: https://openbao.github.io/openbao-helm
+    version: 0.4.0
+  - name: openfga
+    repository: https://openfga.github.io/helm-charts
+    version: 0.2.27
+  - name: qdrant
+    repository: https://qdrant.github.io/qdrant-helm
+    version: 1.13.0
+  - name: trust-manager
+    repository: https://charts.jetstack.io
+    version: v0.12.0
+digest: sha256:bae5fae1f5210678ed1af2bdaba4a20f83b11a046fbd7851e7368611ab6bf79f
+generated: "2026-04-27T22:54:43.590307-05:00"

@@ -22,15 +22,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../../scripts/lib/log.sh"
 
 BAO_ADDR="${BAO_ADDR:-http://localhost:8200}"
-BAO_TOKEN="${BAO_TOKEN:-}"
+# Dev-mode default — values/openbao.yaml runs OpenBao with `dev.enabled=true`
+# and `devRootToken: "root"` so the auto-unsealed in-memory server is reachable
+# with the well-known token. Production overlays must export BAO_TOKEN
+# explicitly after manual `bao operator init` + `bao operator unseal`.
+BAO_TOKEN="${BAO_TOKEN:-root}"
 KV_MOUNT="keese"
 
 # ── Preconditions ──────────────────────────────────────────────────────────────
 
 if [[ -z "${BAO_TOKEN}" ]]; then
-  log::err "BAO_TOKEN is not set. Unseal OpenBao and export the root token."
-  log::err "  kubectl exec -n openbao openbao-0 -- bao operator init"
-  log::err "  kubectl exec -n openbao openbao-0 -- bao operator unseal <key>"
+  log::err "BAO_TOKEN is not set and no dev default available."
+  log::err "  Production: kubectl exec -n openbao openbao-0 -- bao operator init"
+  log::err "             kubectl exec -n openbao openbao-0 -- bao operator unseal <key>"
+  log::err "  Dev:       export BAO_TOKEN=root  (matches values/openbao.yaml devRootToken)"
   exit 1
 fi
 
@@ -73,8 +78,16 @@ _write_placeholder() {
 }
 
 _seed_placeholders() {
-  # tenant-a: Anthropic API key placeholder
-  _write_placeholder "tenants/tenant-a/anthropic" "api_key"
+  # tenant-a: Anthropic API key. If ANTHROPIC_API_KEY is exported (e.g. from
+  # .env.local) this seeds the live value so the AI Gateway BSP works
+  # immediately. Otherwise an empty placeholder is written and the operator
+  # populates it later via `bao kv put`.
+  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    log::info "Seeding live ANTHROPIC_API_KEY at ${KV_MOUNT}/tenants/tenant-a/anthropic"
+    bao kv put -mount="${KV_MOUNT}" "tenants/tenant-a/anthropic" "api_key=${ANTHROPIC_API_KEY}"
+  else
+    _write_placeholder "tenants/tenant-a/anthropic" "api_key"
+  fi
   # tenant-a: GitHub PAT placeholder (for recipe sources)
   _write_placeholder "tenants/tenant-a/github" "pat"
   # tenant-b: Anthropic API key placeholder

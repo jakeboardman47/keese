@@ -183,9 +183,17 @@ kind-down:  ## delete kind cluster $(KIND_CLUSTER)
 	@kind delete cluster --name=$(KIND_CLUSTER) || true
 
 .PHONY: bootstrap-infra
-bootstrap-infra:  ## helmfile sync dev/bootstrap/
+bootstrap-infra:  ## helmfile sync dev/bootstrap/ + apply aigateway CRs
 	@$(GUARD_CONTEXT)
 	@helmfile -f $(DEV_DIR)/bootstrap/helmfile.yaml sync
+	@echo "==> applying NATS streams"
+	@kubectl apply -k $(DEV_DIR)/bootstrap/nats
+	@echo "==> applying AI Gateway stack (Anthropic LLM path)"
+	@kubectl apply -k $(DEV_DIR)/bootstrap/aigateway
+	@echo "==> waiting for AIGatewayRoute Ready"
+	@kubectl wait --for=condition=Accepted aigatewayroute/anthropic \
+	  -n keese-system --timeout=180s || true
+	@echo "==> bootstrap-infra complete"
 
 .PHONY: tilt-up
 tilt-up:  ## tilt up (hot-reload operator)

@@ -1,37 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 #
-# OpenBao values for local dev — PVC-backed, 1-node, auto-unseal disabled.
-# Manual unseal provides dev parity with production where Shamir shares or
-# cloud KMS are used. Seed script (dev/bootstrap/openbao/seed.sh) enables
-# kv-v2 and writes placeholder secrets after manual unseal.
+# OpenBao values for **local dev** — dev-mode (auto-unseal, in-memory).
+# Production deployments require manual Shamir unseal or cloud KMS auto-unseal
+# and PVC-backed storage; see openbao-prod.yaml.example for the prod template.
+#
+# Why dev mode here:
+#   - Auto-unseal on every restart so `make bootstrap-infra` / `tilt up` / kind
+#     re-creates work end-to-end without operator-init + unseal-key handling.
+#   - In-memory storage. Data is lost on pod restart — acceptable for dev,
+#     since seed.sh re-populates kv-v2 paths on every Tilt loop.
+#   - Well-known dev root token (`root`) so the seed script can authenticate
+#     without interactive input.
 #
 # Refs: docs/designs/11-secrets-pluggable-vault.md
+#       https://openbao.org/docs/concepts/dev-server
 
 server:
-  # Run as a proper server (not dev mode) for parity with prod behaviour.
   dev:
-    enabled: false
+    enabled: true
+    devRootToken: "root"
 
-  # Single-node HA disabled — Raft requires at least 3 nodes for quorum.
+  # Disable HA in dev — single-node, in-memory.
   ha:
     enabled: false
-
-  # Standalone mode with PVC-backed storage.
   standalone:
-    enabled: true
-    config: |
-      ui = true
-
-      listener "tcp" {
-        tls_disable = 1
-        address = "[::]:8200"
-        cluster_address = "[::]:8201"
-      }
-
-      storage "file" {
-        path = "/openbao/data"
-      }
+    enabled: false
 
   resources:
     requests:
@@ -41,15 +35,9 @@ server:
       cpu: 250m
       memory: 512Mi
 
+  # In dev mode storage is in-memory; no PVC is required.
   dataStorage:
-    enabled: true
-    size: 2Gi
-    accessMode: ReadWriteOnce
-
-  # Auto-unseal is intentionally disabled for dev parity with prod.
-  # Run: kubectl exec -n openbao openbao-0 -- bao operator init
-  #      kubectl exec -n openbao openbao-0 -- bao operator unseal <key>
-  # Then run scripts/dev/seed-openbao.sh.
+    enabled: false
 
 ui:
   enabled: true

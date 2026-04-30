@@ -6,7 +6,11 @@
 # cert-manager is healthy; downstream issuers (openfga, openbao, etc.)
 # are created by their respective helmfile releases.
 
-installCRDs: true
+# `installCRDs: true` was deprecated in cert-manager v1.15+ in favor of
+# `crds.enabled`. Both are accepted on the v1.15.3 chart but only `crds`
+# is forward-compatible.
+crds:
+  enabled: true
 
 replicaCount: 1
 
@@ -40,12 +44,11 @@ cainjector:
 prometheus:
   enabled: false
 
-# Self-signed bootstrap ClusterIssuer — created post-install via
-# an extraObject so cert-manager CRDs are present first.
-extraObjects:
-  - apiVersion: cert-manager.io/v1
-    kind: ClusterIssuer
-    metadata:
-      name: selfsigned-cluster-issuer
-    spec:
-      selfSigned: {}
+# Note: a cluster-wide selfsigned-cluster-issuer was previously inlined
+# here via extraObjects, but that creates a chicken-and-egg problem on
+# first install (the ClusterIssuer is rendered before its CRD lands).
+# The aigateway stack creates its own namespaced Issuer
+# (dev/bootstrap/aigateway/anthropic-llm-stack.yaml §3) so the
+# cluster-scoped one is unnecessary for the demo path. If a downstream
+# release needs a ClusterIssuer, apply it via a separate kustomize
+# resource that depends on `cert-manager` being healthy.

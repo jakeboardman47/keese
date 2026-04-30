@@ -21,14 +21,17 @@ source "${REPO_ROOT}/scripts/lib/log.sh"
 # ── Cluster context guard ──────────────────────────────────────────────────────
 
 CURRENT_CONTEXT="$(kubectl config current-context 2>/dev/null || echo "")"
-EXPECTED_CONTEXT="kind-keese-dev"
-
-if [[ "${CURRENT_CONTEXT}" != "${EXPECTED_CONTEXT}" ]]; then
-  log::err "Refusing to seed: current kubectl context is '${CURRENT_CONTEXT}'."
-  log::err "Expected '${EXPECTED_CONTEXT}' for local dev seeding."
-  log::err "Switch context: kubectl config use-context ${EXPECTED_CONTEXT}"
-  exit 1
-fi
+# Accept the full-stack dev cluster and the minimal demo cluster. Anything
+# else (incl. cloud contexts) is refused.
+case "${CURRENT_CONTEXT}" in
+  kind-keese-dev|kind-keese-demo) ;;
+  *)
+    log::err "Refusing to seed: current kubectl context is '${CURRENT_CONTEXT}'."
+    log::err "Expected one of: kind-keese-dev, kind-keese-demo."
+    log::err "Switch context: kubectl config use-context kind-keese-dev"
+    exit 1
+    ;;
+esac
 
 log::info "Context check passed: ${CURRENT_CONTEXT}"
 

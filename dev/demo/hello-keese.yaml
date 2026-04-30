@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# End-to-end demo manifest. Apply order is preserved within a single
+# kubectl apply via owner-aware ordering on resource creation.
+#
+# Apply with:
+#   kubectl create namespace alpha   # if not already present
+#   kubectl apply -f dev/demo/hello-keese.yaml
+#
+# Expected outcome:
+#   kubectl get tenant,agentruntime,workspace,memory,workspacesession -A
+#   → all rows show Ready=True (or progressing toward it)
+#
+# This file does NOT assume the helmfile bootstrap stack is installed.
+# Without OpenFGA / NATS / Envoy AI Gateway the Workspace controller still
+# creates the SA + NetworkPolicies + PVC; ReBAC tuple writes go to the
+# in-memory FakeRebacWriter (TD-P1-01).
+
+# ── Tenant ───────────────────────────────────────────────────────────
+apiVersion: tenancy.operator.keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: alpha
+spec:
+  adminSubjects:
+    - kind: User
+      name: alice@example.com
+---
+# ── AgentRuntime (cluster-scoped) ────────────────────────────────────
+apiVersion: runtime.operator.keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  name: goose-default
+spec:
+  implementation:
+    goose:
+      image: ghcr.io/block/goose:latest
+---
+# ── Workspace ────────────────────────────────────────────────────────
+apiVersion: workspace.operator.keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: my-ws
+  namespace: alpha
+spec:
+  runtimeRef:
+    name: goose-default
+  tenantRef:
+    name: alpha
+  interactive: true
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow
+---
+# ── Memory (sqlite) ──────────────────────────────────────────────────
+apiVersion: memory.operator.keese.ai/v1alpha1
+kind: Memory
+metadata:
+  name: my-ws-memory
+  namespace: alpha
+spec:
+  workspaceRef: my-ws
+  provider:
+    type: sqlite
+    sqlite:
+      storageSize: "2Gi"
+      reclaimPolicy: Retain
+  embeddingDim: 768
+---
+# ── WorkspaceSession (per-user) ──────────────────────────────────────
+apiVersion: workspace.operator.keese.ai/v1alpha1
+kind: WorkspaceSession
+metadata:
+  name: my-session
+  namespace: alpha
+spec:
+  workspaceRef: my-ws
+  attachSubject: "user:alice@example.com"
+  sessionName: default
+  mode: per-user
