@@ -333,14 +333,12 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("workspace-controller")
 	}
+	// D1-T2 (2026-04-25): the keese.ai/managed=true predicate was removed so
+	// copy-paste samples reconcile out-of-the-box. Re-evaluation tracked in
+	// docs/plans/demo/tech-debt.md TD-P1-06.
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&workspacev1alpha1.Workspace{}).
-		WithEventFilter(predicate.And(
-			predicate.NewPredicateFuncs(func(obj client.Object) bool {
-				return obj.GetLabels()[managedLabel] == managedLabelValue
-			}),
-			predicate.GenerationChangedPredicate{},
-		)).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Named("workspace").
 		Complete(r)
 }
@@ -410,9 +408,11 @@ func buildDefaultDenyNetworkPolicy(ws *workspacev1alpha1.Workspace, name string)
 // buildEgressNetworkPolicy creates an allowlist for egress to the Envoy AI Gateway (:443)
 // and NATS (:4222) in the workspace namespace (rule 04.17, rule 05.4, 05.5).
 func buildEgressNetworkPolicy(ws *workspacev1alpha1.Workspace, name string) *networkingv1.NetworkPolicy {
-	gwPort := intstr.FromInt(gatewayEgressPort)
+	_ = gatewayEgressPort // documented for production use; see comment in egress rule below
 	natsPort := intstr.FromInt(natsEgressPort)
+	dnsPort := intstr.FromInt(53)
 	tcpProto := corev1.ProtocolTCP
+	udpProto := corev1.ProtocolUDP
 
 	return &networkingv1.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{
@@ -434,21 +434,59 @@ func buildEgressNetworkPolicy(ws *workspacev1alpha1.Workspace, name string) *net
 				networkingv1.PolicyTypeEgress,
 			},
 			Egress: []networkingv1.NetworkPolicyEgressRule{
-				// Allow egress to Envoy AI Gateway service :443.
+				// Allow DNS to kube-dns (UDP+TCP 53) — without this the
+				// agent pod cannot resolve envoy-ai-gateway.keese-system.svc
+				// or any other in-cluster Service name.
 				{
 					Ports: []networkingv1.NetworkPolicyPort{
-						{Protocol: &tcpProto, Port: &gwPort},
+						{Protocol: &udpProto, Port: &dnsPort},
+						{Protocol: &tcpProto, Port: &dnsPort},
 					},
 					To: []networkingv1.NetworkPolicyPeer{
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"kubernetes.io/metadata.name": gatewayServiceNamespace,
+									"kubernetes.io/metadata.name": "kube-system",
 								},
 							},
 							PodSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"app.kubernetes.io/name": gatewayServiceName,
+									"k8s-app": "kube-dns",
+								},
+							},
+						},
+					},
+				},
+				// Allow egress to Envoy AI Gateway pods.
+				//
+				// We deliberately do NOT pin a port here. Kubernetes
+				// NetworkPolicy port matching applies to the destination
+				// POD's container port (after kube-proxy DNAT), not the
+				// Service port the client dials (rule 04.17 + design
+				// 12-network-isolation). The envoy-gateway proxy pod's
+				// listener port is chosen by the upstream chart (10443
+				// in v1.4.x) and not in our control. Locking to :443
+				// here means traffic to the Service IP routes to a pod
+				// port that doesn't match the rule and gets dropped.
+				//
+				// The egress is still constrained by namespace+pod
+				// selector, which is the actual security boundary
+				// (rule 05.4: "All egress through Envoy AI Gateway,
+				// fail-closed"). Production CNIs that support
+				// service-port matching (Cilium with EnableServiceTopology,
+				// Calico with named ports) can re-pin the port — flagged
+				// as TD-P2-X.
+				{
+					To: []networkingv1.NetworkPolicyPeer{
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"kubernetes.io/metadata.name": "envoy-gateway-system",
+								},
+							},
+							PodSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app.kubernetes.io/managed-by": "envoy-gateway",
 								},
 							},
 						},
@@ -484,7 +522,9 @@ func buildSessionPVC(ws *workspacev1alpha1.Workspace, name string) *corev1.Persi
 	if ws.Spec.SessionStorage != nil {
 		storageSize = *ws.Spec.SessionStorage
 	}
-	storageClass := "" // use cluster default
+	// StorageClassName is intentionally omitted (nil) so the cluster
+	// default StorageClass is used. A pointer to an empty string here
+	// would mean "no storage class" — provisioning would never bind.
 	return &corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -496,8 +536,7 @@ func buildSessionPVC(ws *workspacev1alpha1.Workspace, name string) *corev1.Persi
 			Labels:    resourceLabels(ws),
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			StorageClassName: &storageClass,
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: storageSize,

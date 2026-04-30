@@ -36,6 +36,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	runtimev1alpha1 "github.com/keese-ai/keese/api/runtime/v1alpha1"
 	workspacev1alpha1 "github.com/keese-ai/keese/api/workspace/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -67,6 +68,9 @@ func TestControllers(t *testing.T) {
 var workspaceCRDs = []string{
 	"workspace.operator.keese.ai_workspaces.yaml",
 	"workspace.operator.keese.ai_workspaceshares.yaml",
+	// runtime CRD is in a different GroupVersion (runtime.operator.keese.ai),
+	// so it does not trigger the same-GV WaitForCRDs limitation noted above.
+	"runtime.operator.keese.ai_agentruntimes.yaml",
 }
 
 // sessionCRD is installed in a second phase after envtest starts (see BeforeSuite).
@@ -79,6 +83,8 @@ var _ = BeforeSuite(func() {
 
 	var err error
 	err = workspacev1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = runtimev1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
@@ -148,6 +154,19 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	By("creating default-runtime AgentRuntime fixture for session tests")
+	defaultRuntime := &runtimev1alpha1.AgentRuntime{
+		ObjectMeta: metav1.ObjectMeta{Name: "default-runtime"},
+		Spec: runtimev1alpha1.AgentRuntimeSpec{
+			Implementation: runtimev1alpha1.AgentRuntimeImplementation{
+				Goose: &runtimev1alpha1.GooseSpec{
+					Image: "ghcr.io/block/goose:latest",
+				},
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, defaultRuntime)).To(Succeed())
 
 	// Start a controller manager so reconcilers run against envtest.
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})

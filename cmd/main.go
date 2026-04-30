@@ -48,19 +48,23 @@ import (
 	eventingv1 "knative.dev/eventing/pkg/apis/eventing/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	authzv1alpha1 "github.com/keese-ai/keese/api/authz/v1alpha1"
 	guardrailv1alpha1 "github.com/keese-ai/keese/api/guardrail/v1alpha1"
 	memoryv1alpha1 "github.com/keese-ai/keese/api/memory/v1alpha1"
 	observabilityv1alpha1 "github.com/keese-ai/keese/api/observability/v1alpha1"
 	recipev1alpha1 "github.com/keese-ai/keese/api/recipe/v1alpha1"
 	runtimev1alpha1 "github.com/keese-ai/keese/api/runtime/v1alpha1"
+	tenancyv1alpha1 "github.com/keese-ai/keese/api/tenancy/v1alpha1"
 	transportv1alpha1 "github.com/keese-ai/keese/api/transport/v1alpha1"
 	workflowv1alpha1 "github.com/keese-ai/keese/api/workflow/v1alpha1"
 	workspacev1alpha1 "github.com/keese-ai/keese/api/workspace/v1alpha1"
+	authzcontroller "github.com/keese-ai/keese/internal/controller/authz"
 	guardrailcontroller "github.com/keese-ai/keese/internal/controller/guardrail"
 	memorycontroller "github.com/keese-ai/keese/internal/controller/memory"
 	observabilitycontroller "github.com/keese-ai/keese/internal/controller/observability"
 	recipecontroller "github.com/keese-ai/keese/internal/controller/recipe"
 	runtimecontroller "github.com/keese-ai/keese/internal/controller/runtime"
+	tenancycontroller "github.com/keese-ai/keese/internal/controller/tenancy"
 	transportcontroller "github.com/keese-ai/keese/internal/controller/transport"
 	workflowcontroller "github.com/keese-ai/keese/internal/controller/workflow"
 	workspacecontroller "github.com/keese-ai/keese/internal/controller/workspace"
@@ -83,6 +87,8 @@ func init() {
 	utilruntime.Must(guardrailv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(observabilityv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(transportv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(tenancyv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(authzv1alpha1.AddToScheme(scheme))
 
 	// External operator API schemes.
 	utilruntime.Must(argov1alpha1.AddToScheme(scheme))
@@ -258,6 +264,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceShare")
 		os.Exit(1)
 	}
+	if err := (&workspacecontroller.WorkspaceSessionReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceSession")
+		os.Exit(1)
+	}
 	argoProjector := workflowcontroller.NewClientArgoProjector(mgr.GetClient())
 	if err := (&workflowcontroller.WorkflowReconciler{
 		Client: mgr.GetClient(),
@@ -339,6 +352,27 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Transport")
+		os.Exit(1)
+	}
+	if err := (&tenancycontroller.TenantReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Tenant")
+		os.Exit(1)
+	}
+	if err := (&tenancycontroller.CrossTenantAgreementReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "CrossTenantAgreement")
+		os.Exit(1)
+	}
+	if err := (&authzcontroller.OIDCProviderReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OIDCProvider")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

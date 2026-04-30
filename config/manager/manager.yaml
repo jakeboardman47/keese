@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -22,6 +24,14 @@ spec:
       control-plane: controller-manager
       app.kubernetes.io/name: keese
   replicas: 1
+  # Zero-downtime upgrade per docs/designs/14a-olm-channels-upgrades.md.
+  # New pod becomes Ready before the old pod terminates; safe with leader
+  # election (lease handoff happens during new pod's Readiness gate).
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   template:
     metadata:
       annotations:
@@ -71,12 +81,18 @@ spec:
           capabilities:
             drop:
             - "ALL"
+        # Probe schedule aligned to terminationGracePeriodSeconds: 60
+        # per docs/designs/18-process-lifecycle.md (D1-T4 demo plan).
+        # initialDelay(30) + period(10) * failureThreshold(3) = 60s,
+        # equal to the grace period so the kubelet does not SIGKILL
+        # mid-drain (lease release + queue drain + OTEL flush).
         livenessProbe:
           httpGet:
             path: /healthz
             port: 8081
-          initialDelaySeconds: 15
-          periodSeconds: 20
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /readyz
@@ -95,4 +111,6 @@ spec:
         volumeMounts: []
       volumes: []
       serviceAccountName: controller-manager
-      terminationGracePeriodSeconds: 10
+      # 60s drain budget (rule 06 + design 18): release lease (5s) +
+      # drain queue (30s) + flush OTEL (15s) + buffer (10s).
+      terminationGracePeriodSeconds: 60

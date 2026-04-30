@@ -224,6 +224,15 @@ func (r *MemoryReconciler) setStatus(
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MemoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Backend == nil {
+		r.Backend = NewSQLiteBackend(mgr.GetClient())
+	}
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorderFor("memory-controller")
+	}
+	if r.Rebac == nil {
+		r.Rebac = &FakeRebacWriter{}
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&memoryv1alpha1.Memory{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).

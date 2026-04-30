@@ -11,6 +11,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -20,6 +21,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	runtimev1alpha1 "github.com/keese-ai/keese/api/runtime/v1alpha1"
 	workspacev1alpha1 "github.com/keese-ai/keese/api/workspace/v1alpha1"
 )
 
@@ -121,8 +123,16 @@ func (r *WorkspaceSessionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		sess.Status.Phase = workspacev1alpha1.WorkspaceSessionPhasePending
 	}
 
+	// --- Resolve the AgentRuntime referenced by the parent Workspace ---
+	ar, err := resolveAgentRuntime(ctx, r.Client, ws.Spec.RuntimeRef.Name)
+	if err != nil {
+		log.Info("AgentRuntime resolution failed; requeuing", "err", err.Error())
+		r.setSessionProgressing(&sess, "AgentRuntimeNotFound", err.Error())
+		return ctrl.Result{RequeueAfter: sessionRequeueBackoff}, r.patchSessionStatus(ctx, &sess, orig)
+	}
+
 	// --- Ensure pod based on Mode ---
-	podName, result, err := r.ensurePod(ctx, &sess, &ws)
+	podName, result, err := r.ensurePod(ctx, &sess, &ws, ar)
 	if err != nil || result.RequeueAfter > 0 || result.Requeue {
 		_ = r.patchSessionStatus(ctx, &sess, orig)
 		return result, err
@@ -254,6 +264,7 @@ func (r *WorkspaceSessionReconciler) ensurePod(
 	ctx context.Context,
 	sess *workspacev1alpha1.WorkspaceSession,
 	ws *workspacev1alpha1.Workspace,
+	ar *runtimev1alpha1.AgentRuntime,
 ) (string, ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -274,7 +285,7 @@ func (r *WorkspaceSessionReconciler) ensurePod(
 	case workspacev1alpha1.SessionModePerUser:
 		// Per-user: one pod per (workspace, subject) pair.
 		podName := perUserPodName(ws, sess.Spec.AttachSubject)
-		if err := r.applySessionPod(ctx, sess, ws, podName); err != nil {
+		if err := r.applySessionPod(ctx, sess, ws, ar, podName); err != nil {
 			log.Error(err, "failed to apply per-user pod", "pod", podName)
 			r.setSessionProgressing(sess, "PodProvisionFailed", err.Error())
 			return "", ctrl.Result{RequeueAfter: sessionRequeueBackoff}, nil
@@ -287,7 +298,7 @@ func (r *WorkspaceSessionReconciler) ensurePod(
 	case workspacev1alpha1.SessionModePerAttach:
 		// Per-attach: one ephemeral pod per session UID.
 		podName := perAttachPodName(sess)
-		if err := r.applySessionPod(ctx, sess, ws, podName); err != nil {
+		if err := r.applySessionPod(ctx, sess, ws, ar, podName); err != nil {
 			log.Error(err, "failed to apply per-attach pod", "pod", podName)
 			r.setSessionProgressing(sess, "PodProvisionFailed", err.Error())
 			return "", ctrl.Result{RequeueAfter: sessionRequeueBackoff}, nil
@@ -308,9 +319,10 @@ func (r *WorkspaceSessionReconciler) applySessionPod(
 	ctx context.Context,
 	sess *workspacev1alpha1.WorkspaceSession,
 	ws *workspacev1alpha1.Workspace,
+	ar *runtimev1alpha1.AgentRuntime,
 	podName string,
 ) error {
-	pod := buildSessionPodObject(sess, ws, podName)
+	pod := buildSessionPodObject(sess, ws, ar, podName)
 	return r.Client.Patch(ctx, pod, client.Apply,
 		client.FieldOwner(sessionFieldOwner),
 		client.ForceOwnership)
@@ -434,14 +446,24 @@ func shortUID(uid string) string {
 }
 
 // buildSessionPodObject constructs the Pod SSA object for a session.
-// The pod runs a minimal goose ACP sidecar stub; the actual image and args
-// are populated by the AgentRuntime SPI once that package is available.
-// TODO(spec-followup): call runtime.Bootstrap(ctx, sess, ws) once AgentRuntime SPI is implemented.
+// The pod runs the goose runtime image referenced by the AgentRuntime, with
+// projected SA token + session/memory PVC mounts. Upstream credentials never
+// land on this pod (rule 05.2); the gateway injects them via BSP. Memory is
+// stored under a subPath of the session PVC for the demo path; replacing this
+// with a Memory-CR-resolved PVC is tracked in TD-P1-09.
 func buildSessionPodObject(
 	sess *workspacev1alpha1.WorkspaceSession,
 	ws *workspacev1alpha1.Workspace,
+	ar *runtimev1alpha1.AgentRuntime,
 	podName string,
 ) *corev1.Pod {
+	saName := serviceAccountName(ws)
+	pvcName := sessionPVCName(ws)
+	tenantName := ws.Spec.TenantRef.Name
+
+	tgps := int64(60) // align with operator drain budget (design 18)
+	saTokenExpiry := int64(saTokenExpirationSeconds)
+
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -454,6 +476,7 @@ func buildSessionPodObject(
 				"keese.ai/workspace":           ws.Name,
 				"keese.ai/session":             sess.Name,
 				"keese.ai/session-mode":        string(sess.Spec.Mode),
+				"keese.ai/tenant":              tenantName,
 				"app.kubernetes.io/managed-by": sessionFieldOwner,
 			},
 			// Owner reference keeps the pod garbage-collected when the WorkspaceSession is deleted.
@@ -469,23 +492,150 @@ func buildSessionPodObject(
 			},
 		},
 		Spec: corev1.PodSpec{
-			// SecurityContext: readOnlyRootFilesystem enforced per rule 05.11.
-			// Volumes and containers are minimal stubs; the AgentRuntime SPI
-			// will inject the real spec via Bootstrap().
-			RestartPolicy: corev1.RestartPolicyNever,
+			RestartPolicy:                 corev1.RestartPolicyNever,
+			ServiceAccountName:            saName,
+			AutomountServiceAccountToken:  ptr(false), // SA token comes via projected volume only
+			TerminationGracePeriodSeconds: &tgps,
+			SecurityContext: &corev1.PodSecurityContext{
+				RunAsNonRoot: ptr(true),
+				// Explicit numeric UID — kubelet's runAsNonRoot check
+				// rejects non-numeric image users like "goose". 1000 is
+				// the conventional non-root demo UID and matches the
+				// upstream goose image's named user.
+				RunAsUser:  ptr(int64(1000)),
+				RunAsGroup: ptr(int64(1000)),
+				FSGroup:    ptr(int64(1000)),
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "session",
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: pvcName,
+						},
+					},
+				},
+				{
+					Name: "sa-token",
+					VolumeSource: corev1.VolumeSource{
+						Projected: &corev1.ProjectedVolumeSource{
+							Sources: []corev1.VolumeProjection{
+								{
+									ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+										Audience:          fmt.Sprintf("keese-egress-%s", tenantName),
+										ExpirationSeconds: &saTokenExpiry,
+										Path:              "egress",
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					// Writable scratch — readOnlyRootFilesystem requires this for /tmp.
+					Name: "scratch",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{
+							SizeLimit: ptrQuantity("256Mi"),
+						},
+					},
+				},
+			},
 			Containers: []corev1.Container{
 				{
-					Name:  "goose-acp",
-					Image: "gcr.io/distroless/static:nonroot", // stub; real image via AgentRuntime SPI
-					// No env vars carrying secrets (rule 05.7).
+					Name:            "agent",
+					Image:           ar.Spec.Implementation.Goose.Image,
+					ImagePullPolicy: corev1.PullIfNotPresent,
+					// Long-lived ready-to-attach container. We keep `sleep
+					// infinity` (not `goose session`) because goose's
+					// session command requires a TTY/stdin — it exits
+					// immediately under a non-interactive container start.
+					// The user / future ACP bridge attaches via
+					// `kubectl exec` and runs goose interactively. With
+					// the AI Gateway live, the `goose run` invocation
+					// inside the exec works against
+					// $ANTHROPIC_BASE_URL. (TD-P1-02 ACP bridge replaces
+					// this with a real attach handshake.)
+					Command: []string{"/bin/sh", "-c"},
+					Args:    []string{"echo 'goose runtime ready; attach via kubectl exec'; exec sleep infinity"},
+					Env: []corev1.EnvVar{
+						{Name: "GOOSE_PROVIDER", Value: "anthropic"},
+						{Name: "GOOSE_MODEL", Value: "claude-opus-4-7"},
+						{
+							Name:  "ANTHROPIC_BASE_URL",
+							Value: "https://envoy-ai-gateway.keese-system.svc:443",
+						},
+						{
+							Name: "KEESE_SESSION_ID",
+							ValueFrom: &corev1.EnvVarSource{
+								FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
+							},
+						},
+						{Name: "KEESE_TENANT", Value: tenantName},
+						{Name: "KEESE_WORKSPACE", Value: ws.Name},
+						// HOME points to a writable subPath on the session PVC
+						// so goose can write ~/.local/state/goose/... without
+						// needing to disable readOnlyRootFilesystem.
+						{Name: "HOME", Value: "/var/run/keese/session/home"},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "session",
+							MountPath: "/var/run/keese/session",
+						},
+						{
+							Name:      "session",
+							MountPath: "/var/run/keese/memory",
+							SubPath:   "memory",
+						},
+						{
+							Name:      "sa-token",
+							MountPath: "/var/run/keese/tokens",
+							ReadOnly:  true,
+						},
+						{
+							Name:      "scratch",
+							MountPath: "/tmp",
+						},
+					},
 					SecurityContext: &corev1.SecurityContext{
+						RunAsNonRoot:             ptr(true),
 						ReadOnlyRootFilesystem:   ptr(true),
 						AllowPrivilegeEscalation: ptr(false),
+						Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+					},
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("256Mi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("2"),
+							corev1.ResourceMemory: resource.MustParse("2Gi"),
+						},
+					},
+					// Best-effort drain on SIGTERM. The full Drain/Resume SPI
+					// (TD-P1-02) replaces this with a real checkpoint call.
+					Lifecycle: &corev1.Lifecycle{
+						PreStop: &corev1.LifecycleHandler{
+							Exec: &corev1.ExecAction{
+								Command: []string{"/bin/sh", "-c", "kill -TERM 1 && sleep 25"},
+							},
+						},
 					},
 				},
 			},
 		},
 	}
+}
+
+// ptrQuantity is a small helper to construct a *resource.Quantity from a string.
+func ptrQuantity(s string) *resource.Quantity {
+	q := resource.MustParse(s)
+	return &q
 }
 
 // ptr returns a pointer to the given value (generic helper).
