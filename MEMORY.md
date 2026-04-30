@@ -12,6 +12,25 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-04-27 — LLM credential path stays gateway-side (rule 05.2 reaffirmed)
+
+- Architect confirmed: agent pods carry **only** the projected SA token. The
+  Envoy AI Gateway pod is the credential terminator — it loads the upstream
+  key from OpenBao (via `BackendSecurityPolicy` + `ExternalSecret`) and
+  injects it into the outgoing API call. No init-container or sidecar on
+  the agent pod ever touches the upstream credential.
+- For Anthropic specifically: BSP `APIKey` type injects `Authorization:
+  Bearer <key>` (header name is hardcoded at v1alpha1 — see
+  `BackendSecurityPolicyAPIKey` struct in
+  `github.com/envoyproxy/ai-gateway/api/v1alpha1`). Anthropic expects
+  `x-api-key: <key>` + `anthropic-version: 2023-06-01`. Closed by an
+  `EnvoyExtensionPolicy` Lua filter wired in
+  [dev/bootstrap/aigateway/anthropic-llm-stack.yaml](dev/bootstrap/aigateway/anthropic-llm-stack.yaml)
+  (former TD-P2-13).
+- `.envrc` already runs `dotenv .env.local` so `$ANTHROPIC_API_KEY` reaches
+  `tilt up` → `scripts/dev/seed-openbao.sh` automatically once the user
+  populates `.env.local`. No Tiltfile change needed.
+
 ### 2026-04-22 — Final 2 specs (tenancy + authz) close design-gate predicate
 
 - Tenancy spec (4 files: primary + ii-tenant + ii-cra + iter-log) — covers Tenant (D26) + CrossTenantAgreement (D29). Honest score 87.5/100 — at the rubric SHIP threshold (≥85) but below conventional ≥90 target. Cat 4 −5 + Cat 5 −7.5 = full pre-gate docks (Makefile + webhook impl deferred to P8; test scaffolding deferred). Flagged for review as the lowest score in the spec batch.
@@ -71,6 +90,85 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   clone/move.
 
 ## Gotchas
+
+### 2026-04-30 — AI Gateway BSP injection requires EG `extensionManager.hooks.xdsTranslator`
+
+- v0.4+ AI Gateway BSP types (`AnthropicAPIKey`, `APIKey`, `AWSCredentials`,
+  …) inject upstream credentials and rewrite the request path **on the
+  upstream filter chain** (`cluster.typed_extension_protocol_options.HttpProtocolOptions.http_filters`).
+  The HCM ext_proc filter that EG installs from the `EnvoyExtensionPolicy`
+  only fires on the downstream phase — it sets `x-ai-eg-original-path`,
+  `x-ai-eg-internal-req-id`, and tags the request with the BSP backend
+  name, but it does **not** add `x-api-key` and does **not** rewrite
+  `/anthropic/v1/messages` → `/v1/messages`.
+- The upstream filter chain only gets installed when EG is configured
+  with the AI Gateway controller as an xDS-translator extension hook.
+  Required EG values (mirroring [v0.5.0 reference values](https://github.com/envoyproxy/ai-gateway/blob/v0.5.0/manifests/envoy-gateway-values.yaml)):
+  ```yaml
+  config:
+    envoyGateway:
+      extensionApis:
+        enableBackend: true
+        enableEnvoyPatchPolicy: true
+      extensionManager:
+        hooks:
+          xdsTranslator:
+            translation:
+              listener: { includeAll: true }
+              route: { includeAll: true }
+              cluster: { includeAll: true }
+              secret: { includeAll: true }
+            post: [Translation, Cluster, Route]
+        service:
+          fqdn:
+            hostname: ai-gateway-controller.envoy-ai-gateway-system.svc.cluster.local
+            port: 1063
+  ```
+  Without this, `request_attributes` and the upstream ext_proc filter
+  are missing from the cluster, so the BSP credential never gets
+  injected and Anthropic returns 404 on `/anthropic/v1/messages`.
+- The AI Gateway controller's gRPC extension server on `:1063` is
+  **plaintext**, NOT TLS — its `--tlsCertDir` flag is for the mutating
+  webhook on `:9443`. Configuring `tls:` on the EG ExtensionService
+  causes `tls: first record does not look like a TLS handshake`
+  errors. (Verified by reading
+  `cmd/controller/main.go:353` in the v0.5.0 source — the gRPC server
+  is constructed with `grpc.NewServer(...)` without `grpc.Creds(...)`.)
+- `helm upgrade --reuse-values` does NOT drop a `tls:` block previously
+  set under `extensionManager.service`. Use `--reset-values -f` when
+  removing nested keys, otherwise the helm-rendered ConfigMap retains
+  the stale block.
+- Dev-loop verification: post-fix, the cluster config dump exposes
+  `cluster.typed_extension_protocol_options.HttpProtocolOptions.http_filters[0]`
+  = `envoy.filters.http.ext_proc/aigateway` with `request_attributes:
+  ['xds.upstream_host_metadata.filter_metadata['aigateway.envoy.io']['per_route_rule_backend_name']', …]`.
+  End-to-end: agent pod → gateway → Anthropic, HTTP/2 200 with real
+  completion content. Configured in
+  [dev/bootstrap/values/envoy-gateway.yaml](dev/bootstrap/values/envoy-gateway.yaml).
+
+### 2026-04-29 — Envoy Gateway v1.6 BackendTLSPolicy needs `gateway.networking.k8s.io/v1`
+
+- EG v1.6.0 watches `gateway.networking.k8s.io/v1.BackendTLSPolicy` (GA in
+  Gateway API v1.2). Manifests still on `v1alpha3` are silently ignored —
+  EG logs `BackendTLSPolicy CRD not found, skipping watch` and the
+  upstream listener has `transport_socket_count: 0` (cleartext to
+  `api.anthropic.com:443`, instant TLS handshake failure).
+- Helm OCI charts do **not** upgrade CRDs across releases (helm only
+  installs CRDs on first install of a chart). The cert-manager / Gateway
+  API CRDs that ship under `crds/` in the EG chart must be applied
+  separately on every chart bump:
+  `kubectl apply -f $(helm pull oci://docker.io/envoyproxy/gateway-helm --version v1.6.0 --untar -d /tmp/eg && echo /tmp/eg/gateway-helm/crds/gatewayapi-crds.yaml)`.
+  The bundled file ships **both** v1 and v1alpha3 of BackendTLSPolicy.
+- After applying CRDs, restart `envoy-gateway` so the controller-runtime
+  informer registers the new GVK; until restart it reports
+  `BackendTLSPolicy CRD not found`.
+- Verified-working manifest: [dev/bootstrap/aigateway/anthropic-llm-stack.yaml](dev/bootstrap/aigateway/anthropic-llm-stack.yaml)
+  uses `apiVersion: gateway.networking.k8s.io/v1` + `caCertificateRefs`
+  pointing at the trust-manager-distributed `public-ca-bundle` ConfigMap
+  (NOT `wellKnownCACertificates: System` — EG v1.6 expects an SDS-supplied
+  secret for system CAs that the gateway does not auto-provide).
+  Verified post-fix via `config_dump`:
+  `transport_socket_count: 1, tls_present: true`.
 
 ### 2026-04-20 — 05b credential injection patterns
 
