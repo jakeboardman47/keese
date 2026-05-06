@@ -55,10 +55,6 @@ const (
 	bootstrapLabel      = "keese.ai/bootstrap"
 	bootstrapLabelValue = "true"
 
-	// managedLabel and its value filter CRs processed by this reconciler.
-	managedLabel      = "keese.ai/managed"
-	managedLabelValue = "true"
-
 	// requeueJWKSInterval is how often the controller re-probes the JWKS endpoint
 	// regardless of spec changes (rule 06 — no time.Sleep; use RequeueAfter).
 	requeueJWKSInterval = 5 * time.Minute

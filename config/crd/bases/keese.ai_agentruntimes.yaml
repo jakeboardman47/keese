@@ -1,0 +1,213 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: agentruntimes.keese.ai
+spec:
+  group: keese.ai
+  names:
+    kind: AgentRuntime
+    listKind: AgentRuntimeList
+    plural: agentruntimes
+    singular: agentruntime
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.provider
+      name: Provider
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          AgentRuntime is the Schema for the agentruntimes API.
+          Cluster-scoped; registers a runtime provider implementation.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AgentRuntimeSpec defines the desired state of AgentRuntime.
+            properties:
+              implementation:
+                description: |-
+                  Implementation selects and configures the runtime provider.
+                  Exactly one sub-field must be set (enforced by CEL XValidation).
+                properties:
+                  aider:
+                    description: Aider configures the aider runtime provider (stub
+                      at v1alpha1).
+                    type: object
+                  claudeCode:
+                    description: ClaudeCode configures the Claude Code runtime provider
+                      (stub at v1alpha1).
+                    type: object
+                  goose:
+                    description: Goose configures the goose headless runtime provider.
+                    properties:
+                      image:
+                        description: |-
+                          Image is the OCI reference for the goose runtime image.
+                          In production this must be digest-pinned (rule 05.12).
+                        minLength: 1
+                        type: string
+                      imageTag:
+                        description: ImageTag is informational; admission validates
+                          it against SupportedImageVersions.
+                        type: string
+                      migrationPolicy:
+                        description: MigrationPolicy governs how migration severity
+                          gates upgrades.
+                        properties:
+                          maxDeferral:
+                            description: |-
+                              MaxDeferral is the maximum time this runtime can defer the migration.
+                              critical is hard-capped at 1h by the controller.
+                            type: string
+                          severity:
+                            description: 'Severity of migration: critical|high|medium|low.'
+                            enum:
+                            - critical
+                            - high
+                            - medium
+                            - low
+                            type: string
+                        required:
+                        - severity
+                        type: object
+                      sidecars:
+                        description: Sidecars holds optional sidecar configuration.
+                        properties:
+                          acpBridge:
+                            description: AcpBridge configures the ACP bridge sidecar.
+                              Empty image uses the operator-embedded default digest.
+                            properties:
+                              image:
+                                description: |-
+                                  Image is the OCI reference for the ACP bridge sidecar.
+                                  Empty means use the operator-embedded default digest.
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - image
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of goose, claudeCode, or aider must be set
+                  rule: '(has(self.goose) ? 1 : 0) + (has(self.claudeCode) ? 1 : 0)
+                    + (has(self.aider) ? 1 : 0) == 1'
+            required:
+            - implementation
+            type: object
+          status:
+            description: AgentRuntimeStatus defines the observed state of AgentRuntime.
+            properties:
+              conditions:
+                description: Conditions holds standard meta/v1 condition entries.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the .metadata.generation the controller
+                  last reconciled.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the high-level lifecycle phase.
+                enum:
+                - Pending
+                - Ready
+                - Degraded
+                - Incompatible
+                type: string
+              provider:
+                description: Provider mirrors the detected implementation name (e.g.
+                  "goose").
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

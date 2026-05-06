@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 keese-ai
 
-// Package v1alpha1 contains API Schema definitions for the authz.keese.ai v1alpha1 API group.
+// Package v1alpha1 contains API Schema definitions for the keese.ai v1alpha1 API group.
 // +kubebuilder:object:generate=true
-// +groupName=authz.keese.ai
+// +groupName=keese.ai
 package v1alpha1
 
 import (
@@ -13,7 +13,7 @@ import (
 
 var (
 	// GroupVersion is group version used to register these objects.
-	GroupVersion = schema.GroupVersion{Group: "authz.keese.ai", Version: "v1alpha1"}
+	GroupVersion = schema.GroupVersion{Group: "keese.ai", Version: "v1alpha1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}

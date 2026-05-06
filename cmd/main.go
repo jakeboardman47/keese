@@ -49,25 +49,16 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	authzv1alpha1 "github.com/keese-ai/keese/api/authz/v1alpha1"
-	guardrailv1alpha1 "github.com/keese-ai/keese/api/guardrail/v1alpha1"
-	memoryv1alpha1 "github.com/keese-ai/keese/api/memory/v1alpha1"
-	observabilityv1alpha1 "github.com/keese-ai/keese/api/observability/v1alpha1"
-	recipev1alpha1 "github.com/keese-ai/keese/api/recipe/v1alpha1"
-	runtimev1alpha1 "github.com/keese-ai/keese/api/runtime/v1alpha1"
-	tenancyv1alpha1 "github.com/keese-ai/keese/api/tenancy/v1alpha1"
-	transportv1alpha1 "github.com/keese-ai/keese/api/transport/v1alpha1"
-	workflowv1alpha1 "github.com/keese-ai/keese/api/workflow/v1alpha1"
-	workspacev1alpha1 "github.com/keese-ai/keese/api/workspace/v1alpha1"
+	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
+	policyv1alpha1 "github.com/keese-ai/keese/api/policy/v1alpha1"
 	authzcontroller "github.com/keese-ai/keese/internal/controller/authz"
-	guardrailcontroller "github.com/keese-ai/keese/internal/controller/guardrail"
-	memorycontroller "github.com/keese-ai/keese/internal/controller/memory"
-	observabilitycontroller "github.com/keese-ai/keese/internal/controller/observability"
-	recipecontroller "github.com/keese-ai/keese/internal/controller/recipe"
-	runtimecontroller "github.com/keese-ai/keese/internal/controller/runtime"
-	tenancycontroller "github.com/keese-ai/keese/internal/controller/tenancy"
-	transportcontroller "github.com/keese-ai/keese/internal/controller/transport"
-	workflowcontroller "github.com/keese-ai/keese/internal/controller/workflow"
-	workspacecontroller "github.com/keese-ai/keese/internal/controller/workspace"
+	keesecontroller "github.com/keese-ai/keese/internal/controller/keese"
+	policycontroller "github.com/keese-ai/keese/internal/controller/policy"
+	"github.com/keese-ai/keese/internal/rebac"
+
+	// AgentRuntime SPI providers — blank import drives Register() in
+	// each provider's init(). Spec §Static registration.
+	_ "github.com/keese-ai/keese/internal/runtime/providers/goose"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -79,16 +70,9 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(workspacev1alpha1.AddToScheme(scheme))
-	utilruntime.Must(workflowv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(runtimev1alpha1.AddToScheme(scheme))
-	utilruntime.Must(memoryv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(recipev1alpha1.AddToScheme(scheme))
-	utilruntime.Must(guardrailv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(observabilityv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(transportv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(tenancyv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(keesev1alpha1.AddToScheme(scheme))
 	utilruntime.Must(authzv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(policyv1alpha1.AddToScheme(scheme))
 
 	// External operator API schemes.
 	utilruntime.Must(argov1alpha1.AddToScheme(scheme))
@@ -199,14 +183,6 @@ func main() {
 		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
 	}
 
-	// If the certificate is not specified, controller-runtime will automatically
-	// generate self-signed certificates for the metrics server. While convenient for development and testing,
-	// this setup is not recommended for production.
-	//
-	// TODO(user): If you enable certManager, uncomment the following lines:
-	// - [METRICS-WITH-CERTS] at config/default/kustomization.yaml to generate and use certificates
-	// managed by cert-manager for the metrics server.
-	// - [PROMETHEUS-WITH-CERTS] at config/prometheus/kustomization.yaml for TLS certification.
 	if len(metricsCertPath) > 0 {
 		setupLog.Info("Initializing metrics certificate watcher using provided certificates",
 			"metrics-cert-path", metricsCertPath, "metrics-cert-name", metricsCertName, "metrics-cert-key", metricsCertKey)
@@ -232,138 +208,199 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "ae90101e.operator.keese.ai",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
+		LeaderElectionID:       "ae90101e.keese.ai",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
-	if err := (&workspacecontroller.WorkspaceReconciler{
+	// Build the OpenFGA-backed ReBAC writers when OPENFGA_API_URL +
+	// OPENFGA_STORE_ID + OPENFGA_AUTHORIZATION_MODEL_ID are all set;
+	// otherwise leave each adapter nil so the nil-guard in every
+	// reconciler's SetupWithManager falls back to the per-package
+	// FakeRebacWriter (envtest + out-of-cluster local-run path).
+	rebacCfg := rebac.Config{
+		APIURL:               os.Getenv("OPENFGA_API_URL"),
+		StoreID:              os.Getenv("OPENFGA_STORE_ID"),
+		AuthorizationModelID: os.Getenv("OPENFGA_AUTHORIZATION_MODEL_ID"),
+	}
+	// Interface-typed nils (NOT typed-nil pointers — those would defeat
+	// each reconciler's `if r.Rebac == nil` fallback guard).
+	var (
+		transportRebac keesecontroller.TransportRebacWriter
+		tenantRebac    keesecontroller.TenantRebacWriter
+		ctaRebac       authzcontroller.CTARebacWriter
+		workspaceRebac keesecontroller.WorkspaceRebacWriter
+		recipeRebac    keesecontroller.RecipeRebacWriter
+		guardrailRebac authzcontroller.GuardrailRebacWriter
+		memoryRebac    keesecontroller.MemoryRebacWriter
+		runtimeRebac   keesecontroller.RuntimeRebacWriter
+		workflowRebac  keesecontroller.WorkflowRebacWriter
+	)
+	if rebacCfg.APIURL != "" {
+		client, rebacErr := rebac.New(rebacCfg)
+		if rebacErr != nil {
+			setupLog.Error(rebacErr, "unable to construct OpenFGA client; falling back to fake writers")
+		} else {
+			setupLog.Info("OpenFGA-backed ReBAC writers enabled",
+				"api_url", rebacCfg.APIURL, "store_id", rebacCfg.StoreID)
+			transportRebac = &keesecontroller.TransportOpenFGARebacWriter{Client: client}
+			tenantRebac = &keesecontroller.TenantOpenFGARebacWriter{Client: client}
+			ctaRebac = &authzcontroller.CTAOpenFGARebacWriter{Client: client}
+			workspaceRebac = &keesecontroller.WorkspaceOpenFGARebacWriter{Client: client}
+			recipeRebac = &keesecontroller.RecipeOpenFGARebacWriter{Client: client}
+			guardrailRebac = &authzcontroller.GuardrailOpenFGARebacWriter{Client: client}
+			memoryRebac = &keesecontroller.MemoryOpenFGARebacWriter{Client: client}
+			runtimeRebac = &keesecontroller.RuntimeOpenFGARebacWriter{Client: client}
+			workflowRebac = &keesecontroller.WorkflowOpenFGARebacWriter{Client: client}
+		}
+	} else {
+		setupLog.Info("OPENFGA_API_URL unset — using FakeRebacWriter (no upstream authz)")
+	}
+
+	if err := (&keesecontroller.WorkspaceReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Rebac:  workspaceRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Workspace")
 		os.Exit(1)
 	}
-	if err := (&workspacecontroller.WorkspaceShareReconciler{
+	if err := (&keesecontroller.WorkspaceShareReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Rebac:  workspaceRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceShare")
 		os.Exit(1)
 	}
-	if err := (&workspacecontroller.WorkspaceSessionReconciler{
+	if err := (&keesecontroller.WorkspaceSessionReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Rebac:  workspaceRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WorkspaceSession")
 		os.Exit(1)
 	}
-	argoProjector := workflowcontroller.NewClientArgoProjector(mgr.GetClient())
-	if err := (&workflowcontroller.WorkflowReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Argo:   argoProjector,
+	argoProjector := keesecontroller.NewClientArgoProjector(mgr.GetClient())
+	// All Workflow/WorkflowRun reconciler dependencies are wired with
+	// safe defaults (Fake* / NoOp*) until the production implementations
+	// land. Each is tracked as a TD-P1 entry.
+	if workflowRebac == nil {
+		workflowRebac = &keesecontroller.WorkflowFakeRebacWriter{}
+	}
+	wfNats := &keesecontroller.FakeNatsStreamProvisioner{}
+	wfNatsDel := &keesecontroller.FakeNatsStreamDeleter{}
+	if err := (&keesecontroller.WorkflowReconciler{
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		Argo:          argoProjector,
+		Rebac:         workflowRebac,
+		EventRecorder: mgr.GetEventRecorderFor("keese-workflow-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Workflow")
 		os.Exit(1)
 	}
-	if err := (&workflowcontroller.WorkflowRunReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Argo:   argoProjector,
+	if err := (&keesecontroller.WorkflowRunReconciler{
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		Argo:        argoProjector,
+		Nats:        wfNats,
+		NatsDeleter: wfNatsDel,
+		Rebac:       workflowRebac,
+		// Single-tenant default until the CrossTenantAgreement (CTA)
+		// reconciler is wired. NoOpCTAResolver returns no peers.
+		CTA:           &keesecontroller.FakeWorkflowCTAResolver{},
+		EventRecorder: mgr.GetEventRecorderFor("keese-workflowrun-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WorkflowRun")
 		os.Exit(1)
 	}
-	if err := (&runtimecontroller.AgentRuntimeReconciler{
+	if err := (&keesecontroller.AgentRuntimeReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AgentRuntime")
 		os.Exit(1)
 	}
-	if err := (&runtimecontroller.RuntimeExtensionReconciler{
+	if err := (&keesecontroller.RuntimeExtensionReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Rebac:  runtimeRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RuntimeExtension")
 		os.Exit(1)
 	}
-	if err := (&memorycontroller.MemoryReconciler{
+	if err := (&keesecontroller.MemoryReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Rebac:  memoryRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Memory")
 		os.Exit(1)
 	}
-	if err := (&memorycontroller.SharedMemoryReconciler{
+	if err := (&keesecontroller.SharedMemoryReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Rebac:  memoryRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SharedMemory")
 		os.Exit(1)
 	}
-	if err := (&recipecontroller.RecipeReconciler{
+	if err := (&keesecontroller.RecipeReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Rebac:  recipeRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Recipe")
 		os.Exit(1)
 	}
-	if err := (&recipecontroller.RecipeSourceReconciler{
+	if err := (&keesecontroller.RecipeSourceReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RecipeSource")
 		os.Exit(1)
 	}
-	if err := (&guardrailcontroller.GuardrailBindingReconciler{
+	if err := (&authzcontroller.GuardrailBindingReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("guardrailbinding-controller"),
-		Kyverno:  guardrailcontroller.NewClientKyvernoPolicyProjector(mgr.GetClient()),
+		Kyverno:  authzcontroller.NewClientKyvernoPolicyProjector(mgr.GetClient()),
+		Rebac:    guardrailRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GuardrailBinding")
 		os.Exit(1)
 	}
-	if err := (&observabilitycontroller.TokenBudgetReconciler{
+	if err := (&policycontroller.TokenBudgetReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
-		RateLimitProj: observabilitycontroller.NewClientRateLimitProjector(mgr.GetClient()),
+		RateLimitProj: policycontroller.NewClientRateLimitProjector(mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TokenBudget")
 		os.Exit(1)
 	}
-	if err := (&transportcontroller.TransportReconciler{
+	if err := (&keesecontroller.TransportReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Rebac:  transportRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Transport")
 		os.Exit(1)
 	}
-	if err := (&tenancycontroller.TenantReconciler{
+	if err := (&keesecontroller.TenantReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Rebac:  tenantRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Tenant")
 		os.Exit(1)
 	}
-	if err := (&tenancycontroller.CrossTenantAgreementReconciler{
+	if err := (&authzcontroller.CrossTenantAgreementReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Rebac:  ctaRebac,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "CrossTenantAgreement")
 		os.Exit(1)
