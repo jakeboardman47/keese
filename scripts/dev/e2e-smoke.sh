@@ -241,7 +241,7 @@ phase_05_oidcprovider_bootstrap() {
   # Degraded per BootstrapPlaceholderIssuer logic — that is expected).
   local count
   count=$(kubectl --context="${KUBE_CTX}" \
-    get oidcproviders.transport.operator.keese.ai \
+    get oidcproviders.authz.keese.ai \
     --all-namespaces \
     -o json 2>/dev/null \
     | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('items',[])))" \
@@ -253,7 +253,7 @@ phase_05_oidcprovider_bootstrap() {
   local ready=0
   while [[ $(date +%s) -lt ${deadline} ]]; do
     ready=$(kubectl --context="${KUBE_CTX}" \
-      get oidcproviders.transport.operator.keese.ai \
+      get oidcproviders.authz.keese.ai \
       --all-namespaces \
       -o jsonpath='{range .items[*]}{.status.phase}{"\n"}{end}' 2>/dev/null \
       | grep -cE '^(Active|Degraded)$' || true)
@@ -278,7 +278,7 @@ phase_06_sample_tenant() {
 
   local tenant_name
   tenant_name=$(kubectl --context="${KUBE_CTX}" \
-    get tenant.workspace.operator.keese.ai \
+    get tenant.keese.ai \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
 
   if [[ -z "${tenant_name}" ]]; then
@@ -292,7 +292,7 @@ phase_06_sample_tenant() {
   while [[ $(date +%s) -lt ${deadline} ]]; do
     local phase
     phase=$(kubectl --context="${KUBE_CTX}" \
-      get tenant.workspace.operator.keese.ai "${tenant_name}" \
+      get tenant.keese.ai "${tenant_name}" \
       -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
     if [[ "${phase}" == "Active" ]]; then
       log::ok "Tenant '${tenant_name}' is Active."
@@ -304,7 +304,7 @@ phase_06_sample_tenant() {
 
   log::err "Tenant '${tenant_name}' did not reach Active within ${TIMEOUT_TENANT}s."
   kubectl --context="${KUBE_CTX}" \
-    describe tenant.workspace.operator.keese.ai "${tenant_name}" >&2 || true
+    describe tenant.keese.ai "${tenant_name}" >&2 || true
   return 1
 }
 
@@ -314,12 +314,12 @@ phase_07_sample_workspace() {
 
   local ws_name
   ws_name=$(kubectl --context="${KUBE_CTX}" \
-    get workspace.workspace.operator.keese.ai \
+    get workspace.keese.ai \
     --all-namespaces \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
   local ws_ns
   ws_ns=$(kubectl --context="${KUBE_CTX}" \
-    get workspace.workspace.operator.keese.ai \
+    get workspace.keese.ai \
     --all-namespaces \
     -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "")
 
@@ -335,7 +335,7 @@ phase_07_sample_workspace() {
   while [[ $(date +%s) -lt ${deadline} ]]; do
     ws_phase=$(kubectl --context="${KUBE_CTX}" \
       -n "${ws_ns}" \
-      get workspace.workspace.operator.keese.ai "${ws_name}" \
+      get workspace.keese.ai "${ws_name}" \
       -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
     case "${ws_phase}" in
       Provisioning | Running)
@@ -351,7 +351,7 @@ phase_07_sample_workspace() {
     *)
       log::err "Workspace '${ws_name}' phase='${ws_phase}' after ${TIMEOUT_WORKSPACE}s; expected Provisioning or Running."
       kubectl --context="${KUBE_CTX}" -n "${ws_ns}" \
-        describe workspace.workspace.operator.keese.ai "${ws_name}" >&2 || true
+        describe workspace.keese.ai "${ws_name}" >&2 || true
       return 1
       ;;
   esac
@@ -408,12 +408,12 @@ phase_08_sample_session() {
 
   local sess_name
   sess_name=$(kubectl --context="${KUBE_CTX}" \
-    get workspacesession.workspace.operator.keese.ai \
+    get workspacesession.keese.ai \
     --all-namespaces \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
   local sess_ns
   sess_ns=$(kubectl --context="${KUBE_CTX}" \
-    get workspacesession.workspace.operator.keese.ai \
+    get workspacesession.keese.ai \
     --all-namespaces \
     -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || echo "")
 
@@ -429,7 +429,7 @@ phase_08_sample_session() {
   while [[ $(date +%s) -lt ${deadline} ]]; do
     sess_phase=$(kubectl --context="${KUBE_CTX}" \
       -n "${sess_ns}" \
-      get workspacesession.workspace.operator.keese.ai "${sess_name}" \
+      get workspacesession.keese.ai "${sess_name}" \
       -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
     if [[ "${sess_phase}" == "Active" ]]; then
       break
@@ -441,7 +441,7 @@ phase_08_sample_session() {
   if [[ "${sess_phase}" != "Active" ]]; then
     log::err "WorkspaceSession '${sess_name}' did not reach Active within ${TIMEOUT_SESSION}s (got '${sess_phase}')."
     kubectl --context="${KUBE_CTX}" -n "${sess_ns}" \
-      describe workspacesession.workspace.operator.keese.ai "${sess_name}" >&2 || true
+      describe workspacesession.keese.ai "${sess_name}" >&2 || true
     return 1
   fi
 

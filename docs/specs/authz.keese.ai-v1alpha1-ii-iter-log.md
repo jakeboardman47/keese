@@ -5,16 +5,16 @@
 scope: spec
 category: iteration-log
 depends:
-  - authz.operator.keese.ai-v1alpha1.md
+  - authz.keese.ai-v1alpha1.md
 related_skills: []
 status: current
 last_verified: 2026-04-21
 regression_lock: false
 ---
 
-# authz.operator.keese.ai v1alpha1 — Iteration Log
+# authz.keese.ai v1alpha1 — Iteration Log
 
-Companion to [`authz.operator.keese.ai-v1alpha1.md`](authz.operator.keese.ai-v1alpha1.md).
+Companion to [`authz.keese.ai-v1alpha1.md`](authz.keese.ai-v1alpha1.md).
 
 ---
 

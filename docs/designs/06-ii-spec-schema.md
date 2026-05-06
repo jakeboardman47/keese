@@ -23,7 +23,7 @@ the canonical field-by-field schema, `[05c-lock]` annotations marking fields
 ## Canonical spec schema
 
 ```yaml
-apiVersion: guardrail.operator.keese.ai/v1alpha1
+apiVersion: authz.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
   name: <name>

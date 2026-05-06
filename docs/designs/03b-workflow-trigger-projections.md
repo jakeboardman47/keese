@@ -73,7 +73,7 @@ NACK with 30 s backoff; `NATSDedupUnavailable` event; fanout pauses.
 
 ```
 # In operator namespace (keese-system):
-workflowruns.workflow.operator.keese.ai — create
+workflowruns.keese.ai — create
 configmaps (keese-trigger-cfg-*) — get, list, watch
 secrets (keese-trigger-hmac-*) — get, watch  # via projected SA token
 ```

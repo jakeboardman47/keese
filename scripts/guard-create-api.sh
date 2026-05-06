@@ -36,7 +36,7 @@ if grep -qE "^[[:space:]]+group:[[:space:]]+${group}$" PROJECT \
       if (group_found >= block_start) { print "hit"; exit }
     }
   ' PROJECT | grep -q hit && {
-    echo "guard-create-api: ${kind}.${group}.operator.keese.ai already in PROJECT — refusing re-create" >&2
+    echo "guard-create-api: ${kind}/${group} already in PROJECT — refusing re-create" >&2
     exit 1
   }
 fi

@@ -31,7 +31,7 @@ Trade-offs, failure modes, upgrade/rollback, observability, and iteration log:
 ## Context
 
 D26 (2026-04-20) amends D23: keese owns exactly one additional CRD,
-`tenancy.operator.keese.ai/v1alpha1/Tenant` (cluster-scoped). It does NOT
+`keese.ai/v1alpha1/Tenant` (cluster-scoped). It does NOT
 reimplement namespace aggregation — that delegates to Capsule (Mode B) or
 derives from `keese.ai/tenant=<name>` label selectors (Mode A). Purpose: give
 ReBAC `tenant:X` a K8s-object backing with finalizers, events, and status, and
@@ -94,7 +94,7 @@ Controller watches Namespaces matching `spec.namespaceSelector`; populates
 
 **Decision: fail-closed (option a).** When the `keese.ai/tenant=<name>` label is
 removed from a namespace that has live Workspaces: controller installs finalizer
-`finalizers.tenant.operator.keese.ai/namespaces` on the namespace; the VAP from
+`finalizers.tenant.keese.ai/namespaces` on the namespace; the VAP from
 D-01.7 (`config/overlays/base/vap/namespace-tenant-label.yaml`) blocks label
 removal while that finalizer is present. Controller removes the finalizer only
 after all Workspaces in the namespace are Terminating or deleted. Event reason:
@@ -123,7 +123,7 @@ to permit declarative users to carry both fields). The label-immutability VAP
 | `GuardrailBinding` (via `spec.defaultGuardrailBindings`) | No | Bindings may be shared; cascade would be destructive for shared resources. |
 | `Workspace` | No | Association is label-based; OwnerRef would cascade workspace deletion on tenant removal. |
 
-Finalizer on Tenant CR: `finalizers.tenant.operator.keese.ai/workspaces`. Blocks
+Finalizer on Tenant CR: `finalizers.tenant.keese.ai/workspaces`. Blocks
 deletion until `status.namespaces[]` is empty.
 
 ## Admission Invariants (Q5)

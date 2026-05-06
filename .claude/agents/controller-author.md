@@ -26,7 +26,8 @@ the design gate has opened for the owning CRD.
 **Do not start** unless:
 
 - `docs/designs/NN-<topic>.md` has `status: current` and score ≥ 90.
-- `docs/specs/<group>.operator.keese.ai-v1alpha1.md` has `status:
+- The owning spec in `docs/specs/` (e.g. `keese.ai-v1alpha1-<kind>.md`,
+  `authz.keese.ai-v1alpha1.md`, or `policy.keese.ai-v1alpha1.md`) has `status:
   current` and score ≥ 90.
 - `scripts/check-design-gate.sh` exits 0.
 

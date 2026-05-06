@@ -22,7 +22,7 @@ rollback: |
 
 ## Context
 
-`Memory` (`memory.operator.keese.ai/v1alpha1`) is a per-workspace CR that
+`Memory` (`keese.ai/v1alpha1`) is a per-workspace CR that
 provisions a durable, queryable backend for an agent. `SharedMemory` is a
 Tenant-scoped CR that multiple workspaces may read or write, gated by OpenFGA
 tuples and ReferenceGrant. `spec.provider` uses a discriminated one-of (rule 04.6).
@@ -81,7 +81,7 @@ Only `tenant:T#admin@user:U` may mutate `SharedMemory.spec.{read,write}Workspace
 ## Lifecycle
 
 **Memory CR:** controller provisions backend → sets finalizer
-`finalizers.memory.operator.keese.ai/cleanup` → status `Provisioning → Ready`.
+`finalizers.memory.keese.ai/cleanup` → status `Provisioning → Ready`.
 On deletion: remove backend resource, purge OpenFGA tuples, release finalizer.
 
 **SharedMemory CR:** each workspace opting in creates a `ReferenceGrant` in its
@@ -137,7 +137,7 @@ Printer columns: `Phase`, `Provider`, `Ready`, `Age` (rule 04.5).
 - [04a-openfga-authz-model.md](04a-openfga-authz-model.md)
 - [05b-credential-injection-patterns.md](05b-credential-injection-patterns.md)
 - [17-credential-broker.md](17-credential-broker.md)
-- [../specs/memory.operator.keese.ai-v1alpha1.md](../specs/memory.operator.keese.ai-v1alpha1.md)
+- [../specs/keese.ai-v1alpha1.md](../specs/keese.ai-v1alpha1.md)
 - [../plans/rubric.md](../plans/rubric.md)
 
 ## Iteration log

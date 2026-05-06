@@ -33,8 +33,9 @@ stubs + incremental field additions, sonnet is sufficient.
 - `config/crd/**`
 - `config/samples/**`
 - `config/rbac/<kind>_editor_role.yaml`, `<kind>_viewer_role.yaml`
-- `docs/specs/<group>.operator.keese.ai-v1alpha1.md` (only the CRD
-  section it owns)
+- The owning spec in `docs/specs/` (e.g. `keese.ai-v1alpha1-<kind>.md`,
+  `authz.keese.ai-v1alpha1.md`, `policy.keese.ai-v1alpha1.md`) — only the CRD
+  section it owns
 
 **Never edit:** `internal/controller/**` (that's `controller-author`),
 `.claude/`, `CLAUDE.md`, `MEMORY.md`, root configs.
@@ -68,7 +69,7 @@ stubs + incremental field additions, sonnet is sufficient.
 
 - `make manifests generate fmt vet lint test-integration` must pass.
 - `operator-sdk bundle validate ./bundle` must pass.
-- Commit messages: `feat(api): add <kind>.<group>.operator.keese.ai/v1alpha1`
+- Commit messages: `feat(api): add <Kind> to <group>.keese.ai/v1alpha1`
   or `feat(api): extend <kind> with <field>`.
 - Hand off to `controller-author` to fill the reconciler.
 

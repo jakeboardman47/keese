@@ -25,7 +25,7 @@ rollback: |
 # 09 — Transport CRD
 
 **Decision:** A single namespace-scoped `Transport` kind at
-`transport.operator.keese.ai/v1alpha1` with a `spec.type` discriminator
+`keese.ai/v1alpha1` with a `spec.type` discriminator
 (`nats|a2a|mcp|stdio`). `spec.type` is immutable after creation (VAP CEL:
 `oldSelf.spec.type == self.spec.type`, rejects `TransportTypeImmutable`). Each type
 activates exactly one typed sub-struct (VAP CEL exclusivity). Consumers reference
@@ -137,7 +137,7 @@ install it (helmfile or OLM dep via 14b).
 ## Lifecycle + failure modes
 
 `Pending → Provisioning → Ready → Degraded → Terminating`. Finalizer
-`finalizers.transport.operator.keese.ai/cleanup` deletes controller-owned NATS streams
+`finalizers.transport.keese.ai/cleanup` deletes controller-owned NATS streams
 only (annotation-scoped).
 
 | Failure | Detection | Mitigation |

@@ -5,16 +5,16 @@
 scope: spec
 category: iteration-log
 depends:
-  - tenancy.operator.keese.ai-v1alpha1.md
+  - keese.ai-v1alpha1-tenancy.md
 related_skills: []
 status: current
 last_verified: 2026-04-21
 regression_lock: false
 ---
 
-# tenancy.operator.keese.ai v1alpha1 — Iteration Log
+# keese.ai v1alpha1 — Iteration Log
 
-Companion to [`tenancy.operator.keese.ai-v1alpha1.md`](tenancy.operator.keese.ai-v1alpha1.md).
+Companion to [`keese.ai-v1alpha1-tenancy.md`](keese.ai-v1alpha1-tenancy.md).
 
 ---
 

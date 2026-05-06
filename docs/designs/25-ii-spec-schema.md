@@ -23,7 +23,7 @@ Companion to [25-cross-tenant-agreement.md](25-cross-tenant-agreement.md).
 ## Full YAML schema sketch
 
 ```yaml
-apiVersion: tenancy.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: CrossTenantAgreement
 metadata:
   name: <name>                  # cluster-scoped; no namespace
@@ -87,7 +87,7 @@ status:
 
 ## VAP CEL rules
 
-Named: `crosstenanagreement-policy.tenancy.operator.keese.ai/v1alpha1`
+Named: `crosstenanagreement-policy.keese.ai/v1alpha1`
 
 ```cel
 # No self-agreement
@@ -139,7 +139,7 @@ Two samples ship under `config/samples/tenancy/`:
 
 **Minimal:**
 ```yaml
-apiVersion: tenancy.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: CrossTenantAgreement
 metadata:
   name: cra-alpha-to-beta-minimal
@@ -157,7 +157,7 @@ spec:
 
 **Fully populated:**
 ```yaml
-apiVersion: tenancy.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: CrossTenantAgreement
 metadata:
   name: cra-alpha-to-beta-full
@@ -186,7 +186,7 @@ Both samples pass `kubectl apply --dry-run=server` against envtest (rule 04.15).
 - **04a:** `tenant.can_approve_cra` relation added to `model.fga`. Written by operator
   bootstrap Job as `tenant:T#can_approve_cra@user:U` when an admin delegates; the
   computed union `or admin` covers the default case without any tuple.
-- **24:** Tenant CR finalizer `finalizers.tenant.operator.keese.ai/agreements` blocks
+- **24:** Tenant CR finalizer `finalizers.tenant.keese.ai/agreements` blocks
   Tenant deletion while any owned CRA is `Approved`. CRA controller watches Tenant
   deletion events to transition affected CRAs to `Rejected` + delete tuples.
 - **09:** `spec.scope.natsSubjects[]` narrows which `keese.cta.<uid>.*` sub-topics

@@ -41,7 +41,7 @@ events:
   - TooManyBudgets
 ---
 
-# observability.operator.keese.ai v1alpha1 — spec
+# policy.keese.ai v1alpha1 — spec
 
 ## Scope
 
@@ -51,7 +51,7 @@ Envoy AI Gateway rate-limit projection. Billing export delegated to design 21.
 
 ## API
 
-**Group / version / kind:** `observability.operator.keese.ai/v1alpha1 / TokenBudget`
+**Group / version / kind:** `policy.keese.ai/v1alpha1 / TokenBudget`
 
 **Scope:** Namespace (tenant namespace via Capsule, or workspace namespace).
 
@@ -143,7 +143,7 @@ Markers on reconciler: `tokenbudgets` verbs `get;list;watch;create;update;patch;
 
 ## Finalizer
 
-ID: `finalizers.tokenbudget.operator.keese.ai/envoy-ratelimit-cleanup`
+ID: `finalizers.tokenbudget.keese.ai/envoy-ratelimit-cleanup`
 
 On deletion: SSA-delete projected `RateLimit` policy; delete NATS KV keys for all
 `spec.limits[i]` entries; remove finalizer. Idempotent on repeated apply.
@@ -195,4 +195,4 @@ Relation shape documented in `docs/specs/egress-authz-protocol.md`.
 ## Iteration log
 
 Iter-1: 90 → SHIP. Iter-2: 95 → SHIP. Iter-3: 95 → SHIP.
-Full table: [observability.operator.keese.ai-v1alpha1-iter-log.md](observability.operator.keese.ai-v1alpha1-iter-log.md).
+Full table: [policy.keese.ai-v1alpha1-iter-log.md](policy.keese.ai-v1alpha1-iter-log.md).

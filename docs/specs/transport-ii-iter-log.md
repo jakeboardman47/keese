@@ -4,7 +4,7 @@
 ---
 scope: spec
 category: contract
-depends: [transport.operator.keese.ai-v1alpha1.md]
+depends: [keese.ai-v1alpha1-transport.md]
 related_skills: []
 status: current
 last_verified: 2026-04-21
@@ -19,7 +19,7 @@ events: []
 
 # transport spec — iteration log
 
-Companion to [transport.operator.keese.ai-v1alpha1.md](transport.operator.keese.ai-v1alpha1.md).
+Companion to [keese.ai-v1alpha1-transport.md](keese.ai-v1alpha1-transport.md).
 Holds rubric score tables only. Decisions and schema live in the primary doc.
 
 ## Iteration 1 — 2026-04-21 (correctness + security)

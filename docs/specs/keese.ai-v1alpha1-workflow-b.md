@@ -5,7 +5,7 @@
 scope: spec
 category: contract
 depends:
-  - workflow.operator.keese.ai-v1alpha1.md
+  - keese.ai-v1alpha1-workflow.md
   - ../designs/03-workflow-argo-delegation.md
   - ../designs/03c-workflow-messaging-plane.md
   - ../designs/25-cross-tenant-agreement.md
@@ -15,9 +15,9 @@ last_verified: 2026-04-21
 regression_lock: false
 ---
 
-# workflow.operator.keese.ai v1alpha1-b — WorkflowRun spec, failure modes, HA
+# keese.ai v1alpha1-b — WorkflowRun spec, failure modes, HA
 
-Companion to [workflow.operator.keese.ai-v1alpha1.md](workflow.operator.keese.ai-v1alpha1.md).
+Companion to [keese.ai-v1alpha1-workflow.md](keese.ai-v1alpha1-workflow.md).
 
 ## Kind: WorkflowRun — spec schema
 
@@ -72,12 +72,12 @@ type WorkflowRunStatus struct {
 ### RBAC + finalizers
 
 ```go
-// +kubebuilder:rbac:groups=workflow.operator.keese.ai,resources=workflowruns,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=workflowruns,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=argoproj.io,resources=workflows,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;create;update;patch;delete,resourceNames=keese-wf-*
 // Finalizers:
-//   finalizers.workflowrun.operator.keese.ai/nats-stream
-//   finalizers.workflowrun.operator.keese.ai/argo-workflow
+//   finalizers.workflowrun.keese.ai/nats-stream
+//   finalizers.workflowrun.keese.ai/argo-workflow
 ```
 
 SSA fieldOwner: `keese-workflowrun-controller`.
@@ -91,7 +91,7 @@ At WorkflowRun create, controller calls JetStream `AddStream`:
 - `maxAge`: `spec.timeout`
 
 Owner-ref on stream → Argo Workflow; GC on Workflow delete. Finalizer
-`finalizers.workflowrun.operator.keese.ai/nats-stream` guards teardown.
+`finalizers.workflowrun.keese.ai/nats-stream` guards teardown.
 RBAC marker: `// +keese:rebac-tuple=workspace:messageable_from`.
 
 ### CrossTenantAgreement admission

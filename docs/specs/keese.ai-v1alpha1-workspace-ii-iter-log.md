@@ -5,15 +5,15 @@
 scope: spec
 category: iteration-log
 depends:
-  - workspace.operator.keese.ai-v1alpha1.md
+  - keese.ai-v1alpha1-workspace.md
 related_skills: []
 status: current
 last_verified: 2026-04-21
 ---
 
-# workspace.operator.keese.ai v1alpha1 — Iteration log
+# keese.ai v1alpha1 — Iteration log
 
-Companion to [workspace.operator.keese.ai-v1alpha1.md](workspace.operator.keese.ai-v1alpha1.md).
+Companion to [keese.ai-v1alpha1-workspace.md](keese.ai-v1alpha1-workspace.md).
 
 ## Iteration 1 — 2026-04-21 (correctness + security)
 

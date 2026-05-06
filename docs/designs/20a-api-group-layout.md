@@ -20,7 +20,7 @@ all at `v1alpha1`. A shared-types package at
 `github.com/keese-ai/keese/api/core/v1alpha1` holds cross-group primitives.
 Promotion to `v1beta1` requires a rubric score ≥ 90, 90-day customer-production
 soak, and architect sign-off via a migration plan doc. (D26, 2026-04-20: added
-`tenancy.operator.keese.ai/Tenant` — the one cluster-scoped kind. See
+`keese.ai/Tenant` — the one cluster-scoped kind. See
 `docs/designs/24-tenant-crd.md`.)
 
 ## Context
@@ -38,16 +38,16 @@ promotion and the conversion webhook overhead that comes with it.
 
 | Group | Full API Group | Kinds | Go package path | Scope |
 |---|---|---|---|---|
-| tenancy | `tenancy.operator.keese.ai` | `Tenant` (D26) | `api/tenancy/v1alpha1` | cluster |
-| workspace | `workspace.operator.keese.ai` | `Workspace`, `WorkspaceShare`, `WorkspaceSession` (D27) | `api/workspace/v1alpha1` | namespace |
-| workflow | `workflow.operator.keese.ai` | `Workflow`, `WorkflowRun` | `api/workflow/v1alpha1` | namespace |
-| runtime | `runtime.operator.keese.ai` | `AgentRuntime`, `RuntimeExtension` | `api/runtime/v1alpha1` | namespace |
-| memory | `memory.operator.keese.ai` | `Memory`, `SharedMemory` | `api/memory/v1alpha1` | namespace |
-| recipe | `recipe.operator.keese.ai` | `Recipe`, `RecipeSource` | `api/recipe/v1alpha1` | namespace |
-| guardrail | `guardrail.operator.keese.ai` | `GuardrailBinding` | `api/guardrail/v1alpha1` | namespace |
-| observability | `observability.operator.keese.ai` | `TokenBudget` | `api/observability/v1alpha1` | namespace |
-| transport | `transport.operator.keese.ai` | `Transport` | `api/transport/v1alpha1` | namespace |
-| authz | `authz.operator.keese.ai` | `OIDCProvider` (D28) | `api/authz/v1alpha1` | cluster |
+| tenancy | `keese.ai` | `Tenant` (D26) | `api/tenancy/v1alpha1` | cluster |
+| workspace | `keese.ai` | `Workspace`, `WorkspaceShare`, `WorkspaceSession` (D27) | `api/workspace/v1alpha1` | namespace |
+| workflow | `keese.ai` | `Workflow`, `WorkflowRun` | `api/workflow/v1alpha1` | namespace |
+| runtime | `keese.ai` | `AgentRuntime`, `RuntimeExtension` | `api/runtime/v1alpha1` | namespace |
+| memory | `keese.ai` | `Memory`, `SharedMemory` | `api/memory/v1alpha1` | namespace |
+| recipe | `keese.ai` | `Recipe`, `RecipeSource` | `api/recipe/v1alpha1` | namespace |
+| guardrail | `authz.keese.ai` | `GuardrailBinding` | `api/guardrail/v1alpha1` | namespace |
+| observability | `policy.keese.ai` | `TokenBudget` | `api/observability/v1alpha1` | namespace |
+| transport | `keese.ai` | `Transport` | `api/transport/v1alpha1` | namespace |
+| authz | `authz.keese.ai` | `OIDCProvider` (D28) | `api/authz/v1alpha1` | cluster |
 
 `Tenant` and `OIDCProvider` are cluster-scoped (tenants span namespaces; OIDC
 providers are cluster-wide). All other 14 kinds are namespace-scoped. Additional

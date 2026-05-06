@@ -25,7 +25,7 @@ Artifact path: `keese/<workspace-uid>/<run-id>/<step>/`.
 ## Sample A — Cron-triggered autonomous-dev (full)
 
 ```yaml
-apiVersion: workflow.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Workflow
 metadata:
   name: autonomous-dev-nightly
@@ -84,7 +84,7 @@ spec:
 ## Sample B — NATS-fanout WorkflowRun (trigger + run)
 
 ```yaml
-apiVersion: workflow.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Workflow
 metadata:
   name: article-summarizer
@@ -106,7 +106,7 @@ spec:
       on: [Succeeded]
 ---
 # WorkflowRun — created by trigger controller per Nats-Msg-Id; Workspace namespace
-apiVersion: workflow.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: WorkflowRun
 metadata:
   name: article-summarizer-run-abc123
@@ -127,7 +127,7 @@ status:
 ## Sample C — Webhook-triggered PR review (full)
 
 ```yaml
-apiVersion: workflow.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Workflow
 metadata:
   name: pr-reviewer
@@ -148,7 +148,7 @@ spec:
       on: [Succeeded, Failed]
 ---
 # WorkflowRun — created by keese-trigger-receiver in Workspace namespace
-apiVersion: workflow.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: WorkflowRun
 metadata:
   name: pr-reviewer-run-pr-4242

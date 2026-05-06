@@ -59,19 +59,19 @@ events:
   - NetworkPolicyApplied; NetworkPolicyConflict
 ---
 
-# workspace.operator.keese.ai v1alpha1 — spec
+# keese.ai v1alpha1 — spec
 
-API group `workspace.operator.keese.ai/v1alpha1`. Three kinds in this group:
+API group `keese.ai/v1alpha1`. Three kinds in this group:
 **Workspace** · **WorkspaceShare** · **WorkspaceSession**.
 
 ## Companion files (split per 200-line rule)
 
 | File | Owns |
 |---|---|
-| [v1alpha1-ii-workspace.md](workspace.operator.keese.ai-v1alpha1-ii-workspace.md) | Workspace CRD YAML, VAP CEL, finalizer chain, bifurcated FSM, NP application |
-| [v1alpha1-ii-share.md](workspace.operator.keese.ai-v1alpha1-ii-share.md) | WorkspaceShare CRD YAML, VAP, finalizer chain, failure modes |
-| [v1alpha1-ii-session.md](workspace.operator.keese.ai-v1alpha1-ii-session.md) | WorkspaceSession CRD detail, RBAC, event reasons, acceptance tests |
-| [v1alpha1-ii-iter-log.md](workspace.operator.keese.ai-v1alpha1-ii-iter-log.md) | Rubric iteration log (3 passes) |
+| [v1alpha1-ii-workspace.md](keese.ai-v1alpha1-ii-workspace.md) | Workspace CRD YAML, VAP CEL, finalizer chain, bifurcated FSM, NP application |
+| [v1alpha1-ii-share.md](keese.ai-v1alpha1-ii-share.md) | WorkspaceShare CRD YAML, VAP, finalizer chain, failure modes |
+| [v1alpha1-ii-session.md](keese.ai-v1alpha1-ii-session.md) | WorkspaceSession CRD detail, RBAC, event reasons, acceptance tests |
+| [v1alpha1-ii-iter-log.md](keese.ai-v1alpha1-ii-iter-log.md) | Rubric iteration log (3 passes) |
 
 ## Workspace — summary
 
@@ -107,7 +107,7 @@ ReBAC markers on authz-affecting fields:
 
 ### Controller identifiers
 
-- Finalizer: `finalizers.workspace.operator.keese.ai/cleanup`
+- Finalizer: `finalizers.workspace.keese.ai/cleanup`
 - SSA fieldOwner: `keese-workspace-controller`
 - Status: `observedGeneration` + conditions `Ready`, `Running`, `Revoked`, `Degraded`
 - FSM phases: `Pending|Provisioning|Ready|Starting|Running|Idle|Evicted|Suspended|Revoked|Degraded|Terminating`
@@ -132,7 +132,7 @@ Opt-in cross-namespace sharing. Controller creates a `ReferenceGrant` (Gateway A
 // +keese:rebac-tuple=workspace#editor  // spec.role == editor
 ```
 
-- Finalizer: `finalizers.workspaceshare.operator.keese.ai/cleanup`
+- Finalizer: `finalizers.workspaceshare.keese.ai/cleanup`
 - SSA fieldOwner: `keese-workspaceshare-controller`
 - Printer columns: `Age`, `Ready`, `Phase`, `Workspace`, `TargetNS`, `Role`
 
@@ -140,7 +140,7 @@ Opt-in cross-namespace sharing. Controller creates a `ReferenceGrant` (Gateway A
 
 ## WorkspaceSession (D27) — summary
 
-Per-attach interactive session. Full detail in companion [v1alpha1-ii-session.md](workspace.operator.keese.ai-v1alpha1-ii-session.md) and design [08b-ii](../designs/08b-ii-session-crd-spec.md).
+Per-attach interactive session. Full detail in companion [v1alpha1-ii-session.md](keese.ai-v1alpha1-ii-session.md) and design [08b-ii](../designs/08b-ii-session-crd-spec.md).
 
 | Field | Mutable | VAP |
 |---|---|---|
@@ -155,7 +155,7 @@ Per-attach interactive session. Full detail in companion [v1alpha1-ii-session.md
 // +keese:rebac-tuple=workspace#editor  // spec.attachSubject
 ```
 
-- Finalizer: `finalizers.workspacesession.operator.keese.ai/cleanup`
+- Finalizer: `finalizers.workspacesession.keese.ai/cleanup`
 - SSA fieldOwner: `keese-workspacesession-controller`
 - Phases: `Starting|Running|Idle|Draining|Terminating`
 - Printer columns: `Age`, `Ready`, `Phase`, `Subject`, `Session`
@@ -176,7 +176,7 @@ Full table in [02-ii-iter-log.md](../designs/02-ii-iter-log.md). Key items:
 
 ## Iteration log summary
 
-See [v1alpha1-ii-iter-log.md](workspace.operator.keese.ai-v1alpha1-ii-iter-log.md).
+See [v1alpha1-ii-iter-log.md](keese.ai-v1alpha1-ii-iter-log.md).
 
 | Iteration | Emphasis | Score | Verdict |
 |---|---|---|---|

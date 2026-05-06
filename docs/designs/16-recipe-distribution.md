@@ -30,7 +30,7 @@ artifact from OCI (preferred), Git (commit-pinned), or inline ConfigMap (dev onl
 The recipe controller pulls, cosign-verifies, and caches the artifact; admission gates
 Workspace creation against entitlements via GuardrailBinding (06) and OpenFGA (04a).
 
-## Recipe schema (`recipe.operator.keese.ai/v1alpha1`)
+## Recipe schema (`keese.ai/v1alpha1`)
 
 1:1 projection of goose recipe YAML (08a) with added ReBAC markers and admission fields.
 
@@ -149,7 +149,7 @@ Named test cases (pre-gate, controller-author backlog):
 
 [05c](05c-mcp-policy-enforcement.md) · [06](06-guardrailbinding.md) · [04a](04a-openfga-authz-model.md) ·
 [08a](08a-goose-headless-modes.md) · [20a](20a-api-group-layout.md) ·
-[spec](../specs/recipe.operator.keese.ai-v1alpha1.md) · [rubric](../plans/rubric.md)
+[spec](../specs/keese.ai-v1alpha1.md) · [rubric](../plans/rubric.md)
 
 ## Iteration log
 

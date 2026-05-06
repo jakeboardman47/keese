@@ -45,10 +45,10 @@ events:
   - ExtensionOpenFGAUnavailable
 ---
 
-# runtime.operator.keese.ai v1alpha1 — spec
+# keese.ai v1alpha1 — spec
 
-Two kinds in `runtime.operator.keese.ai/v1alpha1`. Go interface: [`agent-runtime-spi.md`](agent-runtime-spi.md).
-Iteration log: [`runtime.operator.keese.ai-v1alpha1b-iter-log.md`](runtime.operator.keese.ai-v1alpha1b-iter-log.md).
+Two kinds in `keese.ai/v1alpha1`. Go interface: [`agent-runtime-spi.md`](agent-runtime-spi.md).
+Iteration log: [`keese.ai-v1alpha1b-iter-log.md`](keese.ai-v1alpha1b-iter-log.md).
 
 ---
 
@@ -94,7 +94,7 @@ Unknown impl → `400 UnknownProvider` + event. Image outside `SupportedImageVer
 ### Controller mechanics
 
 - **SSA:** `client.FieldOwner("keese-agentruntime-controller")`.
-- **Finalizer:** `finalizers.agentruntime.operator.keese.ai/drain`.
+- **Finalizer:** `finalizers.agentruntime.keese.ai/drain`.
 - **RBAC:** `agentruntimes` get;list;watch;create;update;patch;delete; `/status` get;update;patch.
 - **Events** (`internal/controller/runtime/agentruntime/events.go`):
   `RuntimeStarted`, `RuntimeStopped`, `ProviderUnknown`, `ImageVersionUnsupported`,
@@ -144,7 +144,7 @@ of active `enabled_in` tuples), `conditions[Ready]`.
 ### Controller mechanics
 
 - **SSA:** `client.FieldOwner("keese-runtimeextension-controller")`.
-- **Finalizer:** `finalizers.runtimeextension.operator.keese.ai/rebac-cleanup` — cleared after all `enabled_in` tuples deleted.
+- **Finalizer:** `finalizers.runtimeextension.keese.ai/rebac-cleanup` — cleared after all `enabled_in` tuples deleted.
 - **RBAC:** `runtimeextensions` get;list;watch;create;update;patch;delete; `/status` get;update;patch.
 - **Events** (`internal/controller/runtime/runtimeextension/events.go`):
   `ExtensionTupleWritten`, `ExtensionTupleDeleted`, `ExtensionRuntimeRefInvalid`, `ExtensionOpenFGAUnavailable`.
@@ -196,4 +196,4 @@ Packages: `test/controller/runtime/{agentruntime,runtimeextension}/`.
 [08a](../designs/08a-goose-headless-modes.md) · [08b](../designs/08b-goose-acp-stdio-k8s.md) ·
 [08c](../designs/08c-goose-subagents-limits.md) · [16](../designs/16-recipe-distribution.md) ·
 [04a](../designs/04a-openfga-authz-model.md) · [spi-spec](agent-runtime-spi.md) ·
-[iter-log](runtime.operator.keese.ai-v1alpha1b-iter-log.md) · [rubric](../plans/rubric.md)
+[iter-log](keese.ai-v1alpha1b-iter-log.md) · [rubric](../plans/rubric.md)

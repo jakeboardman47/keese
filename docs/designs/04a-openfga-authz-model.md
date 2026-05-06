@@ -41,18 +41,18 @@ Source of truth for DSL: `dev/bootstrap/openfga/model.fga`.
 
 | OpenFGA type | Keese entity | CRD / primitive |
 |---|---|---|
-| `tenant` | Keese Tenant (D24) | `tenancy.operator.keese.ai/v1alpha1/Tenant`; identity key `Tenant.metadata.name` (not `.uid` — names are stable across delete+recreate, avoiding full tuple backfill on typo-fix cycles) |
-| `workspace` | Workspace CR | `workspace.operator.keese.ai/v1alpha1/Workspace` |
+| `tenant` | Keese Tenant (D24) | `keese.ai/v1alpha1/Tenant`; identity key `Tenant.metadata.name` (not `.uid` — names are stable across delete+recreate, avoiding full tuple backfill on typo-fix cycles) |
+| `workspace` | Workspace CR | `keese.ai/v1alpha1/Workspace` |
 | `tool` | Callable function | ConfigMap-backed `ToolAllowList` via GuardrailBinding |
-| `extension` | RuntimeExtension provider | `runtime.operator.keese.ai/v1alpha1/RuntimeExtension` |
+| `extension` | RuntimeExtension provider | `keese.ai/v1alpha1/RuntimeExtension` |
 | `credential` | BackendSecurityPolicy-referenced secret | OpenBao/KMS via ExternalSecrets |
-| `memory` | Memory/SharedMemory backend | `memory.operator.keese.ai/v1alpha1/{Memory,SharedMemory}` |
+| `memory` | Memory/SharedMemory backend | `keese.ai/v1alpha1/{Memory,SharedMemory}` |
 | `service_account` | Per-workspace projected SA | K8s `ServiceAccount` |
 | `user` | Human operator or CI identity | OIDC identity |
 | `witness` | Supervision agent (D23) | Agent-supervision controller |
-| `oidc_provider` | OIDCProvider CR (D28) | `authz.operator.keese.ai/v1alpha1/OIDCProvider`; identity key `OIDCProvider.metadata.name` (cluster-scoped) |
+| `oidc_provider` | OIDCProvider CR (D28) | `authz.keese.ai/v1alpha1/OIDCProvider`; identity key `OIDCProvider.metadata.name` (cluster-scoped) |
 
-**Per-tenant OIDCProvider gating (D28 / iter-6).** `tenant.uses_oidc_provider: [oidc_provider]` — written by the Tenant controller per `Tenant.spec.oidc.allowedProviders[]`; ext_authz denies tokens from issuers not in the allow-list. Cross-cuts: `authz.operator.keese.ai-v1alpha1.md` §1.6; D26/D24.
+**Per-tenant OIDCProvider gating (D28 / iter-6).** `tenant.uses_oidc_provider: [oidc_provider]` — written by the Tenant controller per `Tenant.spec.oidc.allowedProviders[]`; ext_authz denies tokens from issuers not in the allow-list. Cross-cuts: `authz.keese.ai-v1alpha1.md` §1.6; D26/D24.
 
 **Cross-tenant messaging relations (D29 / iter-5).** Two relations gate
 **cross-tenant a2a** at the workspace granularity. Intra-tenant a2a is

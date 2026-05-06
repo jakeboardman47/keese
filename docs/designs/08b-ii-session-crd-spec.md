@@ -29,7 +29,7 @@ VAP rules on CREATE/UPDATE, finalizer chain, and the server-side attach sequence
 ## WorkspaceSession CRD
 
 ```yaml
-apiVersion: workspace.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: WorkspaceSession
 metadata:
   name: ws-dev-alice-default          # <workspace>-<subject-hash-16>-<session-name>
@@ -39,14 +39,14 @@ metadata:
     keese.ai/subject-hash: <sha256[:16]>
     keese.ai/session-name: default
   ownerReferences:
-    - apiVersion: workspace.operator.keese.ai/v1alpha1
+    - apiVersion: keese.ai/v1alpha1
       kind: Workspace
       name: ws-dev
       uid: <workspace-uid>
       blockOwnerDeletion: true
       controller: false              # workspace controller is NOT the managing controller
   finalizers:
-    - finalizers.workspacesession.operator.keese.ai/cleanup
+    - finalizers.workspacesession.keese.ai/cleanup
 spec:
   workspaceRef: ws-dev               # required; immutable
   attachSubject: "user:alice@example.com"  # required; immutable; OpenFGA subject (04b iter-2)

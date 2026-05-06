@@ -15,14 +15,14 @@ last_verified: 2026-04-21
 regression_lock: false
 ---
 
-# tenancy.operator.keese.ai v1alpha1 — Tenant CRD
+# keese.ai v1alpha1 — Tenant CRD
 
-Companion to [`tenancy.operator.keese.ai-v1alpha1.md`](tenancy.operator.keese.ai-v1alpha1.md).
+Companion to [`keese.ai-v1alpha1.md`](keese.ai-v1alpha1.md).
 
 ## Spec schema
 
 ```yaml
-apiVersion: tenancy.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Tenant
 metadata:
   name: <name>   # cluster-scoped; name IS the OpenFGA identity key
@@ -77,7 +77,7 @@ status:
 
 ## VAP CEL invariants
 
-Named: `tenant-policy.tenancy.operator.keese.ai/v1alpha1`
+Named: `tenant-policy.keese.ai/v1alpha1`
 
 ```cel
 # adminSubjects non-empty
@@ -111,7 +111,7 @@ self.spec.jwksCacheFailOpenSeconds == 0 ||
 
 Controller watches Namespaces matching `spec.namespaceSelector`; maintains
 `status.namespaces[]`. On `keese.ai/tenant` label removal with live Workspaces:
-installs finalizer `finalizers.tenant.operator.keese.ai/namespaces` on namespace;
+installs finalizer `finalizers.tenant.keese.ai/namespaces` on namespace;
 VAP blocks label removal while finalizer present; finalizer removed only after all
 Workspaces are Terminating. Event: `TenantLabelLocked`.
 
@@ -142,7 +142,7 @@ Operator bootstrap Job writes `tenant:T#admin@user:U` tuples from `spec.adminSub
 
 Minimum viable:
 ```yaml
-apiVersion: tenancy.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Tenant
 metadata:
   name: alpha

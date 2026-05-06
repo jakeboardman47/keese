@@ -5,7 +5,7 @@
 scope: spec
 category: contract
 depends:
-  - workspace.operator.keese.ai-v1alpha1.md
+  - keese.ai-v1alpha1-workspace.md
   - ../designs/02-workspace-model.md
   - ../designs/02-ii-iter-log.md
   - ../designs/12-network-isolation.md
@@ -15,15 +15,15 @@ status: current
 last_verified: 2026-04-21
 ---
 
-# workspace.operator.keese.ai v1alpha1-ii — Workspace CRD detail
+# keese.ai v1alpha1-ii — Workspace CRD detail
 
-Companion to [workspace.operator.keese.ai-v1alpha1.md](workspace.operator.keese.ai-v1alpha1.md).
+Companion to [keese.ai-v1alpha1-workspace.md](keese.ai-v1alpha1-workspace.md).
 Owns: authoritative CRD YAML sketch, VAP CEL expressions, finalizer chain, FSM detail.
 
 ## CRD YAML sketch
 
 ```yaml
-apiVersion: workspace.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Workspace
 metadata:
   name: ws-dev
@@ -32,7 +32,7 @@ metadata:
     keese.ai/tenant: acme
     keese.ai/workspace: ws-dev
   finalizers:
-    - finalizers.workspace.operator.keese.ai/cleanup
+    - finalizers.workspace.keese.ai/cleanup
 spec:
   tenantRef:
     name: acme                            # immutable
@@ -166,4 +166,4 @@ on every reconcile. Full templates: design [12](../designs/12-network-isolation.
 
 ## Refs
 
-[02](../designs/02-workspace-model.md) · [02-ii](../designs/02-ii-iter-log.md) · [04b](../designs/04b-projected-sa-identity.md) · [12](../designs/12-network-isolation.md) · [primary spec](workspace.operator.keese.ai-v1alpha1.md)
+[02](../designs/02-workspace-model.md) · [02-ii](../designs/02-ii-iter-log.md) · [04b](../designs/04b-projected-sa-identity.md) · [12](../designs/12-network-isolation.md) · [primary spec](keese.ai-v1alpha1-workspace.md)

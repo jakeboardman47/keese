@@ -60,7 +60,7 @@ Reference 07 iter-2 for full topology split.
 
 ## WorkspaceSession CRD (D27)
 
-Namespaced; `workspace.operator.keese.ai/v1alpha1`; lives in Workspace namespace.
+Namespaced; `keese.ai/v1alpha1`; lives in Workspace namespace.
 Full YAML + VAP rules + finalizer chain in companion `08b-ii-session-crd-spec.md`.
 Name pattern: `<workspace>-<subject-hash-16>-<session-name>`. Required fields:
 `workspaceRef`, `attachSubject` (OpenFGA subject), `sessionName`. Mutable:

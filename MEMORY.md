@@ -12,6 +12,13 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-05-06 — A9 doc sweep: 10-group → 3-group rename complete
+
+- 21 spec files renamed (`git mv`) to `keese.ai-v1alpha1-<kind>.md`, `authz.keese.ai-v1alpha1*.md`, `policy.keese.ai-v1alpha1*.md`; ~55 other files had text rewritten; CLAUDE.md, MEMORY.md, `.claude/agents/`, `.claude/skills/` updated.
+- Tenancy split judgment: `CrossTenantAgreement` spec file kept under `keese.ai-v1alpha1-tenancy-ii-cra.md` (CSV-predicted name), but noted in README and spec frontmatter that CTA runs in `authz.keese.ai` at runtime — follow-on to fully split is deferred.
+- Known discrepancy: `config/manifests/bases/keese.clusterserviceversion.yaml` references `keese.ai-v1alpha1-ii-session.md` while bundle CSV references `keese.ai-v1alpha1-workspace-ii-session.md`; file created per bundle CSV. The config manifests CSV needs a follow-on fix (out of A9 scope per constraint on `config/`).
+- See [td-p1-03-extauth-and-group-rename.md](docs/plans/td-p1-03-extauth-and-group-rename.md) for full context.
+
 ### 2026-04-27 — LLM credential path stays gateway-side (rule 05.2 reaffirmed)
 
 - Architect confirmed: agent pods carry **only** the projected SA token. The
@@ -44,9 +51,10 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 - Score-honesty audit: 9 of 11 honest (scores 92.5–97.5 with explicit Cat 4/5 docks); 2 inflated (runtime, recipe both claim 100).
 - Honest rescores: runtime ≈95 (test names locked but bodies pre-gate), recipe ≈92.5 (8 envtest cases NAMED but bodies pre-gate). Both still ≥ 90; flipped to current; iter-log scores left as-recorded.
 - 4 specs had `regression_lock: true` set incorrectly (workspace, memory, credential-broker, egress-authz). Per the spec lifecycle (`status: implemented` predicate), regression_lock should remain false until acceptance tests actually exist. Corrected all 4 to false.
-- [workspace spec](docs/specs/workspace.operator.keese.ai-v1alpha1.md) — split into 5 files (primary + ii-workspace + ii-share + ii-session + ii-iter-log) to honor 200-line cap; covers Workspace + WorkspaceShare + WorkspaceSession (D27).
-- [workflow spec](docs/specs/workflow.operator.keese.ai-v1alpha1.md) — split a/b for Workflow vs WorkflowRun + cross-tenant admission. Q2(b) decision recorded: cross-tenant peers derived from `transportRef`s with `scope: cross-tenant` (NO new participants[] field).
-- **Two NEW spec stubs added** for D26/D28/D29 kinds (gap discovered during dispatch): [tenancy spec](docs/specs/tenancy.operator.keese.ai-v1alpha1.md) (Tenant + CrossTenantAgreement) and [authz spec](docs/specs/authz.operator.keese.ai-v1alpha1.md) (OIDCProvider). Both held at draft pending follow-up architect dispatch.
+- [workspace spec](docs/specs/keese.ai-v1alpha1-workspace.md) — split into 5 files (primary + ii-workspace + ii-share + ii-session + ii-iter-log) to honor 200-line cap; covers Workspace + WorkspaceShare + WorkspaceSession (D27).
+- [workflow spec](docs/specs/keese.ai-v1alpha1-workflow.md) — split a/b for Workflow vs WorkflowRun + cross-tenant admission. Q2(b) decision recorded: cross-tenant peers derived from `transportRef`s with `scope: cross-tenant` (NO new participants[] field).
+- **Two NEW spec stubs added** for D26/D28/D29 kinds (gap discovered during dispatch): [tenancy spec](docs/specs/keese.ai-v1alpha1-tenancy.md) (Tenant + CrossTenantAgreement) and [authz spec](docs/specs/authz.keese.ai-v1alpha1.md) (OIDCProvider). Both held at draft pending follow-up architect dispatch.
+- (superseded 2026-05-06 — spec file names above updated to new 3-group layout; see [td-p1-03-extauth-and-group-rename.md](docs/plans/td-p1-03-extauth-and-group-rename.md))
 - Spec count 11 → 13 top-level + 10 companions = 23 spec files. Design-gate predicate updated: requires all 13 specs at status: current; currently 11/13 (the two new stubs are draft).
 
 ### 2026-04-21 — Final design batch (12, 13, 14a, 14b, 15, 16, 19, 21, 25)
@@ -66,7 +74,7 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ### 2026-04-21 — D29 + a2a/cross-tenant messaging reframe
 
-- [D29 ratified](docs/plans/scaffolding-plan.md) — `CrossTenantAgreement` CRD (`tenancy.operator.keese.ai/v1alpha1`, cluster-scoped, cert-manager-style bilateral handshake). Kind count 16 → 17. Amends D23.
+- [D29 ratified](docs/plans/scaffolding-plan.md) — `CrossTenantAgreement` CRD (`authz.keese.ai/v1alpha1`, cluster-scoped, cert-manager-style bilateral handshake). Kind count 16 → 17. Amends D23.
 - [04a iter-5](docs/designs/04a-openfga-authz-model.md) — added `tenant.allows_messaging` + `workspace.messageable_from` ReBAC relations; old proposed `workspace#can_message` dropped. Cross-tenant a2a authz is workspace-pair-scoped.
 - [04b iter-3](docs/designs/04b-projected-sa-identity.md) — `audienceTemplates` (`egress`, `workflowRun`, `supervisor`); agent pods now mount three projected SA tokens at `/var/run/keese/tokens/{egress,workflowRun,supervisor}`.
 - [09 iter-3](docs/designs/09-transport-crd.md) — a2a peer-auth modes 4 → 2 (`workspace-sa`, `mutual-tls`); dropped `user-oidc` + `none`; new `spec.a2a.scope: intra-tenant | cross-tenant`. NATS is the primary intra-tenant transport.
@@ -78,7 +86,7 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 ### 2026-04-20 — initial scaffolding (P0–P8)
 
 - [Scaffolding plan + 26 decisions](docs/plans/scaffolding-plan.md) —
-  license Apache-2.0; API groups `*.operator.keese.ai`; Capsule opt-in;
+  license Apache-2.0; API groups `keese.ai` / `authz.keese.ai` / `policy.keese.ai`; Capsule opt-in;
   GuardrailBinding composition (not Constitution + Policy +
   ToolAllowList); 14 kinds across 9 groups (D26 added keese `Tenant`
   CRD); Envoy AI Gateway + MCPRoute; Argo delegation; OpenTofu cloud;

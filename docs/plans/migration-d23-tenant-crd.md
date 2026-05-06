@@ -19,7 +19,7 @@ last_verified: 2026-04-20
 
 D23 (original scaffolding) dropped the keese `Tenant` CRD in favor of
 consuming Capsule's `Tenant` directly. D26 (2026-04-20) partially amended
-D23 by adding **exactly one CRD back**: `tenancy.operator.keese.ai/v1alpha1/Tenant`
+D23 by adding **exactly one CRD back**: `keese.ai/v1alpha1/Tenant`
 — a thin CRD that holds keese-specific tenancy config and delegates namespace
 aggregation to Capsule (Mode B) or label selectors (Mode A).
 
@@ -39,7 +39,7 @@ required for `tenant:X` ReBAC tuples).
 
 ## Post-migration state (post-D26)
 
-- `tenancy.operator.keese.ai/v1alpha1/Tenant` CRD installed.
+- `keese.ai/v1alpha1/Tenant` CRD installed.
 - One `Tenant` CR per unique pre-existing `keese.ai/tenant=<name>` label
   value; `spec.namespaceSelector` matches the label.
 - `spec.adminSubjects[]` populated from pre-existing RoleBindings.
@@ -96,7 +96,7 @@ See D26 `rollback:` field. Summary:
    tenant identity. Business continues.
 4. To fully clean up: delete `Tenant` CRs (labels remain, so no tenant
    state is lost); then delete the CRD via `kubectl delete crd
-   tenants.tenancy.operator.keese.ai`.
+   tenants.keese.ai`.
 
 No OpenFGA tuple changes required in either direction — tuples are
 name-derived by design.

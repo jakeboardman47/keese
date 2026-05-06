@@ -95,7 +95,7 @@ Changes:
 - Added 1 tuple-shape row: `tenant:T#uses_oidc_provider@oidc_provider:P` written by Tenant controller.
 - Added `oidc_provider` to Types and relations table in 04a.
 - Added `tests/openfga/oidc-provider.yaml` with allow + deny assertion fixtures.
-- Cross-cuts (not modified, flagged only): `authz.operator.keese.ai-v1alpha1.md` §1.6; `tenancy.operator.keese.ai-v1alpha1-ii-tenant.md` (Tenant controller writes tuples per `spec.oidc.allowedProviders[]`).
+- Cross-cuts (not modified, flagged only): `authz.keese.ai-v1alpha1.md` §1.6; `keese.ai-v1alpha1-ii-tenant.md` (Tenant controller writes tuples per `spec.oidc.allowedProviders[]`).
 
 | # | Category | Weight | Ratio | Score | Δ vs iter-5 | Notes |
 |---|---|---:|---:|---:|---|---|
@@ -116,4 +116,4 @@ Verdict: SHIP (97 ≥ 95 honest threshold). `status: current` retained.
 Iter-6 residual (not blocking gate):
 
 1. Tenant controller tuple-write implementation — controller phase backlog; depends on design gate opening.
-2. `authz.operator.keese.ai-v1alpha1.md` §1.6 `// +keese:rebac-tuple=uses_oidc_provider` marker — coordinate with `crd-author` via PR comment (marker already referenced in existing spec per task brief).
+2. `authz.keese.ai-v1alpha1.md` §1.6 `// +keese:rebac-tuple=uses_oidc_provider` marker — coordinate with `crd-author` via PR comment (marker already referenced in existing spec per task brief).

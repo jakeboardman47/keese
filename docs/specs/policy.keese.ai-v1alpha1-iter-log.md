@@ -4,15 +4,15 @@
 ---
 scope: spec
 category: iter-log
-depends: [observability.operator.keese.ai-v1alpha1.md]
+depends: [policy.keese.ai-v1alpha1.md]
 related_skills: []
 status: current
 last_verified: 2026-04-21
 ---
 
-# observability.operator.keese.ai v1alpha1 — Iteration log
+# policy.keese.ai v1alpha1 — Iteration log
 
-Companion to [observability.operator.keese.ai-v1alpha1.md](observability.operator.keese.ai-v1alpha1.md).
+Companion to [policy.keese.ai-v1alpha1.md](policy.keese.ai-v1alpha1.md).
 Split for 200-line ceiling per rule 01 + rule 03.
 
 ### Iteration 1 — 2026-04-21

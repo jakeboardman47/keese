@@ -24,7 +24,7 @@ Companion to [06-guardrailbinding.md](06-guardrailbinding.md) and
 
 ```yaml
 # config/manager/default-guardrailbinding.yaml
-apiVersion: guardrail.operator.keese.ai/v1alpha1
+apiVersion: authz.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
   name: default
@@ -41,7 +41,7 @@ spec:
 ## Cluster scope — full-featured
 
 ```yaml
-apiVersion: guardrail.operator.keese.ai/v1alpha1
+apiVersion: authz.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
   name: default-strict
@@ -74,7 +74,7 @@ spec:
 ## Tenant scope — minimal
 
 ```yaml
-apiVersion: guardrail.operator.keese.ai/v1alpha1
+apiVersion: authz.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
   name: acme-tenant-policy
@@ -94,7 +94,7 @@ spec:
 ## Tenant scope — full-featured
 
 ```yaml
-apiVersion: guardrail.operator.keese.ai/v1alpha1
+apiVersion: authz.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
   name: acme-tenant-strict
@@ -131,7 +131,7 @@ spec:
 ## Workspace scope — minimal
 
 ```yaml
-apiVersion: guardrail.operator.keese.ai/v1alpha1
+apiVersion: authz.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
   name: ws-dev-policy
@@ -149,7 +149,7 @@ spec:
 ## Workspace scope — full-featured
 
 ```yaml
-apiVersion: guardrail.operator.keese.ai/v1alpha1
+apiVersion: authz.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
   name: ws-dev-strict

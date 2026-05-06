@@ -7,7 +7,7 @@ category: index
 depends: [../designs/README.md]
 related_skills: [doc-authoring]
 status: current
-last_verified: 2026-04-21
+last_verified: 2026-05-06
 ---
 
 # specs/ — WHAT (testable)
@@ -23,28 +23,28 @@ by test harnesses. Each spec is keyed to one or more design docs.
 
 | Spec | Kind / Contract | Owning designs | Status |
 |---|---|---|---|
-| [workspace.operator.keese.ai-v1alpha1.md](workspace.operator.keese.ai-v1alpha1.md) | `Workspace`, `WorkspaceShare`, `WorkspaceSession` | 01, 02, 02-ii, 08b, 08b-ii, 12, 04b | current |
-| [workspace.operator.keese.ai-v1alpha1-ii-workspace.md](workspace.operator.keese.ai-v1alpha1-ii-workspace.md) | `Workspace` CRD detail | 02, 02-ii, 12, 04b | current |
-| [workspace.operator.keese.ai-v1alpha1-ii-share.md](workspace.operator.keese.ai-v1alpha1-ii-share.md) | `WorkspaceShare` CRD detail | 02, 04a | current |
-| [workspace.operator.keese.ai-v1alpha1-ii-session.md](workspace.operator.keese.ai-v1alpha1-ii-session.md) | `WorkspaceSession` CRD detail | 08b, 08b-ii | current |
-| [workspace.operator.keese.ai-v1alpha1-ii-iter-log.md](workspace.operator.keese.ai-v1alpha1-ii-iter-log.md) | Workspace spec iteration log | — | current |
-| [workflow.operator.keese.ai-v1alpha1.md](workflow.operator.keese.ai-v1alpha1.md) | `Workflow` | 03, 22 | current |
-| [workflow.operator.keese.ai-v1alpha1-b.md](workflow.operator.keese.ai-v1alpha1-b.md) | `WorkflowRun` + cross-tenant admission | 03, 03c, 22, 25 | current |
-| [runtime.operator.keese.ai-v1alpha1.md](runtime.operator.keese.ai-v1alpha1.md) | `AgentRuntime`, `RuntimeExtension` | 07, 07b, 08a, 08b, 08c, 16, 04a | current |
-| [runtime.operator.keese.ai-v1alpha1b-iter-log.md](runtime.operator.keese.ai-v1alpha1b-iter-log.md) | Runtime spec iteration log | — | current |
-| [memory.operator.keese.ai-v1alpha1.md](memory.operator.keese.ai-v1alpha1.md) | `Memory`, `SharedMemory` | 15, 04a | current |
-| [recipe.operator.keese.ai-v1alpha1.md](recipe.operator.keese.ai-v1alpha1.md) | `Recipe`, `RecipeSource` | 16, 06, 08a | current |
-| [guardrail.operator.keese.ai-v1alpha1.md](guardrail.operator.keese.ai-v1alpha1.md) | `GuardrailBinding` | 06, 06-ii, 06-iii, 05c | current |
-| [observability.operator.keese.ai-v1alpha1.md](observability.operator.keese.ai-v1alpha1.md) | `TokenBudget` | 10a, 10b | current |
-| [observability.operator.keese.ai-v1alpha1-iter-log.md](observability.operator.keese.ai-v1alpha1-iter-log.md) | Observability spec iteration log | — | current |
-| [transport.operator.keese.ai-v1alpha1.md](transport.operator.keese.ai-v1alpha1.md) | `Transport` | 09, 09-ii, 04a, 04b, 03c, 25 | current |
+| [keese.ai-v1alpha1-workspace.md](keese.ai-v1alpha1-workspace.md) | `Workspace`, `WorkspaceShare`, `WorkspaceSession` | 01, 02, 02-ii, 08b, 08b-ii, 12, 04b | current |
+| [keese.ai-v1alpha1-workspace-ii-workspace.md](keese.ai-v1alpha1-workspace-ii-workspace.md) | `Workspace` CRD detail | 02, 02-ii, 12, 04b | current |
+| [keese.ai-v1alpha1-workspace-ii-share.md](keese.ai-v1alpha1-workspace-ii-share.md) | `WorkspaceShare` CRD detail | 02, 04a | current |
+| [keese.ai-v1alpha1-workspace-ii-session.md](keese.ai-v1alpha1-workspace-ii-session.md) | `WorkspaceSession` CRD detail | 08b, 08b-ii | current |
+| [keese.ai-v1alpha1-workspace-ii-iter-log.md](keese.ai-v1alpha1-workspace-ii-iter-log.md) | Workspace spec iteration log | — | current |
+| [keese.ai-v1alpha1-workflow.md](keese.ai-v1alpha1-workflow.md) | `Workflow` | 03, 22 | current |
+| [keese.ai-v1alpha1-workflow-b.md](keese.ai-v1alpha1-workflow-b.md) | `WorkflowRun` + cross-tenant admission | 03, 03c, 22, 25 | current |
+| [keese.ai-v1alpha1-runtime.md](keese.ai-v1alpha1-runtime.md) | `AgentRuntime`, `RuntimeExtension` | 07, 07b, 08a, 08b, 08c, 16, 04a | current |
+| [keese.ai-v1alpha1-runtime-b-iter-log.md](keese.ai-v1alpha1-runtime-b-iter-log.md) | Runtime spec iteration log | — | current |
+| [keese.ai-v1alpha1-memory.md](keese.ai-v1alpha1-memory.md) | `Memory`, `SharedMemory` | 15, 04a | current |
+| [keese.ai-v1alpha1-recipe.md](keese.ai-v1alpha1-recipe.md) | `Recipe`, `RecipeSource` | 16, 06, 08a | current |
+| [authz.keese.ai-v1alpha1-guardrail.md](authz.keese.ai-v1alpha1-guardrail.md) | `GuardrailBinding` | 06, 06-ii, 06-iii, 05c | current |
+| [policy.keese.ai-v1alpha1.md](policy.keese.ai-v1alpha1.md) | `TokenBudget` | 10a, 10b | current |
+| [policy.keese.ai-v1alpha1-iter-log.md](policy.keese.ai-v1alpha1-iter-log.md) | Observability/policy spec iteration log | — | current |
+| [keese.ai-v1alpha1-transport.md](keese.ai-v1alpha1-transport.md) | `Transport` | 09, 09-ii, 04a, 04b, 03c, 25 | current |
 | [transport-ii-iter-log.md](transport-ii-iter-log.md) | Transport spec iteration log | — | current |
-| [tenancy.operator.keese.ai-v1alpha1.md](tenancy.operator.keese.ai-v1alpha1.md) | `Tenant` (D26), `CrossTenantAgreement` (D29) | 24, 24b, 25, 25-ii, 25-iii, 04a, 01 | current |
-| [tenancy.operator.keese.ai-v1alpha1-ii-tenant.md](tenancy.operator.keese.ai-v1alpha1-ii-tenant.md) | `Tenant` CRD detail | 24, 24b, 01 | current |
-| [tenancy.operator.keese.ai-v1alpha1-ii-cra.md](tenancy.operator.keese.ai-v1alpha1-ii-cra.md) | `CrossTenantAgreement` CRD detail | 25, 25-ii, 25-iii, 04a | current |
-| [tenancy.operator.keese.ai-v1alpha1-iter-log.md](tenancy.operator.keese.ai-v1alpha1-iter-log.md) | Tenancy spec iteration log | — | current |
-| [authz.operator.keese.ai-v1alpha1.md](authz.operator.keese.ai-v1alpha1.md) | `OIDCProvider` (D28) | 04b, 04b-ii, 04a | current |
-| [authz.operator.keese.ai-v1alpha1-ii-iter-log.md](authz.operator.keese.ai-v1alpha1-ii-iter-log.md) | Authz spec iteration log | — | current |
+| [keese.ai-v1alpha1-tenancy.md](keese.ai-v1alpha1-tenancy.md) | `Tenant` (D26), `CrossTenantAgreement` (D29) | 24, 24b, 25, 25-ii, 25-iii, 04a, 01 | current |
+| [keese.ai-v1alpha1-tenancy-ii-tenant.md](keese.ai-v1alpha1-tenancy-ii-tenant.md) | `Tenant` CRD detail | 24, 24b, 01 | current |
+| [keese.ai-v1alpha1-tenancy-ii-cra.md](keese.ai-v1alpha1-tenancy-ii-cra.md) | `CrossTenantAgreement` CRD detail (note: CTA lives in `authz.keese.ai` at runtime; spec remains here for historical continuity) | 25, 25-ii, 25-iii, 04a | current |
+| [keese.ai-v1alpha1-tenancy-iter-log.md](keese.ai-v1alpha1-tenancy-iter-log.md) | Tenancy spec iteration log | — | current |
+| [authz.keese.ai-v1alpha1.md](authz.keese.ai-v1alpha1.md) | `OIDCProvider` (D28), `GuardrailBinding`, `CrossTenantAgreement` authz aspects | 04b, 04b-ii, 04a | current |
+| [authz.keese.ai-v1alpha1-ii-iter-log.md](authz.keese.ai-v1alpha1-ii-iter-log.md) | Authz spec iteration log | — | current |
 | [egress-authz-protocol.md](egress-authz-protocol.md) | ext_authz contract (cross-cutting) | 04a, 04a-ii, 04a-iii, 04b, 04b-ii, 04c, 05a, 05b, 05c, 25 | current |
 | [egress-authz-protocol-iter-log.md](egress-authz-protocol-iter-log.md) | Egress authz protocol iteration log | — | current |
 | [agent-runtime-spi.md](agent-runtime-spi.md) | Go SPI interface contract | 07, 07b, 08a, 08b, 08c, 18, 23 | current |

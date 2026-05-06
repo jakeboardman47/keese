@@ -45,7 +45,7 @@ S3/GCS/Azure/MinIO backend. Cleanup via `ttlStrategy.secondsAfterCompletion: 604
 ## Pattern 1 — Cron-triggered autonomous-dev pipeline
 
 ```yaml
-apiVersion: workflow.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Workflow
 metadata:
   name: autonomous-dev-nightly

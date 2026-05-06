@@ -66,7 +66,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 - Add on create if external resources touched; remove only after
   cleanup succeeds; double-check `DeletionTimestamp.IsZero()`.
-- ID format: `finalizers.<kind>.operator.keese.ai/<purpose>`.
+- ID format: `finalizers.<kind>.keese.ai/<purpose>` (rule 04.10).
 - Envtest: write a deletion test covering failure path (external
   cleanup fails → finalizer sticks → retry converges).
 

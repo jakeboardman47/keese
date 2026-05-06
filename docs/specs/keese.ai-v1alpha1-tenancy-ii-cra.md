@@ -16,14 +16,14 @@ last_verified: 2026-04-21
 regression_lock: false
 ---
 
-# tenancy.operator.keese.ai v1alpha1 — CrossTenantAgreement CRD
+# keese.ai v1alpha1 — CrossTenantAgreement CRD
 
-Companion to [`tenancy.operator.keese.ai-v1alpha1.md`](tenancy.operator.keese.ai-v1alpha1.md).
+Companion to [`keese.ai-v1alpha1.md`](keese.ai-v1alpha1.md).
 
 ## Spec schema
 
 ```yaml
-apiVersion: tenancy.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: CrossTenantAgreement
 metadata:
   name: <name>   # cluster-scoped
@@ -72,7 +72,7 @@ status:
 
 ## VAP CEL invariants
 
-Named: `crosstenanagreement-policy.tenancy.operator.keese.ai/v1alpha1`
+Named: `crosstenanagreement-policy.keese.ai/v1alpha1`
 
 ```cel
 # No self-agreement
@@ -148,7 +148,7 @@ Controller time-based reconcile at `expiresAt`:
 2. Delete failure: `TupleSyncFailed`; retry backoff; phase stays `Approved`
    (fail-closed: tuples never silently dropped).
 3. Transition phase to `Expired`; emit `CRAExpired`.
-4. Finalizer `finalizers.crosstenanagreement.operator.keese.ai/nats` triggers
+4. Finalizer `finalizers.crosstenanagreement.keese.ai/nats` triggers
    stream `keese-cta-<cra-uid>` deletion.
 
 ## NATS stream provisioning

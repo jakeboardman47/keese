@@ -16,7 +16,7 @@ last_verified: 2026-04-19
 
 ## Contents (to expand)
 
-1. **Naming conventions** — group `<sub>.operator.keese.ai`, kind PascalCase, singular/plural/shortName.
+1. **Naming conventions** — group one of `keese.ai`, `authz.keese.ai`, `policy.keese.ai` (see `docs/designs/20a-api-group-layout.md`), kind PascalCase, singular/plural/shortName.
 2. **Schema requirements** — `openAPIV3Schema` with `description`, `// +kubebuilder:validation:*`,
    `XValidation` CEL rules, discriminated one-of for provider-style fields.
 3. **Status and conditions** — `observedGeneration`, `conditions[]` with `type/status/reason/message`,

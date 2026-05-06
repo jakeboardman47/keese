@@ -40,9 +40,9 @@ events:
   - CacheFlushComplete
 ---
 
-# authz.operator.keese.ai v1alpha1 — spec
+# authz.keese.ai v1alpha1 — spec
 
-Iteration log: [authz.operator.keese.ai-v1alpha1-ii-iter-log.md](authz.operator.keese.ai-v1alpha1-ii-iter-log.md).
+Iteration log: [authz.keese.ai-v1alpha1-ii-iter-log.md](authz.keese.ai-v1alpha1-ii-iter-log.md).
 
 ## Owning designs (all `status: current`)
 
@@ -52,7 +52,7 @@ Iteration log: [authz.operator.keese.ai-v1alpha1-ii-iter-log.md](authz.operator.
 
 ## 1. Kind: OIDCProvider
 
-Group: `authz.operator.keese.ai/v1alpha1`. Cluster-scoped. SSA fieldOwner: `keese-oidcprovider-controller`.
+Group: `authz.keese.ai/v1alpha1`. Cluster-scoped. SSA fieldOwner: `keese-oidcprovider-controller`.
 
 ### 1.1 Spec fields
 
@@ -145,7 +145,7 @@ Cache-flush gRPC retries 3x with 5 s backoff before timeout.
 
 ### 1.10 Finalizer
 
-`finalizers.oidcprovider.operator.keese.ai/cache-flush` — controller sends cache-flush signal to
+`finalizers.oidcprovider.keese.ai/cache-flush` — controller sends cache-flush signal to
 all gateway pods (via `keese-ext-authz` gRPC admin endpoint) before allowing CR deletion. Emits
 `CacheFlushComplete` event. Maximum 60 s drain; after timeout, deletion proceeds and a `JWKSUnreachable`
 event is emitted on any gateway that missed the flush.
@@ -187,4 +187,4 @@ Loki labels: `{job="keese-oidcprovider-controller", provider="<name>"}`.
 - [`04a-openfga-authz-model.md`](../designs/04a-openfga-authz-model.md)
 - [`egress-authz-protocol.md`](egress-authz-protocol.md) — sibling spec; consumes rendered subject; do not duplicate
 - [`../plans/rubric.md`](../plans/rubric.md)
-- [`authz.operator.keese.ai-v1alpha1-ii-iter-log.md`](authz.operator.keese.ai-v1alpha1-ii-iter-log.md)
+- [`authz.keese.ai-v1alpha1-ii-iter-log.md`](authz.keese.ai-v1alpha1-ii-iter-log.md)

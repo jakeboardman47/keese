@@ -73,7 +73,7 @@ step pod's messaging capability to its own run stream).
 
 Cross-tenant peers are derived **implicitly** from `Workflow.spec.templates[]`:
 the controller scans every `transportRef` in the templates and resolves each
-referenced `transport.operator.keese.ai/v1alpha1/Transport`. Any Transport with
+referenced `keese.ai/v1alpha1/Transport`. Any Transport with
 `spec.a2a.scope: cross-tenant` (09 iter-3) carries an `endpoint` whose target
 workspace is in a different tenant — that resolved workspace is a cross-tenant
 peer. **No new top-level WorkflowRun spec field is needed**; the Transport CR is

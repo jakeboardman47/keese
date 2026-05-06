@@ -49,7 +49,7 @@ via admission webhook rules (specified in
 
 1. Read `docs/designs/06-guardrailbinding.md` (role model; merge
    lattice).
-2. Read `docs/specs/guardrail.operator.keese.ai-v1alpha1.md` if it
+2. Read `docs/specs/authz.keese.ai-v1alpha1.md` if it
    exists.
 3. Read the linked Kyverno policies + Envoy SecurityPolicy refs.
 

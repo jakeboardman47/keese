@@ -112,7 +112,7 @@ proxy Service routing through the same egress controls as agent pods.
 
 ## VAP rules (CEL, rule 04.12)
 
-Named: `guardrailbinding-policy.guardrail.operator.keese.ai/v1alpha1`
+Named: `guardrailbinding-policy.authz.keese.ai/v1alpha1`
 
 1. Workspace binding `tools.allow` must be a subset of effective-parent allow.
 2. Workspace binding `tools.deny` must be a superset of effective-parent deny.

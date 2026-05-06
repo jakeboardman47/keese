@@ -50,18 +50,18 @@ the gate-open review. None of these are below the rubric SHIP threshold
 
 | Spec | Claim | Honest | Audit reason |
 |---|---:|---:|---|
-| [runtime](../specs/runtime.operator.keese.ai-v1alpha1.md) | 100 | ~95 | Test names locked; bodies pre-gate |
-| [recipe](../specs/recipe.operator.keese.ai-v1alpha1.md) | 100 | ~92.5 | 8 envtest cases NAMED; bodies pre-gate |
+| [runtime](../specs/keese.ai-v1alpha1.md) | 100 | ~95 | Test names locked; bodies pre-gate |
+| [recipe](../specs/keese.ai-v1alpha1.md) | 100 | ~92.5 | 8 envtest cases NAMED; bodies pre-gate |
 
 ### Lowest honest scorers (still ≥ 90)
 
 | Doc | Honest | Reason |
 |---|---:|---|
 | [13-cli-tunnel-wireguard](../designs/13-cli-tunnel-wireguard.md) | 92.5 | Cat 4/5 explicit pre-gate dock; cleanest honest baseline |
-| [guardrail spec](../specs/guardrail.operator.keese.ai-v1alpha1.md) | 92.5 | Cat 4 −5 + Cat 5 −7.5 explicit |
+| [guardrail spec](../specs/authz.keese.ai-v1alpha1.md) | 92.5 | Cat 4 −5 + Cat 5 −7.5 explicit |
 | [egress-authz-protocol](../specs/egress-authz-protocol.md) | 92.5 | Cat 5 −7.5 explicit |
-| [authz spec](../specs/authz.operator.keese.ai-v1alpha1.md) | 92.5 | Cat 4/5 acknowledged |
-| [tenancy spec](../specs/tenancy.operator.keese.ai-v1alpha1.md) | 92.5 | iter-4 recovery from honest 87.5 |
+| [authz spec](../specs/authz.keese.ai-v1alpha1.md) | 92.5 | Cat 4/5 acknowledged |
+| [tenancy spec](../specs/keese.ai-v1alpha1.md) | 92.5 | iter-4 recovery from honest 87.5 |
 
 ## Outstanding controller-phase backlog (not blocking gate-open)
 

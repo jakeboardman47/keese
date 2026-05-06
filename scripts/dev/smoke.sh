@@ -54,7 +54,7 @@ workspace_ready=false
 deadline=$(($(date +%s) + TIMEOUT_SECS))
 
 while [[ $(date +%s) -lt ${deadline} ]]; do
-  phase=$(kubectl --context="${CONTEXT}" get workspace.workspace.operator.keese.ai research \
+  phase=$(kubectl --context="${CONTEXT}" get workspace.keese.ai research \
     -n tenant-a-default \
     -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
   if [[ "${phase}" == "Ready" ]]; then

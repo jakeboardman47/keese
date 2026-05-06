@@ -105,7 +105,7 @@ The API group layout itself does not emit OTEL traces or metrics. The controller
 that own each group do. This design establishes naming conventions:
 
 - OTEL service name: `keese-operator` (single binary; group encoded in span attrs).
-- Span attribute `k8s.crd.group` = full API group (e.g. `workspace.operator.keese.ai`).
+- Span attribute `k8s.crd.group` = full API group (e.g. `keese.ai`).
 - Span attribute `k8s.crd.kind` = kind name.
 - Prometheus metric label `crd_group` = full API group (8 values; within budget).
 - Kubernetes Events reason constants defined per kind in

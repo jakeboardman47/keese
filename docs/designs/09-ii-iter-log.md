@@ -41,7 +41,7 @@ Top gaps:
 3. Cross-dep flag: 12 (NetworkPolicy stub) must add NATS:4222 + Envoy:443 egress rules before gate open.
 
 Next step: 12 iter-1 must absorb the NetworkPolicy flag. Spec
-`docs/specs/transport.operator.keese.ai-v1alpha1.md` may begin once 09 reaches
+`docs/specs/keese.ai-v1alpha1.md` may begin once 09 reaches
 `current` (gate rule satisfied).
 
 ## Iteration 2 — 2026-04-21

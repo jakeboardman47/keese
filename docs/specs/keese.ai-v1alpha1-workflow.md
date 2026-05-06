@@ -65,11 +65,11 @@ events:
   - OutputDeliveryFailed
 ---
 
-# workflow.operator.keese.ai v1alpha1 — spec
+# keese.ai v1alpha1 — spec
 
-Group: `workflow.operator.keese.ai` · Version: `v1alpha1`
+Group: `keese.ai` · Version: `v1alpha1`
 Kinds: **Workflow**, **WorkflowRun** · Namespace: tenant namespace (Workspace's namespace)
-Companion: [workflow-v1alpha1-b.md](workflow.operator.keese.ai-v1alpha1-b.md)
+Companion: [workflow-v1alpha1-b.md](keese.ai-v1alpha1-b.md)
 
 ## Kind: Workflow
 
@@ -98,7 +98,7 @@ SSA fieldOwner: `keese-workflow-controller`.
 | `spec.timeout` | string (duration) | no | `24h` | Maps → Argo `activeDeadlineSeconds` |
 | `spec.templates[]` | object array | no | — | Step definitions; each may carry `transportRef` |
 | `spec.templates[].name` | string | yes | — | Step template name |
-| `spec.templates[].transportRef` | LocalObjectRef | no | — | `transport.operator.keese.ai/v1alpha1/Transport`; scope read by CTA check |
+| `spec.templates[].transportRef` | LocalObjectRef | no | — | `keese.ai/v1alpha1/Transport`; scope read by CTA check |
 | `spec.triggers[]` | object array | no | — | See [03b](../designs/03b-workflow-trigger-projections.md) |
 | `spec.outputs[]` | object array | no | — | Delivery sinks; see 22 §Outputs |
 | `spec.suspended` | bool | no | `false` | Pauses trigger projection and run admission |
@@ -127,9 +127,9 @@ type WorkflowStatus struct {
 ### RBAC + finalizer
 
 ```go
-// +kubebuilder:rbac:groups=workflow.operator.keese.ai,resources=workflows,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=workflows,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=argoproj.io,resources=workflowtemplates,verbs=get;list;watch;create;update;patch;delete
-// Finalizer: finalizers.workflow.operator.keese.ai/workflowtemplate-gc
+// Finalizer: finalizers.workflow.keese.ai/workflowtemplate-gc
 ```
 
 ### Acceptance tests — Workflow (≥ 4)
@@ -159,11 +159,11 @@ namespaces; 03 iter-2). SSA fieldOwner: `keese-workflowrun-controller`.
 // +keese:rebac-tuple=workspace:messageable_from
 ```
 
-Companion doc continues: [workflow-v1alpha1-b.md](workflow.operator.keese.ai-v1alpha1-b.md)
+Companion doc continues: [workflow-v1alpha1-b.md](keese.ai-v1alpha1-b.md)
 
 ## Iteration log
 
-Full rubric tables in [companion](workflow.operator.keese.ai-v1alpha1-b.md) §Iteration log.
+Full rubric tables in [companion](keese.ai-v1alpha1-b.md) §Iteration log.
 
 - **Iter-1 2026-04-21** — 92.5 REVISE. Gaps: companion not written; HA ceilings absent; Cat 4/5 pre-gate structural.
 - **Iter-2 2026-04-21** — 97.5 REVISE. Companion written; 14 failure modes; ≥ 4 envtest + ≥ 4 kuttl per kind; HA ceilings. Cat 4 pre-gate residual.

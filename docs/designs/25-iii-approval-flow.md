@@ -156,7 +156,7 @@ detects empty tuples on next reconcile and transitions to `Expired`.
 | 5 | Controller crash mid-tuple-write | Some tuples written; OpenFGA partially consistent | On restart controller re-enumerates snapshot; writes missing tuples (idempotent); no gap unless crash + immediate subscribe |
 | 6 | OpenFGA unavailable on Approved transition | `TupleSyncFailed` event; phase stays `Pending` | Retries with backoff; `keese_cta_tuple_sync_duration_seconds` alert at > 5 min |
 | 7 | CRA conflict (overlapping workspace pairs) | `CRAConflict` event on both CRAs; later-Approved held in Pending | Create non-overlapping CRAs; or expire/delete the earlier one |
-| 8 | Tenant deletion while CRA Approved | Tenant finalizer `finalizers.tenant.operator.keese.ai/agreements` blocks deletion | CRA controller transitions all owned CRAs to `Rejected` + deletes tuples; finalizer released |
+| 8 | Tenant deletion while CRA Approved | Tenant finalizer `finalizers.tenant.keese.ai/agreements` blocks deletion | CRA controller transitions all owned CRAs to `Rejected` + deletes tuples; finalizer released |
 | 9 | Expired CRA tuple delete failure | `TupleSyncFailed` on delete; phase stays `Approved` past deadline | Retry backoff; runbook `runbook-cta-tuple-delete.md`; manual `fga delete` + controller reconcile |
 | 10 | Third-party deletes a CRA-owned tuple | `fga read` on next reconcile finds tuple missing; emit `OutOfBandTupleObserved` (deletion variant); controller re-writes tuple | Alert on event rate; audit OpenFGA write logs |
 

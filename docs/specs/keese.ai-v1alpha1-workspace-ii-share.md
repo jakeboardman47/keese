@@ -5,7 +5,7 @@
 scope: spec
 category: contract
 depends:
-  - workspace.operator.keese.ai-v1alpha1.md
+  - keese.ai-v1alpha1-workspace.md
   - ../designs/02-workspace-model.md
   - ../designs/04a-openfga-authz-model.md
 related_skills: [crd-authoring, controller-authoring]
@@ -13,9 +13,9 @@ status: current
 last_verified: 2026-04-21
 ---
 
-# workspace.operator.keese.ai v1alpha1-ii — WorkspaceShare CRD detail
+# keese.ai v1alpha1-ii — WorkspaceShare CRD detail
 
-Companion to [workspace.operator.keese.ai-v1alpha1.md](workspace.operator.keese.ai-v1alpha1.md).
+Companion to [keese.ai-v1alpha1-workspace.md](keese.ai-v1alpha1-workspace.md).
 Owns: WorkspaceShare CRD YAML, VAP, finalizer chain.
 
 ## Purpose
@@ -32,7 +32,7 @@ the NetworkPolicy — all egress still routes through Envoy AI Gateway.
 ## CRD YAML sketch
 
 ```yaml
-apiVersion: workspace.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: WorkspaceShare
 metadata:
   name: ws-dev-share-acme-infra
@@ -40,7 +40,7 @@ metadata:
   labels:
     keese.ai/workspace: ws-dev
   finalizers:
-    - finalizers.workspaceshare.operator.keese.ai/cleanup
+    - finalizers.workspaceshare.keese.ai/cleanup
 spec:
   workspaceRef:
     name: ws-dev                        # required; immutable
@@ -93,9 +93,9 @@ step 2 until tuples confirmed deleted (fail-closed; rule 05).
 ## RBAC markers
 
 ```
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaceshares,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaceshares/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaceshares/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaceshares,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaceshares/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaceshares/finalizers,verbs=update
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=referencegrants,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 ```
@@ -149,4 +149,4 @@ Finite const table in `internal/controller/workspace/share/events.go`:
 
 ## Refs
 
-[02](../designs/02-workspace-model.md) · [04a](../designs/04a-openfga-authz-model.md) · [primary spec](workspace.operator.keese.ai-v1alpha1.md)
+[02](../designs/02-workspace-model.md) · [04a](../designs/04a-openfga-authz-model.md) · [primary spec](keese.ai-v1alpha1-workspace.md)

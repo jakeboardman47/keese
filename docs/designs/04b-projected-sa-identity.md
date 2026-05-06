@@ -35,7 +35,7 @@ OIDCProvider CRD must therefore support named templates that resolve at token-mi
 ## OIDCProvider CRD sketch
 
 ```yaml
-# runtime.operator.keese.ai/v1alpha1 OIDCProvider
+# keese.ai/v1alpha1 OIDCProvider
 spec:
   issuer: ""              # K8s OIDC issuer URL (JWKS at <issuer>/openid/v1/jwks)
   subjectTemplate: "system:serviceaccount:{{.WorkspaceName}}:agent"

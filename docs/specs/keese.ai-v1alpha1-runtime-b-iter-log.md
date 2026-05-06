@@ -5,7 +5,7 @@
 scope: spec
 category: contract
 depends:
-  - runtime.operator.keese.ai-v1alpha1.md
+  - keese.ai-v1alpha1-runtime.md
 related_skills: []
 status: current
 last_verified: 2026-04-21
@@ -18,9 +18,9 @@ metrics: []
 events: []
 ---
 
-# runtime.operator.keese.ai v1alpha1 — iteration log
+# keese.ai v1alpha1 — iteration log
 
-Companion to [`runtime.operator.keese.ai-v1alpha1.md`](runtime.operator.keese.ai-v1alpha1.md).
+Companion to [`keese.ai-v1alpha1-runtime.md`](keese.ai-v1alpha1-runtime.md).
 
 ---
 
@@ -104,7 +104,7 @@ Verified:
 - `extension:E#enabled_in@workspace:W` tuple shape matches 04a tuple table row "Extension enabled".
 - `extension:E#owner@tenant:T` tuple shape matches 04a tuple table row "RuntimeExtension created".
 - ReBAC markers (`// +keese:rebac-tuple=`) present on `spec.runtimeRef` with correct relation name.
-- Finalizer IDs follow rule 04.10 pattern (`finalizers.<kind>.operator.keese.ai/<purpose>`).
+- Finalizer IDs follow rule 04.10 pattern (`finalizers.<kind>.keese.ai/<purpose>`).
 - SSA fieldOwner strings follow rule 04.7 pattern (`keese-<kind>-controller`).
 
 No spec changes required. Iter-2 score of 100 stands.

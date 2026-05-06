@@ -27,7 +27,7 @@ rollback: |
 ## Context
 
 `TokenBudget` is keese's long-window (per-day / per-month) budget CR under
-`observability.operator.keese.ai/v1alpha1`, complementing Envoy AI Gateway's short-window
+`policy.keese.ai/v1alpha1`, complementing Envoy AI Gateway's short-window
 `BackendTrafficPolicy` token-cost filter so both layers enforce independently. Token
 consumption is the authoritative counter in Prometheus (via the OTEL pipeline, 10a); NATS KV
 `keese-budget-exceeded` carries boolean enforcement signals only (05a iter-2 locked). The
@@ -50,7 +50,7 @@ NATS KV = boolean propagation of enforcement signals on crossover events only.
 
 ## Spec schema
 
-`TokenBudget` is namespace-scoped under `observability.operator.keese.ai/v1alpha1`.
+`TokenBudget` is namespace-scoped under `policy.keese.ai/v1alpha1`.
 Key fields: `spec.windowDuration` (default `720h`) + `spec.windowAnchor` define the
 billing window; `spec.exhaustionMode: hard|soft|disabled`; `spec.limits[]` per
 `{model, inputTokens, outputTokens, totalTokens}` where `model: "*"` is an aggregate cap.
@@ -191,7 +191,7 @@ via billing-controller (design 21, flagged).
 - [05a](05a-envoy-ai-gateway-topology.md) — `keese-budget-exceeded` bucket + 429 flow locked
 - [06](06-guardrailbinding.md) — `spec.tokenBudget` merge lattice
 - [10a](10a-otel-topology.md) — Prometheus authoritative counter source + OTEL pipeline
-- [20a](20a-api-group-layout.md) — `observability.operator.keese.ai/v1alpha1`
+- [20a](20a-api-group-layout.md) — `policy.keese.ai/v1alpha1`
 - [21](21-opentofu-cloud-infra.md) — USD billing export (stub; flagged)
 - [24](24-tenant-crd.md) — `Tenant.spec.tokenBudgetRef`; `billingTimezone`
 - [../plans/rubric.md](../plans/rubric.md)

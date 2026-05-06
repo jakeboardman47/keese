@@ -74,14 +74,14 @@ events:
   - CRAConflict
 ---
 
-# tenancy.operator.keese.ai v1alpha1 — spec
+# keese.ai v1alpha1 — spec
 
-Group: `tenancy.operator.keese.ai` · Version: `v1alpha1` · Both kinds cluster-scoped.
+Group: `keese.ai` · Version: `v1alpha1` · Both kinds cluster-scoped.
 
 Companion docs:
-- [`tenancy.operator.keese.ai-v1alpha1-ii-tenant.md`](tenancy.operator.keese.ai-v1alpha1-ii-tenant.md) — Tenant CRD detail + acceptance tests
-- [`tenancy.operator.keese.ai-v1alpha1-ii-cra.md`](tenancy.operator.keese.ai-v1alpha1-ii-cra.md) — CrossTenantAgreement CRD detail + acceptance tests
-- [`tenancy.operator.keese.ai-v1alpha1-iter-log.md`](tenancy.operator.keese.ai-v1alpha1-iter-log.md) — Rubric iteration log
+- [`keese.ai-v1alpha1-ii-tenant.md`](keese.ai-v1alpha1-ii-tenant.md) — Tenant CRD detail + acceptance tests
+- [`keese.ai-v1alpha1-ii-cra.md`](keese.ai-v1alpha1-ii-cra.md) — CrossTenantAgreement CRD detail + acceptance tests
+- [`keese.ai-v1alpha1-iter-log.md`](keese.ai-v1alpha1-iter-log.md) — Rubric iteration log
 
 ## Owning designs (all `status: current`)
 
@@ -101,29 +101,29 @@ Companion docs:
 
 Cluster-scoped. Identity key for OpenFGA: `Tenant.metadata.name`.
 SSA fieldOwner: `keese-tenant-controller`.
-Finalizers: `finalizers.tenant.operator.keese.ai/workspaces`,
-`finalizers.tenant.operator.keese.ai/namespaces` (Mode A, namespace-level),
-`finalizers.tenant.operator.keese.ai/agreements` (blocks deletion while Approved CRA exists).
+Finalizers: `finalizers.tenant.keese.ai/workspaces`,
+`finalizers.tenant.keese.ai/namespaces` (Mode A, namespace-level),
+`finalizers.tenant.keese.ai/agreements` (blocks deletion while Approved CRA exists).
 
 Printer columns: `Age`, `Ready`, `Phase`, `Mode` (`ModeA`|`ModeB`), `Namespaces` (count).
 
 Status FSM: `Pending → Provisioning → Active → Suspended → Terminating`.
 
 Full CRD schema, VAP CEL invariants, Mode A/B reconcile, admission webhooks,
-samples, acceptance tests: [tenancy.operator.keese.ai-v1alpha1-ii-tenant.md](tenancy.operator.keese.ai-v1alpha1-ii-tenant.md).
+samples, acceptance tests: [keese.ai-v1alpha1-ii-tenant.md](keese.ai-v1alpha1-ii-tenant.md).
 
 ### CrossTenantAgreement (D29)
 
 Cluster-scoped. Identity key: `CrossTenantAgreement.metadata.name`.
 SSA fieldOwner: `keese-crosstenanagreement-controller`.
-Finalizer: `finalizers.crosstenanagreement.operator.keese.ai/nats`.
+Finalizer: `finalizers.crosstenanagreement.keese.ai/nats`.
 
 Printer columns: `Age`, `Ready`, `Phase`, `From`, `To`, `ExpiresAt`.
 
 Status phases: `Pending → Approved|Rejected`; `Approved → Expired`; terminals immutable.
 
 Full CRD schema, approval handshake, tuple sync, expiry, conflict detection,
-samples, acceptance tests: [tenancy.operator.keese.ai-v1alpha1-ii-cra.md](tenancy.operator.keese.ai-v1alpha1-ii-cra.md).
+samples, acceptance tests: [keese.ai-v1alpha1-ii-cra.md](keese.ai-v1alpha1-ii-cra.md).
 
 ## Security invariants
 

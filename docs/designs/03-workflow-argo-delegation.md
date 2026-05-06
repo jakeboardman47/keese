@@ -41,7 +41,7 @@ rollback: |
 ## Context
 
 `Workflow` and `WorkflowRun` are keese's user-facing orchestration CRs under
-`workflow.operator.keese.ai/v1alpha1` (20a). The keese operator projects them into
+`keese.ai/v1alpha1` (20a). The keese operator projects them into
 Argo-native types: `Workflow` → Argo `WorkflowTemplate`; `WorkflowRun` → Argo
 `Workflow`. This design answers: spec-field mapping, artifact passing (dev/prod), retry
 budget composition, concurrency policy, interactive-workspace mutual exclusion, and RBAC

@@ -44,9 +44,9 @@ events:
   - CrossTenantAgreementMissing
 ---
 
-# transport.operator.keese.ai v1alpha1 — spec
+# keese.ai v1alpha1 — spec
 
-**Kind:** `Transport` · **Group:** `transport.operator.keese.ai` ·
+**Kind:** `Transport` · **Group:** `keese.ai` ·
 **Version:** `v1alpha1` · **Scope:** Namespace
 
 Owning designs: [09](../designs/09-transport-crd.md) (iter-3) ·
@@ -69,7 +69,7 @@ Key fields: `bridgeImage` (req), `outboundQueueDepth` (def 1000), `inboundQueueD
 Default (external): admission rejects `NATSStreamNotFound` if stream absent;
 `streamConfig` ignored without opt-in annotation → `NATSStreamConfigIgnored`.
 Opt-in (`keese.ai/auto-create-stream: "true"`): controller owns JetStream lifecycle;
-finalizer `finalizers.transport.operator.keese.ai/cleanup` deletes stream on deletion.
+finalizer `finalizers.transport.keese.ai/cleanup` deletes stream on deletion.
 
 NATS audience: `keese-wf-<workflow-run-uid>` (04b iter-3 `workflowRun` template),
 `/var/run/keese/tokens/workflowRun`; per-run, not per-peer.
@@ -149,7 +149,7 @@ CRA deletion finalizer cleans stream.
 RBAC markers: `transports` + status + finalizers (get;list;watch;create;update;patch;delete);
 `jetstream.nats.io/streams;consumers` (get;list;watch;create;update;delete);
 `referencegrants`, `mcproutes`, `certificates` (get;list;watch).
-Finalizer `finalizers.transport.operator.keese.ai/cleanup` — annotation-gated
+Finalizer `finalizers.transport.keese.ai/cleanup` — annotation-gated
 (`keese.ai/auto-create-stream: "true"`). SSA fieldOwner: `keese-transport-controller`.
 
 ## 7. Status conditions and event reasons

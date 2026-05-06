@@ -24,7 +24,7 @@ metrics:
 events: [MemoryProvisioned, MemoryProvisionFailed, MemoryQuotaExceeded, EmbeddingDimMismatch, MemoryPVCLost, MemoryCredentialStale, SharedMemoryGrantRevoked, UnauthorizedSharedMemoryMutation]
 ---
 
-# memory.operator.keese.ai v1alpha1 — spec
+# keese.ai v1alpha1 — spec
 
 **Goal.** `Memory` (per-workspace) and `SharedMemory` (cross-workspace within tenant)
 provision durable queryable backends, enforce zero-trust credential handling, and gate
@@ -69,12 +69,12 @@ message: "exactly one provider must be set"
 **RBAC markers:**
 
 ```go
-// +kubebuilder:rbac:groups=memory.operator.keese.ai,resources=memories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=memory.operator.keese.ai,resources=memories/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=memory.operator.keese.ai,resources=memories/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=memories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=memories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=memories/finalizers,verbs=update
 ```
 
-**Finalizer:** `finalizers.memory.operator.keese.ai/cleanup` — deprovision backend, then release. No OpenFGA tuples on `Memory` (namespace isolation is the authz boundary).
+**Finalizer:** `finalizers.memory.keese.ai/cleanup` — deprovision backend, then release. No OpenFGA tuples on `Memory` (namespace isolation is the authz boundary).
 
 **SSA field owner:** `keese-memory-controller`.
 
@@ -95,7 +95,7 @@ Controller validates `ReferenceGrant` in each workspace namespace before writing
 **VAP `SharedMemoryMutationAuthz`** — checks `tenant:T#admin@user:U` via OpenFGA (1-hop, ≤15ms per 04a) before allowing mutations to `readWorkspaces` or `writeWorkspaces`. Event `UnauthorizedSharedMemoryMutation` on deny.
 
 **SSA field owner:** `keese-sharedmemory-controller`.
-**Finalizer:** `finalizers.sharedmemory.operator.keese.ai/cleanup`.
+**Finalizer:** `finalizers.sharedmemory.keese.ai/cleanup`.
 
 ## Acceptance tests
 

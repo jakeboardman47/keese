@@ -43,7 +43,7 @@ idle/eviction, storage, scheduling merge, supervision schema, attach policy, and
 
 ## Spec schema (iter-2 fields marked *)
 
-Full schema in `workspace.operator.keese.ai-v1alpha1.md`.
+Full schema in `keese.ai-v1alpha1.md`.
 
 | Field | Default | VAP constraint |
 |---|---|---|
@@ -127,7 +127,7 @@ Conditions: `Ready`, `Running`, `Revoked`, `Degraded`. `observedGeneration` on e
 - `per-user`: `(subject, sessionName)` unique; each user's `default` is their own CR + pod.
 - `per-attach`: sessionName operator-generated; caller-provided name rejected (`AttachSessionNameForbidden`).
 
-**Cleanup:** finalizer `finalizers.workspacesession.operator.keese.ai/cleanup` handles pod drain,
+**Cleanup:** finalizer `finalizers.workspacesession.keese.ai/cleanup` handles pod drain,
 PVC release (if not shared), and OpenFGA tuple removal. Pod failure: 30 s reconnect window; then
 auto-delete WorkspaceSession CR. Override: `WorkspaceSession.spec.preserveOnPodFailure: true`.
 
@@ -174,4 +174,4 @@ Full observability inventory in `02-ii-iter-log.md`.
 
 ## Refs
 
-[01](01-tenancy-capsule.md) · [03](03-workflow-argo-delegation.md) · [04a](04a-openfga-authz-model.md) · [04b](04b-projected-sa-identity.md) · [04c](04c-token-revocation.md) · [05a](05a-envoy-ai-gateway-topology.md) · [06](06-guardrailbinding.md) · [07](07-agent-runtime-spi.md) · [08b](08b-goose-acp-stdio-k8s.md) · [08c](08c-goose-subagents-limits.md) · [10b](10b-token-accounting.md) · [18](18-process-lifecycle.md) · [20a](20a-api-group-layout.md) · [23](23-agent-supervision.md) · [24](24-tenant-crd.md) · [iter-log](02-ii-iter-log.md) · [spec](../specs/workspace.operator.keese.ai-v1alpha1.md) · [rubric](../plans/rubric.md)
+[01](01-tenancy-capsule.md) · [03](03-workflow-argo-delegation.md) · [04a](04a-openfga-authz-model.md) · [04b](04b-projected-sa-identity.md) · [04c](04c-token-revocation.md) · [05a](05a-envoy-ai-gateway-topology.md) · [06](06-guardrailbinding.md) · [07](07-agent-runtime-spi.md) · [08b](08b-goose-acp-stdio-k8s.md) · [08c](08c-goose-subagents-limits.md) · [10b](10b-token-accounting.md) · [18](18-process-lifecycle.md) · [20a](20a-api-group-layout.md) · [23](23-agent-supervision.md) · [24](24-tenant-crd.md) · [iter-log](02-ii-iter-log.md) · [spec](../specs/keese.ai-v1alpha1.md) · [rubric](../plans/rubric.md)

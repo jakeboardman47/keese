@@ -50,9 +50,9 @@ events:
   - DevSourceInProdNamespace
 ---
 
-# recipe.operator.keese.ai v1alpha1 — spec
+# keese.ai v1alpha1 — spec
 
-Two kinds: `Recipe` and `RecipeSource` in group `recipe.operator.keese.ai/v1alpha1`.
+Two kinds: `Recipe` and `RecipeSource` in group `keese.ai/v1alpha1`.
 
 ## Recipe — schema
 
@@ -72,7 +72,7 @@ SSA fieldOwner: `keese-recipe-controller`. Printer columns: `Age`, `Ready`, `Pha
 
 Status: `observedGeneration`, conditions (`Ready`, `Verified`), `phase` (`Pending`/`Ready`/`Failed`), `resolvedDigest`.
 
-Finalizer: `finalizers.recipe.operator.keese.ai/cache-cleanup` — removes cached OCI layers from cluster registry on delete.
+Finalizer: `finalizers.recipe.keese.ai/cache-cleanup` — removes cached OCI layers from cluster registry on delete.
 
 ## RecipeSource — schema
 
@@ -84,14 +84,14 @@ Finalizer: `finalizers.recipe.operator.keese.ai/cache-cleanup` — removes cache
 
 One-of enforced via `x-kubernetes-validations` CEL: `has(self.oci) ? !has(self.git) && !has(self.configMap) : true` (and symmetric).
 
-VAP policy `recipesource-policy.recipe.operator.keese.ai/v1alpha1` (CEL, rule 04.12):
+VAP policy `recipesource-policy.keese.ai/v1alpha1` (CEL, rule 04.12):
 1. ConfigMap source: `!has(self.spec.configMap) || namespaceLabels['keese.ai/env'] == 'dev'`.
 2. Git revision: `!has(self.spec.git) || self.spec.git.revision.matches('^[0-9a-f]{40}$')`.
 3. OCI digest required in prod: `namespaceLabels['keese.ai/env'] == 'dev' || !has(self.spec.oci) || has(self.spec.oci.digest)`.
 
 Status: `observedGeneration`, `phase` (`Pending`/`Synced`/`Failed`), `resolvedDigest`, conditions (`Ready`).
 
-Finalizer: `finalizers.recipesource.operator.keese.ai/cache-cleanup`.
+Finalizer: `finalizers.recipesource.keese.ai/cache-cleanup`.
 
 ## OCI distribution
 
@@ -119,12 +119,12 @@ Digest-pinned in prod (`RecipeSource.spec.oci.digest` immutable once set). Upgra
 ## RBAC
 
 ```
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipes,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipes/status,verbs=update;patch
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipesources,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipesources/status,verbs=update;patch
-// +kubebuilder:rbac:groups=guardrail.operator.keese.ai,resources=guardrailbindings,verbs=get;list;watch
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=recipes,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=recipes/status,verbs=update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=recipesources,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=recipesources/status,verbs=update;patch
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=guardrailbindings,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch
 ```
 
 ## Observability

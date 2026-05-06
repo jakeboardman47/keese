@@ -5,7 +5,7 @@
 scope: spec
 category: contract
 depends:
-  - workspace.operator.keese.ai-v1alpha1.md
+  - keese.ai-v1alpha1-workspace.md
   - ../designs/08b-goose-acp-stdio-k8s.md
   - ../designs/08b-ii-session-crd-spec.md
   - ../designs/02-workspace-model.md
@@ -16,9 +16,9 @@ status: current
 last_verified: 2026-04-21
 ---
 
-# workspace.operator.keese.ai v1alpha1-ii — WorkspaceSession CRD detail
+# keese.ai v1alpha1-ii — WorkspaceSession CRD detail
 
-Companion to [workspace.operator.keese.ai-v1alpha1.md](workspace.operator.keese.ai-v1alpha1.md).
+Companion to [keese.ai-v1alpha1-workspace.md](keese.ai-v1alpha1-workspace.md).
 Authoritative CRD schema delegates to design [08b-ii-session-crd-spec.md](../designs/08b-ii-session-crd-spec.md)
 which owns the canonical YAML. This file adds: controller RBAC, event reasons, test
 acceptance criteria, and failure modes not in 08b-ii.
@@ -57,10 +57,10 @@ VAP manifest path: `config/overlays/base/vap/workspacesession-create.yaml` (to a
 ## RBAC markers
 
 ```
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspacesessions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspacesessions/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspacesessions/finalizers,verbs=update
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspacesessions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=workspacesessions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspacesessions/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 ```
@@ -78,7 +78,7 @@ Session-created derived tuples (e.g., `witness` tuples) are cleaned by finalizer
 ## SSA fieldOwner · Finalizer · Printer columns
 
 - SSA fieldOwner: `keese-workspacesession-controller`
-- Finalizer: `finalizers.workspacesession.operator.keese.ai/cleanup`
+- Finalizer: `finalizers.workspacesession.keese.ai/cleanup`
 - `observedGeneration` on every status write (rule 04.4)
 
 ```
@@ -134,4 +134,4 @@ Finite const table in `internal/controller/workspace/session/events.go`:
 
 ## Refs
 
-[08b](../designs/08b-goose-acp-stdio-k8s.md) · [08b-ii](../designs/08b-ii-session-crd-spec.md) · [02](../designs/02-workspace-model.md) · [04b](../designs/04b-projected-sa-identity.md) · [18](../designs/18-process-lifecycle.md) · [primary spec](workspace.operator.keese.ai-v1alpha1.md)
+[08b](../designs/08b-goose-acp-stdio-k8s.md) · [08b-ii](../designs/08b-ii-session-crd-spec.md) · [02](../designs/02-workspace-model.md) · [04b](../designs/04b-projected-sa-identity.md) · [18](../designs/18-process-lifecycle.md) · [primary spec](keese.ai-v1alpha1-workspace.md)

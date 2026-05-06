@@ -23,7 +23,7 @@ namespace. A tenant owns one or more namespaces (no prescribed naming); a
 **Workspace** is a CR living inside any tenant-owned namespace; multiple Workspaces
 may share a namespace. Two modes: **Mode A** (single-namespace, no Capsule) and
 **Mode B** (multi-namespace, Capsule present). D26 (2026-04-20) amends D23: keese
-now owns a **thin** `Tenant` CRD (`tenancy.operator.keese.ai/v1alpha1`) holding
+now owns a **thin** `Tenant` CRD (`keese.ai/v1alpha1`) holding
 keese-specific tenancy config (guardrail defaults, token-budget refs, default
 workspace quota) and delegating namespace aggregation to Capsule (Mode B) or
 namespace labels (Mode A). Detailed design: `docs/designs/24-tenant-crd.md`.
@@ -126,7 +126,7 @@ keese `Tenant` CR; in Mode B also via Capsule `additionalRoleBindings`.
 | Workspace quota > tenant quota | VAP rejects before persist | CEL error names violated dimension |
 | SSA field conflict | Unexpected NP change; conflict counter metric | Platform must not configure `TenantResource` for workspace namespaces |
 | Mode detection wrong | Operator logs discovery at INFO | `--capsule-integration=on\|off` override |
-| Tenant CR deleted with live Workspaces | Finalizer `finalizers.tenant.operator.keese.ai/workspaces` | Blocks delete until Workspaces are reassigned or deleted |
+| Tenant CR deleted with live Workspaces | Finalizer `finalizers.tenant.keese.ai/workspaces` | Blocks delete until Workspaces are reassigned or deleted |
 
 ## Upgrade / rollback
 

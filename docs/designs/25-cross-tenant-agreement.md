@@ -25,7 +25,7 @@ rollback: |
 ## Decision
 
 `CrossTenantAgreement` (CRA) is a **cluster-scoped** CRD at
-`tenancy.operator.keese.ai/v1alpha1`. It gates all cross-tenant a2a messaging
+`keese.ai/v1alpha1`. It gates all cross-tenant a2a messaging
 with a **bilateral approval handshake** before any ReBAC tuple is written.
 Intra-tenant a2a requires no CRA. Schema detail: [25-ii-spec-schema.md](25-ii-spec-schema.md).
 Approval flow + NATS prefix + failure modes: [25-iii-approval-flow.md](25-iii-approval-flow.md).
@@ -68,7 +68,7 @@ annotation handler (controller validates subject at approval time via
 
 ## CRD summary
 
-Group: `tenancy.operator.keese.ai` · Version: `v1alpha1` · Kind: `CrossTenantAgreement`
+Group: `keese.ai` · Version: `v1alpha1` · Kind: `CrossTenantAgreement`
 Scope: **Cluster** · Identity key: `metadata.name`.
 
 Printer columns (rule 04.5): `Age`, `Ready`, `Phase`, `From`, `To`, `ExpiresAt`.
@@ -112,7 +112,7 @@ Cross-tenant NATS messaging uses a separate stream per CRA:
 - **Subjects:** `["keese.cta.<cra-uid>.>"]`
 - **Provisioned by:** Workflow controller (03c) at first cross-tenant `transportRef` use
 - **Owner-ref:** Argo Workflow → GC on Workflow deletion; CRA deletion triggers
-  stream deletion (finalizer `finalizers.crosstenanagreement.operator.keese.ai/nats`)
+  stream deletion (finalizer `finalizers.crosstenanagreement.keese.ai/nats`)
 - **Cleanup owner:** Workflow controller (09/03c cross-dep confirmed)
 
 ## Observability

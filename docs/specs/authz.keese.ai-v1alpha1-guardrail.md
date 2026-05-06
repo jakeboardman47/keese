@@ -36,7 +36,7 @@ events:
   - PolicyRefNotFound
 ---
 
-# guardrail.operator.keese.ai v1alpha1 — spec
+# authz.keese.ai v1alpha1 — spec
 
 **Scope:** one kind — `GuardrailBinding`. Collapses Constitution +
 GuardrailPolicy + ToolAllowList (D14) into a single composition CRD that
@@ -47,18 +47,18 @@ Output: `status.effectivePolicy`, consumed by Recipe + Workspace admission.
 
 | Field | Value |
 |---|---|
-| Group | `guardrail.operator.keese.ai` |
+| Group | `authz.keese.ai` |
 | Version | `v1alpha1` |
 | Kind | `GuardrailBinding` |
 | Scope | Namespaced (cluster-default lives in `keese-system`) |
 | SSA fieldOwner | `keese-guardrailbinding-controller` |
-| Finalizer | `finalizers.guardrailbinding.operator.keese.ai/cleanup` |
+| Finalizer | `finalizers.guardrailbinding.keese.ai/cleanup` |
 
 Printer columns: `Age`, `Ready` (conditions[Ready].status), `Phase`
 (status.phase), `Scope` (`keese.ai/binding-scope` label), `ObservedGen`
 (status.observedGeneration).
 
-CEL VAP name: `guardrailbinding-policy.guardrail.operator.keese.ai/v1alpha1`
+CEL VAP name: `guardrailbinding-policy.authz.keese.ai/v1alpha1`
 (rule 04.12 — VAP first).
 
 ## 2. Spec schema
@@ -129,14 +129,14 @@ RBAC markers on reconciler (rule 04.9): `guardrailbindings` (CRUD),
 (get;list;watch;create;update;patch), `coordination.k8s.io/leases`
 (get;create;update).
 
-Finalizer `finalizers.guardrailbinding.operator.keese.ai/cleanup` cleans up:
+Finalizer `finalizers.guardrailbinding.keese.ai/cleanup` cleans up:
 operator-owned Kyverno `ClusterPolicy` copies, OpenFGA tuples (SSA delete on
 `openfga.configMapRef` entries), and Envoy `SecurityPolicy` objects bearing
 `fieldOwner: keese-guardrailbinding-controller`.
 
 ## 8. VAP rules
 
-VAP `guardrailbinding-policy.guardrail.operator.keese.ai/v1alpha1` enforces:
+VAP `guardrailbinding-policy.authz.keese.ai/v1alpha1` enforces:
 (1) workspace `tools.allow` ⊆ parent allow; (2) workspace `tools.deny` ⊇
 parent deny; (3) workspace `tokenBudget.*` ≤ parent; (4) `recipeHooks[]`
 entries require `serviceRef` (no URL); (5) generation freshness (§6).

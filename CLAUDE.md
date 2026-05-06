@@ -66,12 +66,12 @@ Goal: keep this file small and stable so prompt caching stays warm across sessio
 | Multi-agent worktree | `docs/references/agent-dispatch.md` | `scripts/agent-dispatch.sh` | `agent-dispatch` |
 | Auto-merge subagent work | `docs/references/git-worktree-merging.md` | `scripts/worktree-merge.sh` | `worktree-merge` |
 | Create a new CRD | `docs/references/crd-design-checklist.md` | `docs/designs/20-api-group-layout.md` + owning design | `crd-authoring` · agent `crd-author` · `/gen-crd` |
-| Implement a reconciler | `docs/references/envtest-kuttl-harness.md` | owning `docs/specs/<group>.operator.keese.ai-v1alpha1.md` | `controller-authoring` · agent `controller-author` |
+| Implement a reconciler | `docs/references/envtest-kuttl-harness.md` | owning spec in `docs/specs/` (e.g. `keese.ai-v1alpha1-<kind>.md`, `authz.keese.ai-v1alpha1.md`, `policy.keese.ai-v1alpha1.md`) | `controller-authoring` · agent `controller-author` |
 | Edit an admission webhook | `.claude/rules/04-kubernetes.md` | owning spec | `controller-authoring` |
 | Author/update OLM bundle | `docs/references/olm-bundle-authoring.md` | `docs/designs/14a-olm-channels-upgrades.md` + `14b-olm-dependencies.md` | agent `olm-author` · `/validate-bundle` |
 | Bootstrap local kind + infra | `docs/references/tilt-local-loop.md` | `dev/bootstrap/README.md` | agent `infra-bootstrap` |
 | End-to-end smoke (kind) | `docs/references/e2e-smoke.md` | `scripts/dev/e2e-smoke.sh` | agent `test-engineer` |
-| Add/revise a guardrail binding | `docs/designs/06-guardrailbinding.md` | `docs/specs/guardrail.operator.keese.ai-v1alpha1.md` | agent `guardrail-author` |
+| Add/revise a guardrail binding | `docs/designs/06-guardrailbinding.md` | `docs/specs/authz.keese.ai-v1alpha1-guardrail.md` | agent `guardrail-author` |
 | Change OpenFGA auth model | `docs/designs/04a-openfga-authz-model.md` | `docs/specs/egress-authz-protocol.md` | agent `rebac-modeler` |
 | Add an AgentRuntime provider | `docs/designs/07-agent-runtime-spi.md` | `docs/specs/agent-runtime-spi.md` | `doc-authoring` then `controller-authoring` |
 | Edit Envoy AI Gateway config | `docs/designs/05a-envoy-ai-gateway-topology.md` | `.claude/rules/05-security-zero-trust.md` | agent `infra-bootstrap` |

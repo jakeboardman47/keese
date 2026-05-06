@@ -16,8 +16,8 @@ with the `crd-author` agent and the
 
 ## Naming
 
-- **Group**: `<domain>.operator.keese.ai`; domains listed in
-  `docs/designs/20-api-group-layout.md`.
+- **Group**: one of `keese.ai`, `authz.keese.ai`, or `policy.keese.ai`; mapping in
+  `docs/designs/20a-api-group-layout.md`.
 - **Kind**: PascalCase; singular. `WorkspaceShare` not
   `WorkspacesShare`.
 - **Version**: `v1alpha1` first. Promotion rules in rule 04.2.
