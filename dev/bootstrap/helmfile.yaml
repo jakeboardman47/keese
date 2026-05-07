@@ -9,8 +9,9 @@
 #        helmfile -f dev/bootstrap/helmfile.yaml diff
 #        helmfile -f dev/bootstrap/helmfile.yaml template
 #
-# Chart versions are pinned. Versions marked "# unverified-2026" were selected
-# from best available information as of 2026-04-19; verify before production use.
+# Chart versions are pinned and verified against upstream chart indexes
+# as of 2026-05-06. Any version intentionally held back documents the reason
+# inline. See TD-P1-08 in docs/plans/demo/tech-debt.md for the verification log.
 
 environments:
   dev:
@@ -39,7 +40,7 @@ repositories:
   - name: kyverno
     url: https://kyverno.github.io/kyverno
   - name: openbao
-    url: https://openbao.github.io/openbao-helm # unverified-2026
+    url: https://openbao.github.io/openbao-helm
   - name: external-secrets
     url: https://charts.external-secrets.io
   - name: argo
@@ -104,7 +105,11 @@ releases:
     namespace: capsule-system
     createNamespace: true
     chart: projectcapsule/capsule
-    version: 0.7.2 # unverified-2026
+    version: 0.7.2
+    # Upstream latest is 0.9.9; pinned at 0.7.2 — the 0.8.x→0.9.x
+    # series introduced breaking changes to Tenant .spec.ingressOptions
+    # and .spec.storageClasses selectors. Bump only after validating
+    # Tenant CRD migration in dev/bootstrap/openbao/seed.sh context.
     needs:
       - cert-manager/cert-manager
     values:
@@ -157,7 +162,7 @@ releases:
     namespace: openfga
     createNamespace: true
     chart: openfga/openfga
-    version: 0.2.27 # unverified-2026
+    version: 0.2.62
     needs:
       - cert-manager/cert-manager
     values:
@@ -168,7 +173,7 @@ releases:
     namespace: kyverno
     createNamespace: true
     chart: kyverno/kyverno
-    version: 3.2.6 # unverified-2026
+    version: 3.8.0
     needs:
       - cert-manager/cert-manager
     values:
@@ -179,7 +184,7 @@ releases:
     namespace: nats
     createNamespace: true
     chart: nats/nack
-    version: 0.26.0 # unverified-2026
+    version: 0.33.2
     needs:
       - cert-manager/cert-manager
 
@@ -187,7 +192,7 @@ releases:
     namespace: nats
     createNamespace: false
     chart: nats/nats
-    version: 1.2.6 # unverified-2026
+    version: 1.3.16
     needs:
       - cert-manager/cert-manager
     values:
@@ -198,7 +203,7 @@ releases:
     namespace: elastic-system
     createNamespace: true
     chart: elastic/eck-operator
-    version: 2.13.0 # unverified-2026
+    version: 3.4.0
     needs:
       - cert-manager/cert-manager
     values:
@@ -209,7 +214,7 @@ releases:
     namespace: openbao
     createNamespace: true
     chart: openbao/openbao
-    version: 0.4.0 # unverified-2026
+    version: 0.9.0
     needs:
       - cert-manager/cert-manager
     values:
@@ -219,7 +224,11 @@ releases:
     namespace: external-secrets
     createNamespace: true
     chart: external-secrets/external-secrets
-    version: 0.10.5 # unverified-2026
+    version: 0.10.5
+    # CANNOT BUMP: the charts.external-secrets.io index no longer publishes
+    # 0.x charts (current index starts at 1.x/2.x). The 1.x/2.x series
+    # is a rewrite with breaking changes to SecretStore CRD field paths.
+    # Track TD-P2-18 to migrate ESO to 1.x once CRD migration is planned.
     needs:
       - cert-manager/cert-manager
       - openbao/openbao
@@ -231,7 +240,7 @@ releases:
     namespace: argo
     createNamespace: true
     chart: argo/argo-workflows
-    version: 0.42.5 # unverified-2026
+    version: 0.47.5
     needs:
       - cert-manager/cert-manager
     values:
@@ -242,7 +251,7 @@ releases:
     namespace: qdrant
     createNamespace: true
     chart: qdrant/qdrant
-    version: 1.13.0 # unverified-2026
+    version: 1.17.1
     needs:
       - cert-manager/cert-manager
     values:
