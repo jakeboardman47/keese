@@ -12,9 +12,11 @@ last_verified: 2026-04-25
 
 # Demo track — first working agent on a real cluster
 
-> **Goal.** End-to-end demo by Mon 2026-04-27 AM: provision a single cloud
-> cluster, install keese, and run one Workspace whose pod calls Anthropic
-> through the Envoy AI Gateway, returns a result, and writes to sqlite memory.
+> **Goal.** End-to-end demo on a **local kind cluster**: provision the
+> stack, install keese, and run one Workspace whose pod calls Anthropic
+> through the Envoy AI Gateway, returns a result, and writes to sqlite
+> memory. Cloud deploy (D4) is deferred; D5 retargeted to kind T1+T2 on
+> 2026-05-06 — see iteration 2 in [D5-demo-smoke.md](D5-demo-smoke.md).
 >
 > **Non-goal.** Production readiness. The audit on 2026-04-25 found 23
 > stub paths under [internal/controller/](../../../internal/controller/);
@@ -30,7 +32,7 @@ last_verified: 2026-04-25
 | D2 | [Agent runtime minimum SPI (real goose pod + sqlite memory)](D2-runtime-spi-minimum.md) | D1 | 5–7 h | planned |
 | D3 | [Cluster bootstrap + Anthropic LLM wiring](D3-cluster-bootstrap.md) | — (parallel with D2) | 3–4 h | planned |
 | D4 | [Cloud deploy (single-cloud, single-tenant, single-LLM)](D4-cloud-deploy.md) | D1, D2, D3 | 3–4 h | planned |
-| D5 | [Demo smoke + runbook](D5-demo-smoke.md) | D4 | 2 h | planned |
+| D5 | [Demo smoke (kind, T1+T2 only)](D5-demo-smoke.md) | — (kind only; D4 deferred) | 1 h | in-progress |
 | TD | [Tech-debt register (post-demo cleanup)](tech-debt.md) | — | tracked separately | open |
 
 ## Wall-clock map (Sat 2026-04-25 ~ Mon AM 2026-04-27)
