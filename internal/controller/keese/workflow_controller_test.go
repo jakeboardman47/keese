@@ -129,8 +129,8 @@ var _ = Describe("Workflow Controller", func() {
 	})
 
 	Describe("Trigger projection", func() {
-		DescribeTable("reconciles trigger types without error",
-			func(triggerType keesev1alpha1.TriggerType, trigger keesev1alpha1.WorkflowTrigger) {
+		DescribeTable("projects trigger resource and sets TriggerProjected=True",
+			func(triggerType keesev1alpha1.TriggerType, trigger keesev1alpha1.WorkflowTrigger, expectedReason string) {
 				argo, _, _, rebac, _ := newFakes()
 				r := &WorkflowReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Argo: argo, Rebac: rebac}
 
@@ -142,7 +142,6 @@ var _ = Describe("Workflow Controller", func() {
 					_ = k8sClient.Delete(ctx, &keesev1alpha1.Workflow{
 						ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testWorkflowNamespace},
 					})
-					// Ensure the name variable is captured (not the loop var) — it's already captured by closure.
 				}()
 
 				key := types.NamespacedName{Name: wf.Name, Namespace: wf.Namespace}
@@ -153,29 +152,87 @@ var _ = Describe("Workflow Controller", func() {
 				var fetched keesev1alpha1.Workflow
 				Expect(k8sClient.Get(ctx, key, &fetched)).To(Succeed())
 				Expect(fetched.Status.Phase).To(Equal(keesev1alpha1.WorkflowPhaseReady))
+
+				// Assert TriggerProjected condition is present with the expected reason.
+				var triggerCond *metav1.Condition
+				for i := range fetched.Status.Conditions {
+					if fetched.Status.Conditions[i].Type == conditionTypeTriggerProjected {
+						triggerCond = &fetched.Status.Conditions[i]
+						break
+					}
+				}
+				Expect(triggerCond).NotTo(BeNil(), "TriggerProjected condition should be set")
+				Expect(triggerCond.Reason).To(Equal(expectedReason))
 			},
-			Entry("Cron trigger",
+			Entry("Cron trigger projects CronJob",
 				keesev1alpha1.TriggerTypeCron,
 				keesev1alpha1.WorkflowTrigger{
 					Type: keesev1alpha1.TriggerTypeCron,
 					Cron: &keesev1alpha1.CronTrigger{Schedule: "0 * * * *"},
 				},
+				ReasonTriggerCronJobReady,
 			),
-			Entry("KnativeTrigger trigger",
+			Entry("KnativeTrigger projects eventing/v1.Trigger",
 				keesev1alpha1.TriggerTypeKnativeTrigger,
 				keesev1alpha1.WorkflowTrigger{
 					Type:           keesev1alpha1.TriggerTypeKnativeTrigger,
 					KnativeTrigger: &keesev1alpha1.KnativeTriggerConfig{BrokerRef: "default-broker"},
 				},
+				ReasonTriggerKnativeTriggerReady,
 			),
-			Entry("HTTPWebhook trigger",
+			Entry("HTTPWebhook projects gateway.networking.k8s.io/v1.HTTPRoute",
 				keesev1alpha1.TriggerTypeHTTPWebhook,
 				keesev1alpha1.WorkflowTrigger{
 					Type:        keesev1alpha1.TriggerTypeHTTPWebhook,
 					HTTPWebhook: &keesev1alpha1.HTTPWebhookConfig{Path: "/trigger"},
 				},
+				ReasonTriggerHTTPRouteReady,
 			),
 		)
+
+		It("NATSSubscription sets TriggerProjected=False/KEDAUnavailable (no CRD projected)", func() {
+			argo, _, _, rebac, _ := newFakes()
+			r := &WorkflowReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Argo: argo, Rebac: rebac}
+
+			wf := minimalWorkflow("wf-trig-nats")
+			wf.Spec.Triggers = []keesev1alpha1.WorkflowTrigger{
+				{
+					Type: keesev1alpha1.TriggerTypeNATSSubscription,
+					NATSSubscription: &keesev1alpha1.NATSSubscriptionConfig{
+						StreamName: "keese-events",
+						Subject:    "keese.wf.>",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, wf)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, &keesev1alpha1.Workflow{
+					ObjectMeta: metav1.ObjectMeta{Name: wf.Name, Namespace: wf.Namespace},
+				})
+			}()
+
+			key := types.NamespacedName{Name: wf.Name, Namespace: wf.Namespace}
+			_, _ = r.Reconcile(ctx, requestFor(key)) // finalizer
+			// NATSSubscription is non-fatal — reconcile must still succeed.
+			_, err := r.Reconcile(ctx, requestFor(key))
+			Expect(err).NotTo(HaveOccurred())
+
+			var fetched keesev1alpha1.Workflow
+			Expect(k8sClient.Get(ctx, key, &fetched)).To(Succeed())
+			// Phase is Ready even though KEDA is unavailable (non-fatal trigger type).
+			Expect(fetched.Status.Phase).To(Equal(keesev1alpha1.WorkflowPhaseReady))
+
+			var triggerCond *metav1.Condition
+			for i := range fetched.Status.Conditions {
+				if fetched.Status.Conditions[i].Type == conditionTypeTriggerProjected {
+					triggerCond = &fetched.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(triggerCond).NotTo(BeNil(), "TriggerProjected condition should be set")
+			Expect(triggerCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(triggerCond.Reason).To(Equal(ReasonTriggerKEDAUnavailable))
+		})
 	})
 
 	Describe("Finalizer cascade blocks active WorkflowRuns", func() {

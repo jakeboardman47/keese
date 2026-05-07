@@ -15,12 +15,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	eventingv1 "knative.dev/eventing/pkg/apis/eventing/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
 	// +kubebuilder:scaffold:imports
@@ -30,8 +33,16 @@ import (
 // config/crd/bases/ directory hits the 10 s envtest install timeout when 17
 // CRDs install concurrently on macOS arm64 (root cause documented in 6ddacf6).
 var workflowCRDs = []string{
-	"workflow.operator.keese.ai_workflows.yaml",
-	"workflow.operator.keese.ai_workflowruns.yaml",
+	"keese.ai_workflows.yaml",
+	"keese.ai_workflowruns.yaml",
+}
+
+// workflowExtraCRDDirs lists directories containing CRDs for types the
+// workflow controller SSA-projects (Knative Trigger, Gateway API HTTPRoute).
+// batch/v1 CronJob is built-in to envtest so no extra path is needed for it.
+var workflowExtraCRDDirs = []string{
+	filepath.Join("..", "..", "..", "hack", "testdata", "gateway-api"),
+	filepath.Join("..", "..", "..", "hack", "testdata", "knative-eventing"),
 }
 
 var (
@@ -62,7 +73,7 @@ var _ = BeforeSuite(func() {
 	testEnv = &envtest.Environment{
 		// Load only this package's CRDs (not the entire config/crd/bases/ directory)
 		// to prevent the 10 s CRD-install timeout when 17 CRDs install concurrently.
-		CRDDirectoryPaths:     crdPaths,
+		CRDDirectoryPaths:     append(crdPaths, workflowExtraCRDDirs...),
 		ErrorIfCRDPathMissing: true,
 		CRDInstallOptions: envtest.CRDInstallOptions{
 			// Belt-and-suspenders: raise the per-install timeout even with the
@@ -81,6 +92,15 @@ var _ = BeforeSuite(func() {
 
 	err = keesev1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
+
+	// batch/v1 is built-in to envtest; register the Go types so the controller
+	// can use typed SSA Patch calls on CronJob.
+	Expect(batchv1.AddToScheme(scheme.Scheme)).To(Succeed())
+
+	// Register Gateway API and Knative eventing schemes so SSA Patch calls
+	// for HTTPRoute and Trigger succeed against the envtest API server.
+	Expect(gatewayv1.Install(scheme.Scheme)).To(Succeed())
+	Expect(eventingv1.AddToScheme(scheme.Scheme)).To(Succeed())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())

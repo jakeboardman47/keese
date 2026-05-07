@@ -90,4 +90,22 @@ const (
 	// audience is successfully injected into the Argo Workflow's projected
 	// SA tokens.
 	ReasonWorkflowAudienceInjected = "WorkflowAudienceInjected"
+
+	// Trigger projection condition reasons (used as Reason on the TriggerProjected condition).
+
+	// ReasonTriggerCronJobReady is set when a batch/v1.CronJob is successfully SSA-applied.
+	ReasonTriggerCronJobReady = "CronJobReady"
+
+	// ReasonTriggerKnativeTriggerReady is set when a Knative eventing/v1.Trigger is
+	// successfully SSA-applied.
+	ReasonTriggerKnativeTriggerReady = "TriggerReady"
+
+	// ReasonTriggerHTTPRouteReady is set when a gateway.networking.k8s.io/v1.HTTPRoute
+	// is successfully SSA-applied.
+	ReasonTriggerHTTPRouteReady = "HTTPRouteReady"
+
+	// ReasonTriggerKEDAUnavailable is set when a NATSSubscription trigger cannot be
+	// projected because the KEDA ScaledObject CRD dependency is unresolvable (dep-conflict
+	// documented in go.mod). The condition is observable so operators know the limitation.
+	ReasonTriggerKEDAUnavailable = "KEDAUnavailable"
 )

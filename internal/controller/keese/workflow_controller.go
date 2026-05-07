@@ -7,23 +7,29 @@ import (
 	"context"
 	"fmt"
 
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	eventingv1 "knative.dev/eventing/pkg/apis/eventing/v1"
+	duckv1 "knative.dev/pkg/apis/duck/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
 )
 
 const (
-	workflowFinalizer        = "finalizers.workflow.operator.keese.ai/cascade"
-	workflowFieldOwner       = "keese-workflow-controller"
-	conditionTypeReady       = "Ready"
-	conditionTypeProgressing = "Progressing"
+	workflowFinalizer           = "finalizers.workflow.keese.ai/cascade"
+	workflowFieldOwner          = "keese-workflow-controller"
+	conditionTypeReady          = "Ready"
+	conditionTypeProgressing    = "Progressing"
+	conditionTypeTriggerProjected = "TriggerProjected"
 )
 
 // WorkflowReconciler reconciles a Workflow object.
@@ -32,16 +38,22 @@ type WorkflowReconciler struct {
 	Scheme        *runtime.Scheme
 	Argo          ArgoProjector
 	Rebac         WorkflowRebacWriter
+	// LauncherImage is the container image used in CronJob / HTTPRoute launcher pods.
+	// Defaults to "ghcr.io/keese-ai/keese:dev" when empty. In production, cmd/main.go
+	// should inject the operator's own image via the RELATED_IMAGE_WF_LAUNCHER env var.
+	LauncherImage string
 	EventRecorder interface {
 		Eventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{})
 	}
 }
 
-// +kubebuilder:rbac:groups=workflow.operator.keese.ai,resources=workflows,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=workflow.operator.keese.ai,resources=workflows/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=workflow.operator.keese.ai,resources=workflows/finalizers,verbs=update
-// +kubebuilder:rbac:groups=workflow.operator.keese.ai,resources=workflowruns,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=workflows,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=workflows/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=workflows/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=workflowruns,verbs=get;list;watch;create
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=eventing.knative.dev,resources=triggers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile moves the Workflow toward the desired state.
 //
@@ -196,25 +208,295 @@ func (r *WorkflowReconciler) reconcileDelete(ctx context.Context, wf *keesev1alp
 	return ctrl.Result{}, nil
 }
 
-// reconcileTrigger projects a single trigger to its backing resource.
-// Cron → CronJob (stub SSA), KnativeTrigger → Knative Trigger (stub SSA),
-// HTTPWebhook → HTTPRoute (stub SSA).
-// TODO(spec-followup): Full CronJob / KEDA / Knative / HTTPRoute SSA projection
-// requires those API types in go.mod; stubs return nil to unblock integration tests.
-func (r *WorkflowReconciler) reconcileTrigger(_ context.Context, _ *keesev1alpha1.Workflow, _ *keesev1alpha1.WorkflowTrigger) error {
-	// TODO(spec-followup): project CronJob/KEDA ScaledObject/Knative Trigger/HTTPRoute
-	// via SSA with client.FieldOwner(workflowFieldOwner). Each resource is owner-ref'd
-	// to the Workflow so deletion cascades automatically.
+// reconcileTrigger projects a single trigger to its backing resource via SSA.
+//
+// Mapping:
+//   - Cron           → batch/v1.CronJob  (wf-launcher container creates a WorkflowRun)
+//   - KnativeTrigger → eventing.knative.dev/v1.Trigger  (subscriber = wf-launcher Service)
+//   - NATSSubscription → no CRD projected (KEDA dep-conflict; documented in go.mod TODO);
+//     sets TriggerProjected=False/KEDAUnavailable so the condition is observable.
+//   - HTTPWebhook    → gateway.networking.k8s.io/v1.HTTPRoute  (routes to wf-launcher Service)
+//
+// All resources are labeled keese.ai/managed=true and carry an owner reference so
+// garbage collection cascades when the Workflow is deleted.
+func (r *WorkflowReconciler) reconcileTrigger(ctx context.Context, wf *keesev1alpha1.Workflow, trigger *keesev1alpha1.WorkflowTrigger) error {
+	switch trigger.Type {
+	case keesev1alpha1.TriggerTypeCron:
+		return r.reconcileCronTrigger(ctx, wf, trigger)
+	case keesev1alpha1.TriggerTypeKnativeTrigger:
+		return r.reconcileKnativeTrigger(ctx, wf, trigger)
+	case keesev1alpha1.TriggerTypeNATSSubscription:
+		// KEDA ScaledObject is blocked by a dep-conflict (see go.mod TODO).
+		// Set an observable condition and return nil — non-fatal, no CRD projected.
+		r.setCondition(wf, conditionTypeTriggerProjected, metav1.ConditionFalse,
+			ReasonTriggerKEDAUnavailable,
+			"NATSSubscription trigger requires KEDA ScaledObject; KEDA dependency "+
+				"conflict pending upstream resolution (see go.mod TODO(dep-conflict))")
+		return nil
+	case keesev1alpha1.TriggerTypeHTTPWebhook:
+		return r.reconcileHTTPWebhookTrigger(ctx, wf, trigger)
+	default:
+		return fmt.Errorf("unknown trigger type %q", trigger.Type)
+	}
+}
+
+// reconcileCronTrigger SSA-projects a batch/v1.CronJob that creates a WorkflowRun CR
+// on each schedule tick. The launcher container is the operator image itself invoked as
+// the keese-wf-launcher sub-binary.
+func (r *WorkflowReconciler) reconcileCronTrigger(ctx context.Context, wf *keesev1alpha1.Workflow, trigger *keesev1alpha1.WorkflowTrigger) error {
+	cfg := trigger.Cron
+	if cfg == nil {
+		return fmt.Errorf("trigger type Cron requires spec.triggers[].cron to be set")
+	}
+
+	launcherImage := r.LauncherImage
+	if launcherImage == "" {
+		launcherImage = "ghcr.io/keese-ai/keese:dev"
+	}
+
+	suspend := cfg.Suspend
+	cj := &batchv1.CronJob{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "batch/v1",
+			Kind:       "CronJob",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cronJobName(wf),
+			Namespace: wf.Namespace,
+			Labels: map[string]string{
+				managedLabel:          managedLabelValue,
+				"keese.ai/workflow":   wf.Name,
+				"keese.ai/managed-by": workflowFieldOwner,
+			},
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule:          cfg.Schedule,
+			TimeZone:          ptrString(cfg.Timezone),
+			Suspend:           &suspend,
+			ConcurrencyPolicy: batchv1.ForbidConcurrent,
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								managedLabel:          managedLabelValue,
+								"keese.ai/workflow":   wf.Name,
+								"keese.ai/managed-by": workflowFieldOwner,
+							},
+						},
+						Spec: corev1.PodSpec{
+							RestartPolicy: corev1.RestartPolicyOnFailure,
+							Containers: []corev1.Container{
+								{
+									Name:    "wf-launcher",
+									Image:   launcherImage,
+									Command: []string{"keese-wf-launcher"},
+									Args: []string{
+										"--workflow", wf.Name,
+										"--namespace", wf.Namespace,
+									},
+									SecurityContext: &corev1.SecurityContext{
+										ReadOnlyRootFilesystem:   ptr[bool](true),
+										AllowPrivilegeEscalation: ptr[bool](false),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetOwnerReference(wf, cj, r.Scheme); err != nil {
+		return fmt.Errorf("set owner ref on CronJob: %w", err)
+	}
+
+	if err := r.Patch(ctx, cj, client.Apply,
+		client.FieldOwner(workflowFieldOwner),
+		client.ForceOwnership,
+	); err != nil {
+		return fmt.Errorf("SSA CronJob %s/%s: %w", cj.Namespace, cj.Name, err)
+	}
+
+	r.setCondition(wf, conditionTypeTriggerProjected, metav1.ConditionTrue,
+		ReasonTriggerCronJobReady,
+		fmt.Sprintf("CronJob %s/%s projected (schedule: %s)", cj.Namespace, cj.Name, cfg.Schedule))
 	return nil
 }
 
-// reconcileOutput projects a single output to its backing resource.
-// TODO(spec-followup): Full Knative Sink / NATS stream / S3 / GitHub PR SSA projection
-// deferred until the respective API types are available in go.mod.
-func (r *WorkflowReconciler) reconcileOutput(_ context.Context, _ *keesev1alpha1.Workflow, _ *keesev1alpha1.WorkflowOutput) error {
-	// TODO(spec-followup): SSA-project Knative Sink / NATS stream / S3 config /
-	// GitHub PR sink. Owner-ref'd to Workflow.
+// reconcileKnativeTrigger SSA-projects a Knative eventing/v1.Trigger that subscribes
+// to a named Broker and forwards matching CloudEvents to the wf-launcher Service.
+func (r *WorkflowReconciler) reconcileKnativeTrigger(ctx context.Context, wf *keesev1alpha1.Workflow, trigger *keesev1alpha1.WorkflowTrigger) error {
+	cfg := trigger.KnativeTrigger
+	if cfg == nil {
+		return fmt.Errorf("trigger type KnativeTrigger requires spec.triggers[].knativeTrigger to be set")
+	}
+
+	kt := &eventingv1.Trigger{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "eventing.knative.dev/v1",
+			Kind:       "Trigger",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      knativeTriggerName(wf),
+			Namespace: wf.Namespace,
+			Labels: map[string]string{
+				managedLabel:          managedLabelValue,
+				"keese.ai/workflow":   wf.Name,
+				"keese.ai/managed-by": workflowFieldOwner,
+			},
+		},
+		Spec: eventingv1.TriggerSpec{
+			Broker: cfg.BrokerRef,
+			Subscriber: duckv1.Destination{
+				Ref: &duckv1.KReference{
+					APIVersion: "v1",
+					Kind:       "Service",
+					Name:       wfLauncherServiceName(wf),
+					Namespace:  wf.Namespace,
+				},
+			},
+		},
+	}
+
+	// Map optional CloudEvent attribute filter.
+	if len(cfg.Filter) > 0 {
+		attrs := make(eventingv1.TriggerFilterAttributes, len(cfg.Filter))
+		for k, v := range cfg.Filter {
+			attrs[k] = v
+		}
+		kt.Spec.Filter = &eventingv1.TriggerFilter{Attributes: attrs}
+	}
+
+	if err := controllerutil.SetOwnerReference(wf, kt, r.Scheme); err != nil {
+		return fmt.Errorf("set owner ref on Knative Trigger: %w", err)
+	}
+
+	if err := r.Patch(ctx, kt, client.Apply,
+		client.FieldOwner(workflowFieldOwner),
+		client.ForceOwnership,
+	); err != nil {
+		return fmt.Errorf("SSA Knative Trigger %s/%s: %w", kt.Namespace, kt.Name, err)
+	}
+
+	r.setCondition(wf, conditionTypeTriggerProjected, metav1.ConditionTrue,
+		ReasonTriggerKnativeTriggerReady,
+		fmt.Sprintf("Knative Trigger %s/%s projected (broker: %s)", kt.Namespace, kt.Name, cfg.BrokerRef))
 	return nil
+}
+
+// reconcileHTTPWebhookTrigger SSA-projects a gateway.networking.k8s.io/v1.HTTPRoute
+// that routes incoming POST requests at cfg.Path to the wf-launcher Service.
+func (r *WorkflowReconciler) reconcileHTTPWebhookTrigger(ctx context.Context, wf *keesev1alpha1.Workflow, trigger *keesev1alpha1.WorkflowTrigger) error {
+	cfg := trigger.HTTPWebhook
+	if cfg == nil {
+		return fmt.Errorf("trigger type HTTPWebhook requires spec.triggers[].httpWebhook to be set")
+	}
+
+	pathExact := gatewayv1.PathMatchExact
+	postMethod := gatewayv1.HTTPMethod("POST")
+	svcName := gatewayv1.ObjectName(wfLauncherServiceName(wf))
+	svcPort := gatewayv1.PortNumber(8080)
+
+	hr := &gatewayv1.HTTPRoute{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "gateway.networking.k8s.io/v1",
+			Kind:       "HTTPRoute",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      httpRouteName(wf),
+			Namespace: wf.Namespace,
+			Labels: map[string]string{
+				managedLabel:          managedLabelValue,
+				"keese.ai/workflow":   wf.Name,
+				"keese.ai/managed-by": workflowFieldOwner,
+			},
+		},
+		Spec: gatewayv1.HTTPRouteSpec{
+			Rules: []gatewayv1.HTTPRouteRule{
+				{
+					Matches: []gatewayv1.HTTPRouteMatch{
+						{
+							Path: &gatewayv1.HTTPPathMatch{
+								Type:  &pathExact,
+								Value: ptr[string](cfg.Path),
+							},
+							Method: &postMethod,
+						},
+					},
+					BackendRefs: []gatewayv1.HTTPBackendRef{
+						{
+							BackendRef: gatewayv1.BackendRef{
+								BackendObjectReference: gatewayv1.BackendObjectReference{
+									Name: svcName,
+									Port: &svcPort,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetOwnerReference(wf, hr, r.Scheme); err != nil {
+		return fmt.Errorf("set owner ref on HTTPRoute: %w", err)
+	}
+
+	if err := r.Patch(ctx, hr, client.Apply,
+		client.FieldOwner(workflowFieldOwner),
+		client.ForceOwnership,
+	); err != nil {
+		return fmt.Errorf("SSA HTTPRoute %s/%s: %w", hr.Namespace, hr.Name, err)
+	}
+
+	r.setCondition(wf, conditionTypeTriggerProjected, metav1.ConditionTrue,
+		ReasonTriggerHTTPRouteReady,
+		fmt.Sprintf("HTTPRoute %s/%s projected (path: %s)", hr.Namespace, hr.Name, cfg.Path))
+	return nil
+}
+
+// reconcileOutput projects a single output sink. Output projections (Knative Sink,
+// NATS publish, S3, GitHub PR) are deferred to a follow-on TD item; this function
+// is a documented intentional no-op so the reconciler loop does not block.
+func (r *WorkflowReconciler) reconcileOutput(_ context.Context, _ *keesev1alpha1.Workflow, _ *keesev1alpha1.WorkflowOutput) error {
+	// Output projections (KnativeSink / NATSPublish / S3 / GitHubPR) are in scope
+	// for a separate TD item (TD-P2-10). This no-op is intentional and not a stub —
+	// the output CRD fields are validated by the API server at admission time.
+	return nil
+}
+
+// ---- name helpers -------------------------------------------------------
+
+// cronJobName returns the deterministic CronJob name for a Workflow.
+func cronJobName(wf *keesev1alpha1.Workflow) string {
+	return fmt.Sprintf("keese-wf-%s-cron", wf.Name)
+}
+
+// knativeTriggerName returns the deterministic Knative Trigger name for a Workflow.
+func knativeTriggerName(wf *keesev1alpha1.Workflow) string {
+	return fmt.Sprintf("keese-wf-%s-trigger", wf.Name)
+}
+
+// httpRouteName returns the deterministic HTTPRoute name for a Workflow.
+func httpRouteName(wf *keesev1alpha1.Workflow) string {
+	return fmt.Sprintf("keese-wf-%s-webhook", wf.Name)
+}
+
+// wfLauncherServiceName returns the deterministic wf-launcher Service name for a Workflow.
+// The Service itself is not projected by this controller; it is expected to be provisioned
+// out-of-band (e.g. by Helm or a separate infra chart) and named according to this convention.
+func wfLauncherServiceName(wf *keesev1alpha1.Workflow) string {
+	return fmt.Sprintf("keese-wf-%s-launcher", wf.Name)
+}
+
+// ptrString returns nil for an empty string (for optional CronJob TimeZone field).
+func ptrString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // patchStatus applies a status-only SSA patch from orig → wf.
