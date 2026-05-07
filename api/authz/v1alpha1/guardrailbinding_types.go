@@ -53,6 +53,7 @@ type BindingScope struct {
 
 	// TenantRef is required when Type == Tenant.
 	// +optional
+	// +keese:rebac-tuple=guardrailbinding.tenant
 	TenantRef *NamespacedRef `json:"tenantRef,omitempty"`
 
 	// WorkspaceRef is required when Type == Workspace.

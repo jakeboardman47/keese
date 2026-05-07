@@ -218,6 +218,7 @@ type MCPConfig struct {
 
 	// ToolTimeout is the per-tool-call timeout duration. Range [1s, 300s]. Default "30s".
 	// +optional
+	// +keese:rebac-tuple=N/A-quantitative-config
 	ToolTimeout string `json:"toolTimeout,omitempty"`
 }
 

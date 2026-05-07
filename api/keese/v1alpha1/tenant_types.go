@@ -52,7 +52,7 @@ type CrossNamespaceObjectRef struct {
 
 // TenantOIDCConfig controls which OIDCProvider CRs are accepted for this tenant.
 type TenantOIDCConfig struct {
-	// AllowedProviders lists OIDCProvider names (in authz.operator.keese.ai) accepted for token
+	// AllowedProviders lists OIDCProvider names (in authz.keese.ai) accepted for token
 	// validation in this tenant. Empty means all configured providers are accepted.
 	// Tokens from issuers not in the allow-list are rejected 403 OIDCProviderNotFound.
 	//
@@ -67,6 +67,7 @@ type TenantSecurityConfig struct {
 	// AllowUnsafeTransports enables non-TLS transport (break-glass; design 09 cross-cut).
 	// Requires namespace label keese.ai/break-glass=true.
 	// +optional
+	// +keese:rebac-tuple=tenant.allows_unsafe_transports
 	AllowUnsafeTransports bool `json:"allowUnsafeTransports,omitempty"`
 }
 
@@ -86,9 +87,9 @@ type CallRetryBudget struct {
 // TenantSpec defines the desired state of Tenant.
 //
 // Finalizers:
-//   - finalizers.tenant.operator.keese.ai/workspaces  — prevent deletion while Workspaces live
-//   - finalizers.tenant.operator.keese.ai/namespaces  — prevent label removal while Workspaces live
-//   - finalizers.tenant.operator.keese.ai/agreements  — drain CrossTenantAgreements before delete
+//   - finalizers.tenant.keese.ai/workspaces  — prevent deletion while Workspaces live
+//   - finalizers.tenant.keese.ai/namespaces  — prevent label removal while Workspaces live
+//   - finalizers.tenant.keese.ai/agreements  — drain CrossTenantAgreements before delete
 //
 // +kubebuilder:validation:XValidation:rule="size(self.adminSubjects) > 0",message="adminSubjects must be non-empty"
 // +kubebuilder:validation:XValidation:rule="!has(self.jwksCacheFailOpenSeconds) || self.jwksCacheFailOpenSeconds == 0 || (self.jwksCacheFailOpenSeconds >= 30 && self.jwksCacheFailOpenSeconds <= 600)",message="jwksCacheFailOpenSeconds must be in [30,600] when set"
@@ -207,7 +208,7 @@ type TenantStatus struct {
 // Tenant is the Schema for the tenants API.
 // Tenant is cluster-scoped; its name IS the OpenFGA identity key.
 // Design: docs/designs/24-tenant-crd.md + docs/designs/24b-tenant-crd.md
-// Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-tenant.md
+// Spec: docs/specs/keese.ai-v1alpha1-ii-tenant.md
 type Tenant struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

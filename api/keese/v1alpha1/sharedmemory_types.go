@@ -35,6 +35,7 @@ type SharedMemorySpec struct {
 	// Only the tenant admin may mutate sharedWith[]; enforced by the
 	// SharedMemoryMutationAuthz VAP which calls OpenFGA (≤15ms 1-hop).
 	// +kubebuilder:validation:MinLength=1
+	// +keese:rebac-tuple=sharedmemory.tenant
 	TenantRef string `json:"tenantRef"`
 
 	// provider is the discriminated one-of backend configuration.
