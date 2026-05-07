@@ -5,7 +5,7 @@
 scope: reference
 category: developer-experience
 status: current
-last_verified: 2026-04-19
+last_verified: 2026-05-06
 ---
 
 # Local Dev Infra Bootstrap
@@ -53,28 +53,69 @@ cert-manager
 | nack | nats | NATS JetStream CRD controllers |
 | nats | nats | JetStream messaging broker |
 | eck-operator | elastic-system | ECK → ES + Kibana + APM Server |
-| openbao | openbao | Secrets store (PVC-backed) |
+| openbao | openbao | Secrets store (in-memory dev mode; prod overlay uses PVC + manual unseal) |
 | external-secrets | external-secrets | OpenBao → K8s Secret bridge |
 | argo-workflows | argo | Workflow execution engine |
 | qdrant | qdrant | Vector memory backend |
 | otel-collector | observability | OTLP receive → ES/APM export |
 
-## OpenBao manual steps (after bootstrap-infra)
+## OpenBao (dev mode → automatic; prod → manual unseal)
 
-OpenBao uses manual unseal (no auto-unseal) for dev parity with prod:
+> **Dev divergence.** Local kind runs OpenBao in **dev mode**
+> (`server.dev.enabled: true` in
+> [values/openbao.yaml](values/openbao.yaml)) — auto-unsealed on every
+> restart with the well-known root token `root` and **in-memory**
+> storage. This is the demo-fast path documented in
+> [docs/plans/demo/README.md](../../docs/plans/demo/README.md) DD-2.
+> Tilt + `seed.sh` re-populate the kv-v2 paths every loop, so data loss
+> on restart is acceptable.
+>
+> **Production uses Shamir manual unseal (or cloud KMS auto-unseal) on
+> PVC-backed storage.** See
+> [values/openbao-prod.yaml.example](values/openbao-prod.yaml.example).
+> The prod overlay (TD-P2-09) wires the manual-init + unseal flow; the
+> seed script's `_enable_kv` step then runs once `BAO_TOKEN` is set.
+
+### Dev — nothing to do
 
 ```bash
-# Initialize and capture unseal keys + root token (first time only).
+# After `make bootstrap-infra` completes, OpenBao is auto-unsealed.
+# Tilt runs scripts/dev/seed-openbao.sh automatically. To reseed manually:
+export BAO_ADDR=http://localhost:8200
+export BAO_TOKEN=root
+scripts/dev/seed-openbao.sh
+```
+
+If `ANTHROPIC_API_KEY` is set in `.env.local`, the seed script writes
+the live key at `keese/tenants/tenant-a/anthropic`. Otherwise it writes
+empty placeholders that the operator fills later.
+
+### Prod — copy the example, init, unseal
+
+```bash
+# Copy the gitignored prod-values overlay into place.
+cp dev/bootstrap/values/openbao-prod.yaml.example \
+   dev/bootstrap/values/openbao-prod.yaml          # gitignored
+# Edit to point seal stanza at your KMS.
+
+# After install, init + capture unseal keys + root token (first time only).
 kubectl exec -n openbao openbao-0 -- bao operator init
 
-# Unseal (repeat 3× with different keys if using default 5-of-3 split).
-kubectl exec -n openbao openbao-0 -- bao operator unseal <key>
+# Shamir unseal — repeat with 3 of the 5 keys printed by `init`.
+kubectl exec -n openbao openbao-0 -- bao operator unseal <key-1>
+kubectl exec -n openbao openbao-0 -- bao operator unseal <key-2>
+kubectl exec -n openbao openbao-0 -- bao operator unseal <key-3>
 
-# Export token and run the seed script.
-export BAO_ADDR=http://localhost:8200
+# Export the captured root token and seed.
+export BAO_ADDR=http://openbao.openbao.svc.cluster.local:8200
 export BAO_TOKEN=<root-token>
 scripts/dev/seed-openbao.sh
 ```
+
+For HA prod, the prod-values example also documents `server.ha.enabled:
+true` with a 3-node Raft quorum and a `seal "awskms"` /
+`seal "gcpckms"` / `seal "azurekeyvault"` stanza so the cluster
+auto-unseals on rolling restart.
 
 ## OpenFGA seed (automated via Tilt)
 
