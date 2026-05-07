@@ -7,7 +7,7 @@ category: index
 depends: []
 related_skills: [doc-authoring]
 status: current
-last_verified: 2026-04-19
+last_verified: 2026-05-06
 ---
 
 # references/ — HOW (steady-state)
@@ -27,6 +27,8 @@ or specs (what), references tell you **how** to do a recurring operation.
 | Git worktree merging | [git-worktree-merging.md](git-worktree-merging.md) |
 | Model selection for subagents | [model-selection.md](model-selection.md) |
 | End-to-end kind smoke harness | [e2e-smoke.md](e2e-smoke.md) |
+| Rotate a running CSV to a CI-signed bundle | [csv-rotate-to-signed-bundle.md](csv-rotate-to-signed-bundle.md) |
+| Backup and DR (OpenBao, OpenFGA, NATS) | [backup-and-dr.md](backup-and-dr.md) |
 
 Add a reference when you find yourself explaining the same "how" twice. Update it when
 a vendor or tool changes.

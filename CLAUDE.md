@@ -70,6 +70,7 @@ Goal: keep this file small and stable so prompt caching stays warm across sessio
 | Edit an admission webhook | `.claude/rules/04-kubernetes.md` | owning spec | `controller-authoring` |
 | Author/update OLM bundle | `docs/references/olm-bundle-authoring.md` | `docs/designs/14a-olm-channels-upgrades.md` + `14b-olm-dependencies.md` | agent `olm-author` · `/validate-bundle` |
 | Bootstrap local kind + infra | `docs/references/tilt-local-loop.md` | `dev/bootstrap/README.md` | agent `infra-bootstrap` |
+| Backup / DR (OpenBao, OpenFGA, NATS) | `docs/references/backup-and-dr.md` | component runbooks in same dir | agent `infra-bootstrap` |
 | End-to-end smoke (kind) | `docs/references/e2e-smoke.md` | `scripts/dev/e2e-smoke.sh` | agent `test-engineer` |
 | Add/revise a guardrail binding | `docs/designs/06-guardrailbinding.md` | `docs/specs/authz.keese.ai-v1alpha1-guardrail.md` | agent `guardrail-author` |
 | Change OpenFGA auth model | `docs/designs/04a-openfga-authz-model.md` | `docs/specs/egress-authz-protocol.md` | agent `rebac-modeler` |
@@ -83,6 +84,7 @@ Goal: keep this file small and stable so prompt caching stays warm across sessio
 | Score a plan / design / spec | `docs/plans/rubric.md` | target doc | `plan-management` · agent `plan-scorer` |
 | Commit or push | `.claude/rules/01-conventions.md` | `docs/references/conventional-commits.md` | (hook-enforced) |
 | Write or run tests | `.claude/rules/06-testing.md` | test harness refs | agent `test-engineer` |
+| Toggle a keese capability via FeatureGate | `docs/designs/27-feature-gates-openfeature.md` | `docs/designs/27b-feature-gate-catalog.md` + `internal/featuregate/` | `controller-authoring` |
 
 ## Loading strategy
 

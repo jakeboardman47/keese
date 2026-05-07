@@ -79,7 +79,7 @@ last_verified: 2026-05-07
 | TD-P3-06 | OPA / Conftest Rego policies for OpenTofu cloud deployments. | audit 2026-04-25 | [docs/designs/21-opentofu-cloud-deployment.md](../../designs/21-opentofu-cloud-deployment.md) |
 | TD-P3-07 | Multi-tenant + cross-tenant smoke tests. Demo is single-tenant. | D5 §verification | [docs/specs/keese.ai-v1alpha1.md](../../specs/) |
 | TD-P3-08 | Chaos / network-partition / disk-full tests. None today. | D5 §verification | n/a |
-| TD-P3-09 | Backup + DR runbook for OpenBao + OpenFGA + NATS streams. | D4 out-of-scope | n/a |
+| ~~TD-P3-09~~ | ~~Backup + DR runbook for OpenBao + OpenFGA + NATS streams.~~ Closed 2026-05-07: four docs authored under `docs/references/`: index at [backup-and-dr.md](../../references/backup-and-dr.md) (summary matrix + guiding principles) plus component runbooks [backup-and-dr-openbao.md](../../references/backup-and-dr-openbao.md) (daily CSI VolumeSnapshot, 3-of-5 unseal, cloud KMS auto-unseal rotation runbook), [backup-and-dr-openfga.md](../../references/backup-and-dr-openfga.md) (`fga store export/import`, ConfigMap mirror update, smoke verification), [backup-and-dr-nats.md](../../references/backup-and-dr-nats.md) (`nats stream backup/restore`, per-stream cadence trade-offs, consumer sequence reset). Each file ≤ 200 lines. References README and CLAUDE.md task table updated. | D4 out-of-scope | [docs/references/backup-and-dr.md](../../references/backup-and-dr.md) |
 | TD-P3-10 | OPA Scorecard hardening past current state. | rule 02 supply chain | rule 02 |
 
 ## Tracking
