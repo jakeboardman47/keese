@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	recipeFinalizer  = "finalizers.recipe.operator.keese.ai/cache-cleanup"
+	recipeFinalizer  = "finalizers.recipe.keese.ai/cache-cleanup"
 	recipeFieldOwner = "keese-recipe-controller"
 
 	// requeueOnRecipeError is the requeue interval on transient errors.
@@ -33,13 +33,13 @@ const (
 
 // RecipeReconciler reconciles a Recipe object.
 //
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipes,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipes/status,verbs=update;patch
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipes/finalizers,verbs=update
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipesources,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipesources/status,verbs=update;patch
-// +kubebuilder:rbac:groups=guardrail.operator.keese.ai,resources=guardrailbindings,verbs=get;list;watch
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=recipes,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=recipes/status,verbs=update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=recipes/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=recipesources,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=recipesources/status,verbs=update;patch
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=guardrailbindings,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 type RecipeReconciler struct {
 	client.Client
@@ -253,7 +253,7 @@ func recipeRebacTuples(recipe *keesev1alpha1.Recipe) []RecipeRebacTuple {
 // SetupWithManager sets up the controller with the Manager.
 func (r *RecipeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Rebac == nil {
-		r.Rebac = &RecipeFakeRebacWriter{}
+		r.Rebac = RecipeNoopRebacWriter{}
 	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("recipe-controller")

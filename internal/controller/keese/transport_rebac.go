@@ -16,10 +16,10 @@ type TransportRebacTuple struct {
 	User string
 }
 
-// TransportRebacWriter is satisfied by the internal/rebac package once the OpenFGA SDK
-// is added to go.mod. Until then TransportFakeRebacWriter is used in tests.
-//
-// TODO(spec-followup): replace with internal/rebac.Writer once openfga-sdk is in go.mod.
+// TransportRebacWriter is satisfied by TransportOpenFGARebacWriter (real, production)
+// and by a test-only fake (see transport_rebac_fake_test.go). The real implementation is wired at startup
+// via cmd/main.go when OPENFGA_API_URL is set; otherwise TransportNoopRebacWriter
+// is used so the operator boots without a live OpenFGA instance.
 type TransportRebacWriter interface {
 	// Sync writes (or no-ops if already present) the given tuples to OpenFGA.
 	// Idempotent — calling Sync with the same tuples twice is safe.
@@ -30,34 +30,14 @@ type TransportRebacWriter interface {
 	Delete(ctx context.Context, tuples []TransportRebacTuple) error
 }
 
-// TransportFakeRebacWriter is a no-op TransportRebacWriter used in tests and as the default
-// when no real OpenFGA client is wired. It records calls for assertion.
-type TransportFakeRebacWriter struct {
-	Synced  []TransportRebacTuple
-	Deleted []TransportRebacTuple
-	// FailNext causes the next Sync call to return an error.
-	FailNext bool
-}
+// TransportNoopRebacWriter is a silent no-op TransportRebacWriter used when OpenFGA
+// is not configured (dev/local run without OPENFGA_API_URL). It does not record calls.
+type TransportNoopRebacWriter struct{}
 
-func (f *TransportFakeRebacWriter) Sync(_ context.Context, tuples []TransportRebacTuple) error {
-	if f.FailNext {
-		f.FailNext = false
-		return transportRebacError("fake rebac sync failure")
-	}
-	f.Synced = append(f.Synced, tuples...)
-	return nil
-}
+func (TransportNoopRebacWriter) Sync(_ context.Context, _ []TransportRebacTuple) error  { return nil }
+func (TransportNoopRebacWriter) Delete(_ context.Context, _ []TransportRebacTuple) error { return nil }
 
-func (f *TransportFakeRebacWriter) Delete(_ context.Context, tuples []TransportRebacTuple) error {
-	f.Deleted = append(f.Deleted, tuples...)
-	return nil
-}
-
-var _ TransportRebacWriter = &TransportFakeRebacWriter{}
-
-type transportRebacError string
-
-func (e transportRebacError) Error() string { return string(e) }
+var _ TransportRebacWriter = TransportNoopRebacWriter{}
 
 // transportOwnerTuple returns the transport.owner tuple for this transport.
 // transport:<namespace>/<name>#owner@workspace:<namespace>

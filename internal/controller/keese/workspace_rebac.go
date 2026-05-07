@@ -16,11 +16,10 @@ type WorkspaceRebacTuple struct {
 	User string
 }
 
-// WorkspaceRebacWriter is satisfied by the internal/rebac package once the OpenFGA SDK
-// is added to go.mod. Until then, the fake implementation (WorkspaceFakeRebacWriter) is
-// used in tests and the real wire-up is deferred.
-//
-// TODO(spec-followup): replace with internal/rebac.Writer once openfga-sdk is in go.mod.
+// WorkspaceRebacWriter is satisfied by WorkspaceOpenFGARebacWriter (real, production)
+// and by a test-only fake (see workspace_rebac_fake_test.go). The real implementation is wired at startup
+// via cmd/main.go when OPENFGA_API_URL is set; otherwise WorkspaceNoopRebacWriter
+// is used so the operator boots without a live OpenFGA instance.
 type WorkspaceRebacWriter interface {
 	// Sync writes (or no-ops if already present) the given tuples to OpenFGA.
 	// It is idempotent — calling Sync with the same tuples twice is safe.
@@ -31,24 +30,14 @@ type WorkspaceRebacWriter interface {
 	Delete(ctx context.Context, tuples []WorkspaceRebacTuple) error
 }
 
-// WorkspaceFakeRebacWriter is a no-op WorkspaceRebacWriter used in tests and as the default
-// when no real OpenFGA client is wired. It records calls for assertion.
-type WorkspaceFakeRebacWriter struct {
-	Synced  []WorkspaceRebacTuple
-	Deleted []WorkspaceRebacTuple
-}
+// WorkspaceNoopRebacWriter is a silent no-op WorkspaceRebacWriter used when OpenFGA
+// is not configured (dev/local run without OPENFGA_API_URL). It does not record calls.
+type WorkspaceNoopRebacWriter struct{}
 
-func (f *WorkspaceFakeRebacWriter) Sync(_ context.Context, tuples []WorkspaceRebacTuple) error {
-	f.Synced = append(f.Synced, tuples...)
-	return nil
-}
+func (WorkspaceNoopRebacWriter) Sync(_ context.Context, _ []WorkspaceRebacTuple) error  { return nil }
+func (WorkspaceNoopRebacWriter) Delete(_ context.Context, _ []WorkspaceRebacTuple) error { return nil }
 
-func (f *WorkspaceFakeRebacWriter) Delete(_ context.Context, tuples []WorkspaceRebacTuple) error {
-	f.Deleted = append(f.Deleted, tuples...)
-	return nil
-}
-
-var _ WorkspaceRebacWriter = &WorkspaceFakeRebacWriter{}
+var _ WorkspaceRebacWriter = WorkspaceNoopRebacWriter{}
 
 // sessionAttachedByTuple returns the OpenFGA tuple that records the attaching
 // identity for a WorkspaceSession:

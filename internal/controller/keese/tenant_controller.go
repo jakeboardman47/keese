@@ -28,10 +28,10 @@ import (
 const (
 	tenantFieldOwner = "keese-tenant-controller"
 
-	// Finalizer IDs — format: finalizers.<kind>.operator.keese.ai/<purpose> (rule 04.10).
-	tenantFinalizerWorkspaces = "finalizers.tenant.operator.keese.ai/workspaces"
-	tenantFinalizerNamespaces = "finalizers.tenant.operator.keese.ai/namespaces"
-	tenantFinalizerAgreements = "finalizers.tenant.operator.keese.ai/agreements"
+	// Finalizer IDs — format: finalizers.<kind>.keese.ai/<purpose> (rule 04.10).
+	tenantFinalizerWorkspaces = "finalizers.tenant.keese.ai/workspaces"
+	tenantFinalizerNamespaces = "finalizers.tenant.keese.ai/namespaces"
+	tenantFinalizerAgreements = "finalizers.tenant.keese.ai/agreements"
 
 	// managedByLabel marks resources owned by this controller.
 	tenantManagedByLabel      = "keese.ai/managed"
@@ -48,9 +48,9 @@ const (
 // SSA fieldOwner: keese-tenant-controller (rule 04.7)
 //
 // Finalizers managed:
-//   - finalizers.tenant.operator.keese.ai/workspaces
-//   - finalizers.tenant.operator.keese.ai/namespaces (Mode A only)
-//   - finalizers.tenant.operator.keese.ai/agreements
+//   - finalizers.tenant.keese.ai/workspaces
+//   - finalizers.tenant.keese.ai/namespaces (Mode A only)
+//   - finalizers.tenant.keese.ai/agreements
 type TenantReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
@@ -58,12 +58,12 @@ type TenantReconciler struct {
 	Rebac    TenantRebacWriter
 }
 
-// +kubebuilder:rbac:groups=tenancy.operator.keese.ai,resources=tenants,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=tenancy.operator.keese.ai,resources=tenants/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=tenancy.operator.keese.ai,resources=tenants/finalizers,verbs=update
-// +kubebuilder:rbac:groups=tenancy.operator.keese.ai,resources=crosstenanagreements,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=tenants,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=tenants/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=tenants/finalizers,verbs=update
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=crosstenantagreements,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile is the main reconciliation loop for Tenant.
@@ -431,7 +431,7 @@ func (r *TenantReconciler) setProgressing(tenant *keesev1alpha1.Tenant, reason, 
 // SetupWithManager sets up the controller with the Manager.
 func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Rebac == nil {
-		r.Rebac = &TenantFakeRebacWriter{}
+		r.Rebac = TenantNoopRebacWriter{}
 	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("tenant-controller")

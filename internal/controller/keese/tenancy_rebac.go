@@ -16,11 +16,10 @@ type TenantRebacTuple struct {
 	User string
 }
 
-// TenantRebacWriter is satisfied by the internal/rebac package once the OpenFGA SDK
-// is added to go.mod. Until then, TenantFakeRebacWriter is used in tests and the
-// real wire-up is deferred.
-//
-// TODO(spec-followup): replace with internal/rebac.Writer once openfga-sdk is in go.mod.
+// TenantRebacWriter is satisfied by TenantOpenFGARebacWriter (real, production)
+// and by a test-only fake (see tenancy_rebac_fake_test.go). The real implementation is wired at startup
+// via cmd/main.go when OPENFGA_API_URL is set; otherwise TenantNoopRebacWriter
+// is used so the operator boots without a live OpenFGA instance.
 type TenantRebacWriter interface {
 	// Sync writes (or no-ops if already present) the given tuples to OpenFGA.
 	// It is idempotent — calling Sync with the same tuples twice is safe.
@@ -31,24 +30,14 @@ type TenantRebacWriter interface {
 	Delete(ctx context.Context, tuples []TenantRebacTuple) error
 }
 
-// TenantFakeRebacWriter is a no-op TenantRebacWriter used in tests and as the default
-// when no real OpenFGA client is wired. It records calls for assertion.
-type TenantFakeRebacWriter struct {
-	Synced  []TenantRebacTuple
-	Deleted []TenantRebacTuple
-}
+// TenantNoopRebacWriter is a silent no-op TenantRebacWriter used when OpenFGA
+// is not configured (dev/local run without OPENFGA_API_URL). It does not record calls.
+type TenantNoopRebacWriter struct{}
 
-func (f *TenantFakeRebacWriter) Sync(_ context.Context, tuples []TenantRebacTuple) error {
-	f.Synced = append(f.Synced, tuples...)
-	return nil
-}
+func (TenantNoopRebacWriter) Sync(_ context.Context, _ []TenantRebacTuple) error  { return nil }
+func (TenantNoopRebacWriter) Delete(_ context.Context, _ []TenantRebacTuple) error { return nil }
 
-func (f *TenantFakeRebacWriter) Delete(_ context.Context, tuples []TenantRebacTuple) error {
-	f.Deleted = append(f.Deleted, tuples...)
-	return nil
-}
-
-var _ TenantRebacWriter = &TenantFakeRebacWriter{}
+var _ TenantRebacWriter = TenantNoopRebacWriter{}
 
 // tenantAdminTuples computes the admin tuples for a Tenant given its name and
 // admin subjects. One tuple per subject: tenant:<name>#admin@user:<subject>.

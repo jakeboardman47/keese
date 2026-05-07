@@ -26,8 +26,8 @@ const (
 	transportFieldOwner = "keese-transport-controller"
 
 	// transportFinalizer is the finalizer placed on transports that own a NATS stream
-	// (annotation-gated). Format: finalizers.<kind>.operator.keese.ai/<purpose> (rule 04.10).
-	transportFinalizer = "finalizers.transport.operator.keese.ai/cleanup"
+	// (annotation-gated). Format: finalizers.<kind>.keese.ai/<purpose> (rule 04.10).
+	transportFinalizer = "finalizers.transport.keese.ai/cleanup"
 
 	// autoCreateStreamAnnotation enables controller-owned NATS stream lifecycle.
 	autoCreateStreamAnnotation = "keese.ai/auto-create-stream"
@@ -39,7 +39,7 @@ const (
 // TransportReconciler reconciles a Transport object.
 //
 // SSA fieldOwner: keese-transport-controller (rule 04.7)
-// Finalizer: finalizers.transport.operator.keese.ai/cleanup (annotation-gated, rule 04.10)
+// Finalizer: finalizers.transport.keese.ai/cleanup (annotation-gated, rule 04.10)
 type TransportReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
@@ -50,9 +50,9 @@ type TransportReconciler struct {
 	CertManager CertManagerReader
 }
 
-// +kubebuilder:rbac:groups=transport.operator.keese.ai,resources=transports,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=transport.operator.keese.ai,resources=transports/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=transport.operator.keese.ai,resources=transports/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=transports,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=transports/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=transports/finalizers,verbs=update
 // +kubebuilder:rbac:groups=jetstream.nats.io,resources=streams;consumers,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=referencegrants,verbs=get;list;watch
 // +kubebuilder:rbac:groups=mcp.keese.ai,resources=mcproutes,verbs=get;list;watch
@@ -460,7 +460,7 @@ func (r *TransportReconciler) setCondition(conditions *[]metav1.Condition, c met
 // SetupWithManager registers the controller with the manager.
 func (r *TransportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Rebac == nil {
-		r.Rebac = &TransportFakeRebacWriter{}
+		r.Rebac = TransportNoopRebacWriter{}
 	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("transport-controller")

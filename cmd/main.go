@@ -288,7 +288,7 @@ func main() {
 	// safe defaults (Fake* / NoOp*) until the production implementations
 	// land. Each is tracked as a TD-P1 entry.
 	if workflowRebac == nil {
-		workflowRebac = &keesecontroller.WorkflowFakeRebacWriter{}
+		workflowRebac = keesecontroller.WorkflowNoopRebacWriter{}
 	}
 	wfNats := &keesecontroller.FakeNatsStreamProvisioner{}
 	wfNatsDel := &keesecontroller.FakeNatsStreamDeleter{}
@@ -379,6 +379,13 @@ func main() {
 		RateLimitProj: policycontroller.NewClientRateLimitProjector(mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TokenBudget")
+		os.Exit(1)
+	}
+	if err := (&policycontroller.FeatureGateReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "FeatureGate")
 		os.Exit(1)
 	}
 	if err := (&keesecontroller.TransportReconciler{

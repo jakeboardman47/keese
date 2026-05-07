@@ -20,7 +20,10 @@ type WorkflowOpenFGATuple struct {
 }
 
 // WorkflowRebacWriter syncs OpenFGA tuples for Workflow and WorkflowRun resources.
-// The real implementation calls the OpenFGA gRPC API; tests use WorkflowFakeRebacWriter.
+// The real implementation (WorkflowOpenFGARebacWriter) is wired at startup via
+// cmd/main.go when OPENFGA_API_URL is set. Tests inject a fake writer (see
+// workflow_rebac_fake_test.go). When OpenFGA is unconfigured, WorkflowNoopRebacWriter
+// is used as the fallback.
 type WorkflowRebacWriter interface {
 	// WriteWorkflowOwner writes (or idempotently updates) the owner tuple
 	// for a Workflow resource.
@@ -37,57 +40,21 @@ type WorkflowRebacWriter interface {
 	DeleteWorkflowRunTuples(ctx context.Context, wfr *keesev1alpha1.WorkflowRun) error
 }
 
-// WorkflowFakeRebacWriter is a test-only WorkflowRebacWriter that records calls.
-type WorkflowFakeRebacWriter struct {
-	// WrittenWorkflowTuples accumulates WriteWorkflowOwner calls.
-	WrittenWorkflowTuples []*keesev1alpha1.Workflow
-	// DeletedWorkflowTuples accumulates DeleteWorkflowTuples calls.
-	DeletedWorkflowTuples []*keesev1alpha1.Workflow
-	// WrittenWorkflowRunTuples accumulates WriteWorkflowRunOwner calls.
-	WrittenWorkflowRunTuples []*keesev1alpha1.WorkflowRun
-	// DeletedWorkflowRunTuples accumulates DeleteWorkflowRunTuples calls.
-	DeletedWorkflowRunTuples []*keesev1alpha1.WorkflowRun
-	// TupleCount is the count returned by Write* calls.
-	TupleCount int32
-	// Err is returned by all calls when non-nil.
-	Err error
-}
+// WorkflowNoopRebacWriter is a silent no-op WorkflowRebacWriter used when OpenFGA
+// is not configured (dev/local run without OPENFGA_API_URL). It does not record calls.
+type WorkflowNoopRebacWriter struct{}
 
-// WriteWorkflowOwner records the call and returns WorkflowFakeRebacWriter.TupleCount.
-func (f *WorkflowFakeRebacWriter) WriteWorkflowOwner(_ context.Context, wf *keesev1alpha1.Workflow) (int32, error) {
-	if f.Err != nil {
-		return 0, f.Err
-	}
-	f.WrittenWorkflowTuples = append(f.WrittenWorkflowTuples, wf)
-	return f.TupleCount, nil
+func (WorkflowNoopRebacWriter) WriteWorkflowOwner(_ context.Context, _ *keesev1alpha1.Workflow) (int32, error) {
+	return 0, nil
 }
-
-// DeleteWorkflowTuples records the call.
-func (f *WorkflowFakeRebacWriter) DeleteWorkflowTuples(_ context.Context, wf *keesev1alpha1.Workflow) error {
-	if f.Err != nil {
-		return f.Err
-	}
-	f.DeletedWorkflowTuples = append(f.DeletedWorkflowTuples, wf)
+func (WorkflowNoopRebacWriter) DeleteWorkflowTuples(_ context.Context, _ *keesev1alpha1.Workflow) error {
+	return nil
+}
+func (WorkflowNoopRebacWriter) WriteWorkflowRunOwner(_ context.Context, _ *keesev1alpha1.WorkflowRun) (int32, error) {
+	return 0, nil
+}
+func (WorkflowNoopRebacWriter) DeleteWorkflowRunTuples(_ context.Context, _ *keesev1alpha1.WorkflowRun) error {
 	return nil
 }
 
-// WriteWorkflowRunOwner records the call and returns WorkflowFakeRebacWriter.TupleCount.
-func (f *WorkflowFakeRebacWriter) WriteWorkflowRunOwner(_ context.Context, wfr *keesev1alpha1.WorkflowRun) (int32, error) {
-	if f.Err != nil {
-		return 0, f.Err
-	}
-	f.WrittenWorkflowRunTuples = append(f.WrittenWorkflowRunTuples, wfr)
-	return f.TupleCount, nil
-}
-
-// DeleteWorkflowRunTuples records the call.
-func (f *WorkflowFakeRebacWriter) DeleteWorkflowRunTuples(_ context.Context, wfr *keesev1alpha1.WorkflowRun) error {
-	if f.Err != nil {
-		return f.Err
-	}
-	f.DeletedWorkflowRunTuples = append(f.DeletedWorkflowRunTuples, wfr)
-	return nil
-}
-
-// Verify WorkflowFakeRebacWriter satisfies the interface at compile time.
-var _ WorkflowRebacWriter = (*WorkflowFakeRebacWriter)(nil)
+var _ WorkflowRebacWriter = WorkflowNoopRebacWriter{}

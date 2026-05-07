@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	workspaceFinalizer = "finalizers.workspace.operator.keese.ai/cleanup"
+	workspaceFinalizer = "finalizers.workspace.keese.ai/cleanup"
 	fieldOwner         = "keese-workspace-controller"
 
 	// defaultSessionStorage is the PVC size when spec.sessionStorage is unset.
@@ -54,9 +54,9 @@ type WorkspaceReconciler struct {
 	Rebac    WorkspaceRebacWriter
 }
 
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaces/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaces/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaces/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaces/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch;delete
@@ -320,14 +320,17 @@ func (r *WorkspaceReconciler) setProgressing(ws *keesev1alpha1.Workspace, reason
 // SetupWithManager sets up the controller with the Manager.
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Rebac == nil {
-		r.Rebac = &WorkspaceFakeRebacWriter{}
+		r.Rebac = WorkspaceNoopRebacWriter{}
 	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("workspace-controller")
 	}
-	// D1-T2 (2026-04-25): the keese.ai/managed=true predicate was removed so
-	// copy-paste samples reconcile out-of-the-box. Re-evaluation tracked in
-	// docs/plans/demo/tech-debt.md TD-P1-06.
+	// Predicate-free reconcile. Per
+	// docs/designs/26-workspace-managed-predicate-adr.md, the
+	// keese.ai/managed=true predicate is permanently dropped:
+	// every Workspace in the keese.ai API group is reconciled
+	// unconditionally. Suspended-state semantics, if needed
+	// later, go in spec — not in a label predicate.
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&keesev1alpha1.Workspace{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
@@ -577,6 +580,26 @@ func rebacTuplesFor(ws *keesev1alpha1.Workspace) []WorkspaceRebacTuple {
 			Relation: "viewer",
 			User:     "user:" + viewer,
 		})
+	}
+
+	// Per-tool egress allowlist tuples (D22 ToolBinding). One
+	// tuple per spec.egress.allowedTools[] entry. The keese-authz
+	// ext_authz Check resolves `tool:<name>#can_call@<subject>` =
+	// `tenant_member from allowed_in` — these tuples are the
+	// `allowed_in` half. Closes the orphan-tuple gap from
+	// TD-P1-01 (the `tool:` type was declared in the FGA model
+	// but no controller wrote its tuples).
+	if ws.Spec.Egress != nil {
+		for _, name := range ws.Spec.Egress.AllowedTools {
+			if name == "" {
+				continue
+			}
+			tuples = append(tuples, WorkspaceRebacTuple{
+				Object:   "tool:" + name,
+				Relation: "allowed_in",
+				User:     "workspace:" + ws.Name,
+			})
+		}
 	}
 
 	return tuples

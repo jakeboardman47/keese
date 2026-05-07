@@ -17,8 +17,10 @@ type MemoryTuple struct {
 	User     string
 }
 
-// MemoryRebacWriter abstracts OpenFGA tuple operations so tests can inject a fake.
-// The real implementation calls the OpenFGA HTTP/gRPC API.
+// MemoryRebacWriter abstracts OpenFGA tuple operations. The real implementation
+// (MemoryOpenFGARebacWriter) is wired at startup via cmd/main.go when OPENFGA_API_URL
+// is set. Tests inject a fake writer (see memory_rebac_fake_test.go) directly.
+// When OpenFGA is unconfigured, MemoryNoopRebacWriter is used as the fallback.
 type MemoryRebacWriter interface {
 	// Write writes (upserts) the given tuples.
 	Write(ctx context.Context, tuples []MemoryTuple) error
@@ -54,44 +56,11 @@ func MemoryWriterTuple(memoryID, workspaceName string) MemoryTuple {
 	}
 }
 
-// MemoryFakeRebacWriter is an in-memory MemoryRebacWriter for unit and integration tests.
-// It is not safe for concurrent use without external synchronisation.
-type MemoryFakeRebacWriter struct {
-	// Written accumulates all tuples passed to Write.
-	Written []MemoryTuple
+// MemoryNoopRebacWriter is a silent no-op MemoryRebacWriter used when OpenFGA
+// is not configured (dev/local run without OPENFGA_API_URL). It does not record calls.
+type MemoryNoopRebacWriter struct{}
 
-	// Deleted accumulates all tuples passed to Delete.
-	Deleted []MemoryTuple
+func (MemoryNoopRebacWriter) Write(_ context.Context, _ []MemoryTuple) error  { return nil }
+func (MemoryNoopRebacWriter) Delete(_ context.Context, _ []MemoryTuple) error { return nil }
 
-	// WriteErr, if non-nil, is returned by Write.
-	WriteErr error
-
-	// DeleteErr, if non-nil, is returned by Delete.
-	DeleteErr error
-}
-
-// Reset clears accumulated state and error overrides. Call in BeforeEach.
-func (f *MemoryFakeRebacWriter) Reset() {
-	f.Written = nil
-	f.Deleted = nil
-	f.WriteErr = nil
-	f.DeleteErr = nil
-}
-
-// Write implements MemoryRebacWriter.
-func (f *MemoryFakeRebacWriter) Write(_ context.Context, tuples []MemoryTuple) error {
-	if f.WriteErr != nil {
-		return f.WriteErr
-	}
-	f.Written = append(f.Written, tuples...)
-	return nil
-}
-
-// Delete implements MemoryRebacWriter.
-func (f *MemoryFakeRebacWriter) Delete(_ context.Context, tuples []MemoryTuple) error {
-	if f.DeleteErr != nil {
-		return f.DeleteErr
-	}
-	f.Deleted = append(f.Deleted, tuples...)
-	return nil
-}
+var _ MemoryRebacWriter = MemoryNoopRebacWriter{}

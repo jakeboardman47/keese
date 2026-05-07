@@ -16,10 +16,10 @@ type GuardrailRebacTuple struct {
 	User string
 }
 
-// GuardrailRebacWriter is satisfied by the internal/rebac package once the OpenFGA SDK
-// is added to go.mod. Until then, the GuardrailFakeRebacWriter is used in tests.
-//
-// TODO(spec-followup): replace with internal/rebac.Writer once openfga-sdk is in go.mod.
+// GuardrailRebacWriter is satisfied by GuardrailOpenFGARebacWriter (real, production)
+// and by a test-only fake (see guardrail_rebac_fake_test.go). The real implementation is wired at startup
+// via cmd/main.go when OPENFGA_API_URL is set; otherwise GuardrailNoopRebacWriter
+// is used so the operator boots without a live OpenFGA instance.
 type GuardrailRebacWriter interface {
 	// Sync writes (or no-ops if already present) the given tuples to OpenFGA.
 	// It is idempotent — calling Sync with the same tuples twice is safe.
@@ -30,30 +30,11 @@ type GuardrailRebacWriter interface {
 	Delete(ctx context.Context, tuples []GuardrailRebacTuple) error
 }
 
-// GuardrailFakeRebacWriter is a no-op GuardrailRebacWriter used in tests.
-type GuardrailFakeRebacWriter struct {
-	Synced  []GuardrailRebacTuple
-	Deleted []GuardrailRebacTuple
-	// SyncErr, if non-nil, is returned from every Sync call.
-	SyncErr error
-	// DeleteErr, if non-nil, is returned from every Delete call.
-	DeleteErr error
-}
+// GuardrailNoopRebacWriter is a silent no-op GuardrailRebacWriter used when OpenFGA
+// is not configured (dev/local run without OPENFGA_API_URL). It does not record calls.
+type GuardrailNoopRebacWriter struct{}
 
-func (f *GuardrailFakeRebacWriter) Sync(_ context.Context, tuples []GuardrailRebacTuple) error {
-	if f.SyncErr != nil {
-		return f.SyncErr
-	}
-	f.Synced = append(f.Synced, tuples...)
-	return nil
-}
+func (GuardrailNoopRebacWriter) Sync(_ context.Context, _ []GuardrailRebacTuple) error  { return nil }
+func (GuardrailNoopRebacWriter) Delete(_ context.Context, _ []GuardrailRebacTuple) error { return nil }
 
-func (f *GuardrailFakeRebacWriter) Delete(_ context.Context, tuples []GuardrailRebacTuple) error {
-	if f.DeleteErr != nil {
-		return f.DeleteErr
-	}
-	f.Deleted = append(f.Deleted, tuples...)
-	return nil
-}
-
-var _ GuardrailRebacWriter = &GuardrailFakeRebacWriter{}
+var _ GuardrailRebacWriter = GuardrailNoopRebacWriter{}

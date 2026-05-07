@@ -426,7 +426,7 @@ func (r *WorkspaceSessionReconciler) setSessionProgressing(
 //     PVC (recipeRef updates, manual delete during demo).
 func (r *WorkspaceSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Rebac == nil {
-		r.Rebac = &WorkspaceFakeRebacWriter{}
+		r.Rebac = WorkspaceNoopRebacWriter{}
 	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("workspacesession-controller")

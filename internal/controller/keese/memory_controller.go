@@ -23,15 +23,15 @@ import (
 )
 
 const (
-	memoryFinalizer  = "finalizers.memory.operator.keese.ai/cleanup"
+	memoryFinalizer  = "finalizers.memory.keese.ai/cleanup"
 	memoryFieldOwner = "keese-memory-controller"
 )
 
 // MemoryReconciler reconciles a Memory object.
 //
-// +kubebuilder:rbac:groups=memory.operator.keese.ai,resources=memories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=memory.operator.keese.ai,resources=memories/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=memory.operator.keese.ai,resources=memories/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=memories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=memories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=memories/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 type MemoryReconciler struct {
@@ -231,7 +231,7 @@ func (r *MemoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.Recorder = mgr.GetEventRecorderFor("memory-controller")
 	}
 	if r.Rebac == nil {
-		r.Rebac = &MemoryFakeRebacWriter{}
+		r.Rebac = MemoryNoopRebacWriter{}
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&keesev1alpha1.Memory{}).

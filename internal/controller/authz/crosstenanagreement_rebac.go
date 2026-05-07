@@ -17,6 +17,10 @@ type CTARebacTuple struct {
 }
 
 // CTARebacWriter manages OpenFGA tuples for CrossTenantAgreement resources.
+// The real implementation (CTAOpenFGARebacWriter) is wired at startup via
+// cmd/main.go when OPENFGA_API_URL is set. Tests inject a fake writer (see
+// crosstenanagreement_rebac_fake_test.go). When OpenFGA is unconfigured,
+// CTANoopRebacWriter is used as the fallback.
 type CTARebacWriter interface {
 	// Sync writes (or no-ops if already present) the given tuples to OpenFGA.
 	// It is idempotent — calling Sync with the same tuples twice is safe.
@@ -27,23 +31,14 @@ type CTARebacWriter interface {
 	Delete(ctx context.Context, tuples []CTARebacTuple) error
 }
 
-// CTAFakeRebacWriter is a no-op CTARebacWriter used in tests.
-type CTAFakeRebacWriter struct {
-	Synced  []CTARebacTuple
-	Deleted []CTARebacTuple
-}
+// CTANoopRebacWriter is a silent no-op CTARebacWriter used when OpenFGA
+// is not configured (dev/local run without OPENFGA_API_URL). It does not record calls.
+type CTANoopRebacWriter struct{}
 
-func (f *CTAFakeRebacWriter) Sync(_ context.Context, tuples []CTARebacTuple) error {
-	f.Synced = append(f.Synced, tuples...)
-	return nil
-}
+func (CTANoopRebacWriter) Sync(_ context.Context, _ []CTARebacTuple) error  { return nil }
+func (CTANoopRebacWriter) Delete(_ context.Context, _ []CTARebacTuple) error { return nil }
 
-func (f *CTAFakeRebacWriter) Delete(_ context.Context, tuples []CTARebacTuple) error {
-	f.Deleted = append(f.Deleted, tuples...)
-	return nil
-}
-
-var _ CTARebacWriter = &CTAFakeRebacWriter{}
+var _ CTARebacWriter = CTANoopRebacWriter{}
 
 // craAllowsMessagingTuple returns the top-level cross-tenant messaging tuple.
 // tenant:<to>#allows_messaging@tenant:<from>

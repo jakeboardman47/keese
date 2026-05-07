@@ -25,8 +25,8 @@ import (
 const (
 	craFieldOwner = "keese-crosstenanagreement-controller"
 
-	// Finalizer ID — format: finalizers.<kind>.operator.keese.ai/<purpose> (rule 04.10).
-	craFinalizerNATS = "finalizers.crosstenanagreement.operator.keese.ai/nats"
+	// Finalizer ID — format: finalizers.<kind>.keese.ai/<purpose> (rule 04.10).
+	craFinalizerNATS = "finalizers.crosstenanagreement.keese.ai/nats"
 
 	// craApproveAnnotation is checked on each reconcile to drive the approval flow.
 	// An admission webhook (stubbed) validates the annotator has can_approve_cra permission.
@@ -43,7 +43,7 @@ const (
 // SSA fieldOwner: keese-crosstenanagreement-controller (rule 04.7)
 //
 // Finalizers managed:
-//   - finalizers.crosstenanagreement.operator.keese.ai/nats
+//   - finalizers.crosstenanagreement.keese.ai/nats
 type CrossTenantAgreementReconciler struct {
 	client.Client
 	Scheme          *runtime.Scheme
@@ -54,11 +54,11 @@ type CrossTenantAgreementReconciler struct {
 	NatsDeleter     NatsStreamDeleter
 }
 
-// +kubebuilder:rbac:groups=tenancy.operator.keese.ai,resources=crosstenanagreements,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=tenancy.operator.keese.ai,resources=crosstenanagreements/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=tenancy.operator.keese.ai,resources=crosstenanagreements/finalizers,verbs=update
-// +kubebuilder:rbac:groups=tenancy.operator.keese.ai,resources=tenants,verbs=get;list;watch
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=crosstenantagreements,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=crosstenantagreements/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=crosstenantagreements/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=tenants,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile is the main reconciliation loop for CrossTenantAgreement.
@@ -508,7 +508,7 @@ func (r *CrossTenantAgreementReconciler) setCRACondition(conditions *[]metav1.Co
 // SetupWithManager sets up the controller with the Manager.
 func (r *CrossTenantAgreementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Rebac == nil {
-		r.Rebac = &CTAFakeRebacWriter{}
+		r.Rebac = CTANoopRebacWriter{}
 	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("crosstenanagreement-controller")

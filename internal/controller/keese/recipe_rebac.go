@@ -15,10 +15,10 @@ type RecipeRebacTuple struct {
 	User string
 }
 
-// RecipeRebacWriter is satisfied by the internal/rebac package.
-// Until the OpenFGA SDK is added to go.mod, RecipeFakeRebacWriter is used.
-//
-// TODO(spec-followup): replace with internal/rebac.Writer once openfga-sdk is in go.mod.
+// RecipeRebacWriter is satisfied by RecipeOpenFGARebacWriter (real, production)
+// and by a test-only fake (see recipe_rebac_fake_test.go). The real implementation is wired at startup
+// via cmd/main.go when OPENFGA_API_URL is set; otherwise RecipeNoopRebacWriter
+// is used so the operator boots without a live OpenFGA instance.
 type RecipeRebacWriter interface {
 	// Sync writes (or no-ops if already present) the given tuples to OpenFGA.
 	Sync(ctx context.Context, tuples []RecipeRebacTuple) error
@@ -26,20 +26,11 @@ type RecipeRebacWriter interface {
 	Delete(ctx context.Context, tuples []RecipeRebacTuple) error
 }
 
-// RecipeFakeRebacWriter is a no-op RecipeRebacWriter for tests and default wiring.
-type RecipeFakeRebacWriter struct {
-	Synced  []RecipeRebacTuple
-	Deleted []RecipeRebacTuple
-}
+// RecipeNoopRebacWriter is a silent no-op RecipeRebacWriter used when OpenFGA
+// is not configured (dev/local run without OPENFGA_API_URL). It does not record calls.
+type RecipeNoopRebacWriter struct{}
 
-func (f *RecipeFakeRebacWriter) Sync(_ context.Context, tuples []RecipeRebacTuple) error {
-	f.Synced = append(f.Synced, tuples...)
-	return nil
-}
+func (RecipeNoopRebacWriter) Sync(_ context.Context, _ []RecipeRebacTuple) error  { return nil }
+func (RecipeNoopRebacWriter) Delete(_ context.Context, _ []RecipeRebacTuple) error { return nil }
 
-func (f *RecipeFakeRebacWriter) Delete(_ context.Context, tuples []RecipeRebacTuple) error {
-	f.Deleted = append(f.Deleted, tuples...)
-	return nil
-}
-
-var _ RecipeRebacWriter = &RecipeFakeRebacWriter{}
+var _ RecipeRebacWriter = RecipeNoopRebacWriter{}

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	workspaceShareFinalizer = "finalizers.workspaceshare.operator.keese.ai/cleanup"
+	workspaceShareFinalizer = "finalizers.workspaceshare.keese.ai/cleanup"
 	shareFieldOwner         = "keese-workspaceshare-controller"
 
 	// TODO(spec-followup): ReferenceGrant projection requires gateway.networking.k8s.io CRD.
@@ -40,9 +40,9 @@ type WorkspaceShareReconciler struct {
 	Rebac    WorkspaceRebacWriter
 }
 
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaceshares,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaceshares/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaceshares/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaceshares,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaceshares/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaceshares/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile implements the main reconciliation loop for WorkspaceShare.
@@ -217,7 +217,7 @@ func rebacTuplesForShare(share *keesev1alpha1.WorkspaceShare, ws *keesev1alpha1.
 // SetupWithManager sets up the controller with the Manager.
 func (r *WorkspaceShareReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Rebac == nil {
-		r.Rebac = &WorkspaceFakeRebacWriter{}
+		r.Rebac = WorkspaceNoopRebacWriter{}
 	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("workspaceshare-controller")
