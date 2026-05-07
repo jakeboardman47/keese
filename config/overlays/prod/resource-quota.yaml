@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# ResourceQuota for keese-system in production.
+# Conservative limits for a single-tenant prod baseline; adjust for HA.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: keese-system-quota
+  namespace: keese-system
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: "2Gi"
+    limits.cpu: "4"
+    limits.memory: "4Gi"
+    pods: "20"
+    services: "10"
+    persistentvolumeclaims: "10"

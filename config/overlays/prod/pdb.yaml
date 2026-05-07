@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# PodDisruptionBudget for the keese operator in production.
+# minAvailable: 1 ensures at least one operator pod is running during
+# voluntary disruptions (node drains, cluster upgrades). With replicas: 1
+# this blocks eviction until the replacement pod is Ready.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: keese-controller-manager-pdb
+  namespace: keese-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      app.kubernetes.io/name: keese

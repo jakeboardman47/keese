@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Kustomize overlay for production deployments.
+# Images are pinned by digest (rule 05.12). Update digests on each release
+# after cosign verification: cosign verify --certificate-identity-regexp
+# 'https://github.com/keese-ai/keese/.github/workflows/.*'
+# --certificate-oidc-issuer https://token.actions.githubusercontent.com
+# <image>@<digest>
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../default
+  - resource-quota.yaml
+  - pdb.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+      keese.ai/env: prod
+    includeSelectors: false
+
+patches:
+  # Production hardening for the operator Deployment.
+  - target:
+      kind: Deployment
+      name: keese-controller-manager
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        # Pin by digest for rule 05.12 (images pinned by digest in prod overlays).
+        # UPDATE on each release after cosign verification:
+        #   cosign verify --certificate-identity-regexp
+        #     'https://github.com/keese-ai/keese/.github/workflows/.*'
+        #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+        #     ghcr.io/keese-ai/keese-operator@sha256:<digest>
+        # sha256:0000... is a placeholder until the first CI image publish.
+        value: "ghcr.io/keese-ai/keese-operator@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+      - op: replace
+        path: /spec/template/spec/terminationGracePeriodSeconds
+        value: 90
+      - op: add
+        path: /spec/template/spec/topologySpreadConstraints
+        value:
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels:
+                control-plane: controller-manager
+                app.kubernetes.io/name: keese
