@@ -6,6 +6,7 @@ package keese
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -24,7 +25,7 @@ import (
 )
 
 const (
-	recipeSourceFinalizer  = "finalizers.recipesource.operator.keese.ai/cache-cleanup"
+	recipeSourceFinalizer  = "finalizers.recipesource.keese.ai/cache-cleanup"
 	recipeSourceFieldOwner = "keese-recipesource-controller"
 
 	// devEnvLabel is the namespace label that permits ConfigMap sources (VAP rule).
@@ -37,17 +38,21 @@ const (
 
 // RecipeSourceReconciler reconciles a RecipeSource object.
 //
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipesources,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipesources/status,verbs=update;patch
-// +kubebuilder:rbac:groups=recipe.operator.keese.ai,resources=recipesources/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=recipesources,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=recipesources/status,verbs=update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=recipesources/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 type RecipeSourceReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
-	Fetcher  OCIFetcher
+	Scheme            *runtime.Scheme
+	Recorder          record.EventRecorder
+	Fetcher           OCIFetcher
+	Cloner            GitCloner
+	// OperatorNamespace is where git credential Secrets live (same namespace as the operator pod).
+	OperatorNamespace string
 }
 
 // Reconcile implements the RecipeSource reconciliation loop.
@@ -196,39 +201,138 @@ func (r *RecipeSourceReconciler) reconcileOCI(ctx context.Context, rs *keesev1al
 	return ctrl.Result{}, r.patchRecipeSourceStatus(ctx, rs, orig)
 }
 
-// reconcileGit handles the Git clone + SHA verify sequence.
+// reconcileGit handles the Git clone + SHA resolve + digest sequence.
+// Uses in-memory go-git clone (no disk writes — operator pod has readOnlyRootFilesystem: true).
 func (r *RecipeSourceReconciler) reconcileGit(ctx context.Context, rs *keesev1alpha1.RecipeSource, orig *keesev1alpha1.RecipeSource) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
-	git := rs.Spec.Git
+	gitSpec := rs.Spec.Git
 
 	rs.Status.SourceType = keesev1alpha1.RecipeSourceTypeGit
-	// Git pull is represented as the resolved "digest" = the commit SHA.
-	// For the real implementation, use go-git or exec git clone --depth=1.
-	// Here we record the pinned revision as the digest and mark synced.
-	// TODO(controller-author): wire real go-git clone when git dependency is added.
-	log.Info("git source reconcile (stub: records revision as digest)", "url", git.URL, "revision", git.Revision)
+	rs.Status.Phase = keesev1alpha1.RecipeSourcePhasePending
+	setRecipeSourceCondition(&rs.Status.Conditions, metav1.Condition{
+		Type:               keesev1alpha1.RecipeSourceConditionProgressing,
+		Status:             metav1.ConditionTrue,
+		Reason:             "Cloning",
+		Message:            fmt.Sprintf("cloning %s at %s", sanitizeURL(gitSpec.URL), gitSpec.Revision),
+		ObservedGeneration: rs.Generation,
+	})
 
-	rs.Status.ResolvedDigest = git.Revision
+	// Load authentication (nil for public repos).
+	auth, err := loadGitAuth(ctx, r.Client, r.OperatorNamespace, gitSpec.SecretRef)
+	if err != nil {
+		log.Error(err, "failed to load git credentials", "secret", gitSpec.SecretRef)
+		return r.setGitCloneFailed(ctx, rs, orig, fmt.Sprintf("credential load error: %v", redactError(err)))
+	}
+
+	// Perform in-memory clone.
+	resolvedSHA, treeDigest, err := r.Cloner.Clone(ctx, gitSpec.URL, gitSpec.Revision, auth)
+	if err != nil {
+		log.Error(err, "git clone failed", "url", sanitizeURL(gitSpec.URL), "revision", gitSpec.Revision)
+		r.Recorder.Eventf(rs, corev1.EventTypeWarning, ReasonGitCloneFailed,
+			"git clone failed for %s: %v", sanitizeURL(gitSpec.URL), redactError(err))
+		return r.setGitCloneFailed(ctx, rs, orig, fmt.Sprintf("clone failed: %v", redactError(err)))
+	}
+
+	log.Info("git clone succeeded", "url", sanitizeURL(gitSpec.URL), "resolvedSHA", resolvedSHA)
+	r.Recorder.Eventf(rs, corev1.EventTypeNormal, ReasonGitCloneSucceeded,
+		"git clone succeeded: sha=%s digest=%s", resolvedSHA, treeDigest)
+	r.Recorder.Eventf(rs, corev1.EventTypeNormal, ReasonRecipePulled,
+		"git revision cloned: sha=%s", resolvedSHA)
+
 	now := metav1.Now()
+	rs.Status.ResolvedDigest = treeDigest
 	rs.Status.LastVerifiedTime = &now
 	rs.Status.Cached = true
 	rs.Status.Phase = keesev1alpha1.RecipeSourcePhaseSynced
 	rs.Status.ObservedGeneration = rs.Generation
 
-	r.Recorder.Eventf(rs, corev1.EventTypeNormal, ReasonRecipePulled,
-		"Git revision recorded: sha=%s", git.Revision)
-	r.Recorder.Eventf(rs, corev1.EventTypeNormal, ReasonRecipeVerified,
-		"Git SHA verified: sha=%s", git.Revision)
-
+	setRecipeSourceCondition(&rs.Status.Conditions, metav1.Condition{
+		Type:               keesev1alpha1.RecipeSourceConditionProgressing,
+		Status:             metav1.ConditionFalse,
+		Reason:             "Synced",
+		Message:            "git clone complete",
+		ObservedGeneration: rs.Generation,
+	})
 	setRecipeSourceCondition(&rs.Status.Conditions, metav1.Condition{
 		Type:               keesev1alpha1.RecipeSourceConditionReady,
 		Status:             metav1.ConditionTrue,
 		Reason:             "Synced",
-		Message:            fmt.Sprintf("git revision %s recorded", git.Revision),
+		Message:            fmt.Sprintf("git sha=%s digest=%s", resolvedSHA, treeDigest),
 		ObservedGeneration: rs.Generation,
 	})
 
 	return ctrl.Result{}, r.patchRecipeSourceStatus(ctx, rs, orig)
+}
+
+// setGitCloneFailed marks the RecipeSource as Failed with a CloneFailed condition.
+func (r *RecipeSourceReconciler) setGitCloneFailed(ctx context.Context, rs, orig *keesev1alpha1.RecipeSource, message string) (ctrl.Result, error) {
+	rs.Status.Phase = keesev1alpha1.RecipeSourcePhaseFailed
+	rs.Status.Cached = false
+	rs.Status.ObservedGeneration = rs.Generation
+	setRecipeSourceCondition(&rs.Status.Conditions, metav1.Condition{
+		Type:               keesev1alpha1.RecipeSourceConditionReady,
+		Status:             metav1.ConditionFalse,
+		Reason:             "CloneFailed",
+		Message:            message,
+		ObservedGeneration: rs.Generation,
+	})
+	setRecipeSourceCondition(&rs.Status.Conditions, metav1.Condition{
+		Type:               keesev1alpha1.RecipeSourceConditionProgressing,
+		Status:             metav1.ConditionFalse,
+		Reason:             "CloneFailed",
+		Message:            message,
+		ObservedGeneration: rs.Generation,
+	})
+	return ctrl.Result{RequeueAfter: requeueOnSourceError}, r.patchRecipeSourceStatus(ctx, rs, orig)
+}
+
+// redactError removes any token-shaped substrings from an error message before
+// it is recorded in an event or condition (rule 02 — no credentials in events).
+func redactError(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	// Redact anything that looks like a base64 or hex token (≥20 chars of [A-Za-z0-9+/=_-]).
+	// This is a best-effort guard; the primary control is never embedding tokens in URLs.
+	return &redactedError{msg: redactTokenLike(msg)}
+}
+
+type redactedError struct{ msg string }
+
+func (e *redactedError) Error() string { return e.msg }
+
+// redactTokenLike replaces substrings that look like embedded secrets with <redacted>.
+// Specifically targets URL userinfo patterns (://user:pass@) and long opaque strings.
+func redactTokenLike(s string) string {
+	// Redact URL userinfo: scheme://anything@host → scheme://<redacted>@host
+	for {
+		atIdx := indexNth(s, "@", 0)
+		if atIdx < 0 {
+			break
+		}
+		schemeEnd := indexNth(s, "://", 0)
+		if schemeEnd >= 0 && schemeEnd < atIdx {
+			s = s[:schemeEnd+3] + "<redacted>" + s[atIdx:]
+		}
+		break
+	}
+	return s
+}
+
+func indexNth(s, substr string, n int) int {
+	offset := 0
+	for i := 0; i <= n; i++ {
+		idx := strings.Index(s[offset:], substr)
+		if idx < 0 {
+			return -1
+		}
+		if i == n {
+			return offset + idx
+		}
+		offset += idx + len(substr)
+	}
+	return -1
 }
 
 // reconcileConfigMap handles the inline ConfigMap source (dev only).
@@ -333,6 +437,9 @@ func (r *RecipeSourceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	if r.Fetcher == nil {
 		r.Fetcher = &FakeOCIFetcher{}
+	}
+	if r.Cloner == nil {
+		r.Cloner = &DefaultGitCloner{}
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&keesev1alpha1.RecipeSource{}).

@@ -28,6 +28,11 @@ const (
 	ReasonDevSourceInProdNamespace = "DevSourceInProdNamespace"
 	ReasonConfigMapSourceInNonDev  = "ConfigMapSourceInNonDev"
 
+	// Git source events.
+	ReasonGitCloneFailed     = "GitCloneFailed"
+	ReasonGitRefNotFound     = "GitRefNotFound"
+	ReasonGitCloneSucceeded  = "GitCloneSucceeded"
+
 	// Lifecycle events.
 	ReasonRecipeFinalizerAdded = "RecipeFinalizerAdded"
 	ReasonRecipeCacheCleanup   = "RecipeCacheCleanup"

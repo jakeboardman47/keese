@@ -6,6 +6,7 @@
 package keese
 
 import (
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -339,6 +340,163 @@ var _ = Describe("RecipeSource Controller", func() {
 				g.Expect(k8sClient.Get(ctx, nsn, &rs2)).To(Succeed())
 				g.Expect(rs2.Status.Phase).To(Equal(keesev1alpha1.RecipeSourcePhaseSynced))
 			}, timeout, interval).Should(Succeed())
+		})
+	})
+})
+
+	// Spec 6 (TD-P2-03): GitCloneSuccess — real go-git path populates revision + digest.
+	Context("Git source with public repo (fake cloner simulating success)", func() {
+		const rsName = "rs-git-success"
+		const rsNS = "default"
+		// VAP requires a 40-char hex SHA for Spec.Git.Revision.
+		const pinSHA = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+
+		BeforeEach(func() {
+			rs := &keesev1alpha1.RecipeSource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rsName,
+					Namespace: rsNS,
+					Labels:    map[string]string{"keese.ai/managed": "true"},
+				},
+				Spec: keesev1alpha1.RecipeSourceSpec{
+					Git: &keesev1alpha1.GitSource{
+						URL:      "https://github.com/keese-ai/recipes-public",
+						Revision: pinSHA,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, rs)).To(Succeed())
+		})
+
+		AfterEach(func() {
+			rs := &keesev1alpha1.RecipeSource{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: rsName, Namespace: rsNS}, rs)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, rs)).To(Succeed())
+			}
+		})
+
+		It("GitCloneSuccess: should populate resolvedDigest and phase=Synced on clone success", func() {
+			const wantSHA = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+			const wantDigest = "sha256:aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd"
+
+			reconciler := &RecipeSourceReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: noopRecorder{},
+				Fetcher:  &FakeOCIFetcher{},
+				Cloner: &FakeGitCloner{
+					ResolvedSHA: wantSHA,
+					TreeDigest:  wantDigest,
+				},
+			}
+
+			nsn := types.NamespacedName{Name: rsName, Namespace: rsNS}
+			req := reconcile.Request{NamespacedName: nsn}
+
+			// First reconcile: adds finalizer.
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: clone + digest.
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Third reconcile (idempotency).
+			_, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			var rs keesev1alpha1.RecipeSource
+			Expect(k8sClient.Get(ctx, nsn, &rs)).To(Succeed())
+			Expect(rs.Status.Phase).To(Equal(keesev1alpha1.RecipeSourcePhaseSynced))
+			Expect(rs.Status.Cached).To(BeTrue())
+			Expect(rs.Status.ResolvedDigest).To(Equal(wantDigest))
+			Expect(rs.Status.SourceType).To(Equal(keesev1alpha1.RecipeSourceTypeGit))
+			Expect(rs.Status.LastVerifiedTime).NotTo(BeNil())
+
+			// Ready condition must be True.
+			var readyCond *metav1.Condition
+			for i := range rs.Status.Conditions {
+				if rs.Status.Conditions[i].Type == keesev1alpha1.RecipeSourceConditionReady {
+					readyCond = &rs.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(readyCond.Reason).To(Equal("Synced"))
+		})
+	})
+
+	// Spec 7 (TD-P2-03): GitCloneBadRef — bad ref sets CloneFailed condition.
+	Context("Git source with a bad ref (fake cloner simulating clone failure)", func() {
+		const rsName = "rs-git-badref"
+		const rsNS = "default"
+		// A valid 40-char SHA syntactically, but the fake cloner will reject it.
+		const badSHA = "0000000000000000000000000000000000000000"
+
+		BeforeEach(func() {
+			rs := &keesev1alpha1.RecipeSource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rsName,
+					Namespace: rsNS,
+					Labels:    map[string]string{"keese.ai/managed": "true"},
+				},
+				Spec: keesev1alpha1.RecipeSourceSpec{
+					Git: &keesev1alpha1.GitSource{
+						URL:      "https://github.com/keese-ai/recipes-public",
+						Revision: badSHA,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, rs)).To(Succeed())
+		})
+
+		AfterEach(func() {
+			rs := &keesev1alpha1.RecipeSource{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Name: rsName, Namespace: rsNS}, rs)
+			if err == nil {
+				Expect(k8sClient.Delete(ctx, rs)).To(Succeed())
+			}
+		})
+
+		It("GitCloneBadRef: should set phase=Failed and CloneFailed condition on clone error", func() {
+			cloneErr := fmt.Errorf("reference not found")
+			reconciler := &RecipeSourceReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: noopRecorder{},
+				Fetcher:  &FakeOCIFetcher{},
+				Cloner:   &FakeGitCloner{CloneErr: cloneErr},
+			}
+
+			nsn := types.NamespacedName{Name: rsName, Namespace: rsNS}
+			req := reconcile.Request{NamespacedName: nsn}
+
+			// First reconcile: adds finalizer.
+			_, _ = reconciler.Reconcile(ctx, req)
+
+			// Second reconcile: clone fails.
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred()) // controller returns (RequeueAfter, nil) on clone fail
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+
+			var rs keesev1alpha1.RecipeSource
+			Expect(k8sClient.Get(ctx, nsn, &rs)).To(Succeed())
+			Expect(rs.Status.Phase).To(Equal(keesev1alpha1.RecipeSourcePhaseFailed))
+			Expect(rs.Status.Cached).To(BeFalse())
+
+			// CloneFailed condition must be present and False/Ready=False.
+			var readyCond *metav1.Condition
+			for i := range rs.Status.Conditions {
+				if rs.Status.Conditions[i].Type == keesev1alpha1.RecipeSourceConditionReady {
+					readyCond = &rs.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCond.Reason).To(Equal("CloneFailed"))
 		})
 	})
 })
