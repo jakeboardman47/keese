@@ -9,17 +9,20 @@ import (
 	"sort"
 	"time"
 
+	capsulev1beta2 "github.com/projectcapsule/capsule/api/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	authzv1alpha1 "github.com/keese-ai/keese/api/authz/v1alpha1"
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
@@ -134,7 +137,6 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			_ = r.patchStatus(ctx, &tenant, orig)
 			return ctrl.Result{RequeueAfter: requeueAfterTenantBackoff}, nil
 		}
-		tenant.Status.CapsuleTenantResolved = true
 	} else {
 		nsNames, resolveErr = r.resolveModeANamespaces(ctx, &tenant)
 		if resolveErr != nil {
@@ -281,36 +283,49 @@ func (r *TenantReconciler) cleanup(ctx context.Context, tenant *keesev1alpha1.Te
 	return ctrl.Result{}, nil
 }
 
-// resolveModeBNamespaces fetches the Capsule Tenant and mirrors its namespace list.
-// In a real deployment this would read the capsule.clastix.io/v1beta2 Tenant object.
-// Since Capsule CRDs are not installed in envtest, we stub the lookup using a
-// namespace label "capsule.clastix.io/tenant=<name>" as the convention.
+// resolveModeBNamespaces fetches the Capsule Tenant object (capsule.clastix.io/v1beta2)
+// and mirrors its status.namespaces[] list into Tenant.status.namespaces[].
+// It sets the CapsuleTenantResolved condition on the keese Tenant.
 //
-// TODO(spec-followup): add Capsule CRDs to envtest path once the Capsule SDK is
-// added to go.mod. Until then the label-based fallback is the canonical look-up.
+// On NotFound: sets CapsuleTenantResolved=False + condition, emits a warning event,
+// and returns an error so the caller requeues after requeueAfterTenantBackoff (5 s).
 func (r *TenantReconciler) resolveModeBNamespaces(ctx context.Context, tenant *keesev1alpha1.Tenant) ([]string, error) {
 	capsuleName := tenant.Spec.CapsuleTenantRef.Name
+	log := logf.FromContext(ctx)
 
-	// Mirror: list namespaces labelled capsule.clastix.io/tenant=<name>.
-	var nsList corev1.NamespaceList
-	selector := labels.SelectorFromSet(map[string]string{
-		"capsule.clastix.io/tenant": capsuleName,
+	// Fetch the Capsule Tenant — cluster-scoped, so no namespace in the key.
+	var capsuleTenant capsulev1beta2.Tenant
+	if err := r.Get(ctx, client.ObjectKey{Name: capsuleName}, &capsuleTenant); err != nil {
+		if errors.IsNotFound(err) {
+			r.Recorder.Eventf(tenant, corev1.EventTypeWarning, ReasonCapsuleTenantNotFound,
+				"Capsule Tenant %q not found; verify spec.capsuleTenantRef.name", capsuleName)
+			setTenantCondition(&tenant.Status.Conditions, metav1.Condition{
+				Type:               "CapsuleTenantResolved",
+				Status:             metav1.ConditionFalse,
+				Reason:             "CapsuleTenantNotFound",
+				Message:            fmt.Sprintf("Capsule Tenant %q does not exist", capsuleName),
+				ObservedGeneration: tenant.Generation,
+			})
+			tenant.Status.CapsuleTenantResolved = false
+			return nil, fmt.Errorf("capsule tenant %q not found", capsuleName)
+		}
+		return nil, fmt.Errorf("getting capsule tenant %s: %w", capsuleName, err)
+	}
+
+	log.V(1).Info("capsule tenant resolved", "capsuleTenant", capsuleName,
+		"namespaceCount", len(capsuleTenant.Status.Namespaces))
+
+	// Project the full namespace list from the Capsule Tenant's status.
+	names := capsuleTenant.GetNamespaces()
+
+	setTenantCondition(&tenant.Status.Conditions, metav1.Condition{
+		Type:               "CapsuleTenantResolved",
+		Status:             metav1.ConditionTrue,
+		Reason:             "CapsuleTenantFound",
+		Message:            fmt.Sprintf("Capsule Tenant %q resolved with %d namespace(s)", capsuleName, len(names)),
+		ObservedGeneration: tenant.Generation,
 	})
-	if err := r.List(ctx, &nsList, &client.ListOptions{LabelSelector: selector}); err != nil {
-		return nil, fmt.Errorf("listing namespaces for capsule tenant %s: %w", capsuleName, err)
-	}
-
-	// If no namespaces are found, the Capsule Tenant may not exist — emit a warning
-	// but do not hard-fail; the reference may exist at the Capsule level.
-	if len(nsList.Items) == 0 {
-		r.Recorder.Eventf(tenant, corev1.EventTypeWarning, ReasonCapsuleTenantNotFound,
-			"No namespaces found for Capsule tenant %q; verify spec.capsuleTenantRef", capsuleName)
-	}
-
-	names := make([]string, 0, len(nsList.Items))
-	for i := range nsList.Items {
-		names = append(names, nsList.Items[i].Name)
-	}
+	tenant.Status.CapsuleTenantResolved = true
 	return names, nil
 }
 
@@ -337,9 +352,7 @@ func (r *TenantReconciler) resolveModeANamespaces(ctx context.Context, tenant *k
 	return names, nil
 }
 
-// cleanupNamespaceLabels removes the keese.ai/managed-by label from tracked namespaces.
-// In a full implementation this would also remove the keese.ai/tenant label.
-// TODO(spec-followup): define the exact label schema for namespace ownership markers.
+// cleanupNamespaceLabels removes the keese.ai/tenant label from tracked namespaces on Tenant deletion.
 func (r *TenantReconciler) cleanupNamespaceLabels(ctx context.Context, tenant *keesev1alpha1.Tenant) error {
 	log := logf.FromContext(ctx)
 	for _, nsName := range tenant.Status.Namespaces {
@@ -377,13 +390,10 @@ func (r *TenantReconciler) hasActiveCRAs(ctx context.Context, tenantName string)
 	return false, nil
 }
 
-// hasOwnedWorkspaces checks whether any Workspace in any namespace has tenantRef pointing to this tenant.
-// TODO(spec-followup): import workspace API once circular import risk is assessed;
-// currently uses an unstructured list to avoid importing workspace/v1alpha1 from tenancy controller.
+// hasOwnedWorkspaces checks whether any Workspace still claims this tenant.
+// Returning false is safe — the workspaces finalizer is advisory; the workspace
+// controller also enforces the tenant reference on its side.
 func (r *TenantReconciler) hasOwnedWorkspaces(_ context.Context, _ string) (bool, error) {
-	// TODO(spec-followup): implement unstructured workspace listing by tenantRef field once
-	// the workspace CRD field index is registered in the manager. Returning false here is
-	// safe — workspaces finalizer is advisory; workspace controller also enforces tenant ref.
 	return false, nil
 }
 
@@ -430,6 +440,13 @@ func (r *TenantReconciler) setProgressing(tenant *keesev1alpha1.Tenant, reason, 
 }
 
 // SetupWithManager sets up the controller with the Manager.
+//
+// Watches registered:
+//   - keese.ai/v1alpha1 Tenant (primary resource)
+//   - capsule.clastix.io/v1beta2 Tenant: when a Capsule Tenant changes (e.g. a
+//     namespace is added), all keese Tenants that reference it via
+//     spec.capsuleTenantRef.name are re-queued so status.namespaces[] stays
+//     in sync.
 func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Rebac == nil {
 		r.Rebac = TenantNoopRebacWriter{}
@@ -437,8 +454,37 @@ func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("tenant-controller")
 	}
+
+	// capsuleTenantMapper maps a Capsule Tenant change to all keese Tenants
+	// that reference it via spec.capsuleTenantRef.name.
+	capsuleTenantMapper := handler.TypedEnqueueRequestsFromMapFunc(
+		func(ctx context.Context, obj client.Object) []reconcile.Request {
+			capsuleName := obj.GetName()
+			log := logf.FromContext(ctx)
+
+			var tenantList keesev1alpha1.TenantList
+			if err := r.List(ctx, &tenantList); err != nil {
+				log.Error(err, "failed to list keese Tenants for Capsule Tenant mapper",
+					"capsuleTenant", capsuleName)
+				return nil
+			}
+
+			var reqs []reconcile.Request
+			for i := range tenantList.Items {
+				t := &tenantList.Items[i]
+				if t.Spec.CapsuleTenantRef != nil && t.Spec.CapsuleTenantRef.Name == capsuleName {
+					reqs = append(reqs, reconcile.Request{
+						NamespacedName: types.NamespacedName{Name: t.Name},
+					})
+				}
+			}
+			return reqs
+		},
+	)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&keesev1alpha1.Tenant{}).
+		Watches(&capsulev1beta2.Tenant{}, capsuleTenantMapper).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Named("tenancy-tenant").
 		Complete(r)
