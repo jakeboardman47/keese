@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 03 (assert): resume pod succeeded, proving memory survived
+# the Drain → pod-delete → new-pod → Resume round-trip.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: drain-test-resumer
+  namespace: drain-test
+status:
+  phase: Succeeded

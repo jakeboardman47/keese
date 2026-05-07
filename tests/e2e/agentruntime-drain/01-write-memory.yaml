@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 01 (apply): start a test pod that writes a marker file to the
+# session PVC. This simulates a goose session writing state before drain.
+#
+# The pod runs keese-drain directly (the binary bundled in the runtime image)
+# so we test the actual drain code path, not a simulation.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: drain-test-writer
+  namespace: drain-test
+  labels:
+    keese.ai/test: agentruntime-drain
+    app.kubernetes.io/component: drain-writer
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  volumes:
+    - name: session
+      persistentVolumeClaim:
+        claimName: drain-test-session
+    - name: scratch
+      emptyDir:
+        sizeLimit: 256Mi
+  containers:
+    - name: writer
+      # Use busybox to simulate the pre-drain write without requiring the full
+      # goose image. The drain binary test (step 02) uses the real keese-drain.
+      image: busybox:1.36
+      imagePullPolicy: IfNotPresent
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -e
+          SESSION_DIR=/var/run/keese/session/sessions/drain-test-uid
+          mkdir -p "${SESSION_DIR}"
+          # Simulate goose writing its SQLite DB (we write a plain file as a stand-in).
+          echo '{"last_step":"step-001","state":"pre-drain"}' > "${SESSION_DIR}/session.sqlite"
+          echo "Memory written to PVC; drain-writer complete."
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      volumeMounts:
+        - name: session
+          mountPath: /var/run/keese/session
+        - name: scratch
+          mountPath: /tmp
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi

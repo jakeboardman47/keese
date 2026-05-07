@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 02 (assert): drain pod succeeded.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: drain-test-drainer
+  namespace: drain-test
+status:
+  phase: Succeeded

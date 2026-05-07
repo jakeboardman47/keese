@@ -41,4 +41,8 @@ const (
 	ReasonSessionPodProvisioned               = "SessionPodProvisioned"
 	ReasonSessionPodTornDown                  = "SessionPodTornDown"
 	ReasonSessionAttachedByTupleWritten       = "SessionAttachedByTupleWritten"
+
+	// WorkspaceSession drain and resume events (TD-P1-02).
+	ReasonSessionDrained = "SessionDrained"
+	ReasonSessionResumed = "SessionResumed"
 )

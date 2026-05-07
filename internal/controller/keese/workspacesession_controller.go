@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -16,8 +17,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -25,7 +28,7 @@ import (
 )
 
 const (
-	sessionFinalizer      = "finalizers.workspacesession.operator.keese.ai/cleanup"
+	sessionFinalizer      = "finalizers.workspacesession.keese.ai/cleanup"
 	sessionFieldOwner     = "keese-workspacesession-controller"
 	sessionRequeueBackoff = 5 * time.Second
 
@@ -41,7 +44,7 @@ const (
 // SSA fieldOwner: keese-workspacesession-controller (rule 04.7)
 //
 // Finalizers managed:
-//   - finalizers.workspacesession.operator.keese.ai/cleanup
+//   - finalizers.workspacesession.keese.ai/cleanup
 //     Steps: Draining → delete Pod → remove session-scoped OpenFGA tuples → remove finalizer.
 type WorkspaceSessionReconciler struct {
 	client.Client
@@ -50,10 +53,10 @@ type WorkspaceSessionReconciler struct {
 	Rebac    WorkspaceRebacWriter
 }
 
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspacesessions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspacesessions/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspacesessions/finalizers,verbs=update
-// +kubebuilder:rbac:groups=workspace.operator.keese.ai,resources=workspaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspacesessions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=workspacesessions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=workspacesessions/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
@@ -407,6 +410,20 @@ func (r *WorkspaceSessionReconciler) setSessionProgressing(
 }
 
 // SetupWithManager sets up the controller with the Manager.
+//
+// Watches:
+//   - WorkspaceSession (primary). Predicate fires on generation
+//     changes (spec edits) AND any annotation update whose key
+//     matches `keese.ai/poke*` so operators can force a reconcile
+//     without bumping the spec.
+//   - Pod (owned). When the per-user session pod is deleted out
+//     from under the controller (kubectl delete pod, node drain,
+//     OOM, cluster eviction) the parent WorkspaceSession requeues
+//     and recreates the pod. Without this, status drifts to
+//     Ready=True with no live pod and the only recovery is delete +
+//     reapply (the pain we hit repeatedly during TD-P1-02 verify).
+//   - PersistentVolumeClaim (owned). Same rationale for the session
+//     PVC (recipeRef updates, manual delete during demo).
 func (r *WorkspaceSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Rebac == nil {
 		r.Rebac = &WorkspaceFakeRebacWriter{}
@@ -415,10 +432,53 @@ func (r *WorkspaceSessionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.Recorder = mgr.GetEventRecorderFor("workspacesession-controller")
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&keesev1alpha1.WorkspaceSession{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		For(&keesev1alpha1.WorkspaceSession{},
+			builder.WithPredicates(predicate.Or(
+				predicate.GenerationChangedPredicate{},
+				newPokeAnnotationPredicate(),
+			))).
+		Owns(&corev1.Pod{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		Named("workspace-workspacesession").
 		Complete(r)
+}
+
+// newPokeAnnotationPredicate fires when any annotation whose key
+// starts with `keese.ai/poke` changes. Useful for forcing a
+// reconcile without bumping spec generation (e.g.,
+// `kubectl annotate workspacesession my-session keese.ai/poke=$(date +%s)`).
+func newPokeAnnotationPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectOld == nil || e.ObjectNew == nil {
+				return false
+			}
+			return pokeAnnotationDelta(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
+		},
+	}
+}
+
+func pokeAnnotationDelta(oldA, newA map[string]string) bool {
+	if len(oldA) == 0 && len(newA) == 0 {
+		return false
+	}
+	for k, v := range newA {
+		if !strings.HasPrefix(k, "keese.ai/poke") {
+			continue
+		}
+		if oldA[k] != v {
+			return true
+		}
+	}
+	for k := range oldA {
+		if !strings.HasPrefix(k, "keese.ai/poke") {
+			continue
+		}
+		if _, ok := newA[k]; !ok {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Resource builders ---
@@ -508,41 +568,7 @@ func buildSessionPodObject(
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},
 			},
-			Volumes: []corev1.Volume{
-				{
-					Name: "session",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: pvcName,
-						},
-					},
-				},
-				{
-					Name: "sa-token",
-					VolumeSource: corev1.VolumeSource{
-						Projected: &corev1.ProjectedVolumeSource{
-							Sources: []corev1.VolumeProjection{
-								{
-									ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
-										Audience:          fmt.Sprintf("keese-egress-%s", tenantName),
-										ExpirationSeconds: &saTokenExpiry,
-										Path:              "egress",
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					// Writable scratch — readOnlyRootFilesystem requires this for /tmp.
-					Name: "scratch",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{
-							SizeLimit: ptrQuantity("256Mi"),
-						},
-					},
-				},
-			},
+			Volumes: sessionPodVolumes(ws, pvcName, tenantName, saTokenExpiry),
 			Containers: []corev1.Container{
 				{
 					Name:            "agent",
@@ -560,46 +586,8 @@ func buildSessionPodObject(
 					// this with a real attach handshake.)
 					Command: []string{"/bin/sh", "-c"},
 					Args:    []string{"echo 'goose runtime ready; attach via kubectl exec'; exec sleep infinity"},
-					Env: []corev1.EnvVar{
-						{Name: "GOOSE_PROVIDER", Value: "anthropic"},
-						{Name: "GOOSE_MODEL", Value: "claude-opus-4-7"},
-						{
-							Name:  "ANTHROPIC_BASE_URL",
-							Value: "https://envoy-ai-gateway.keese-system.svc:443",
-						},
-						{
-							Name: "KEESE_SESSION_ID",
-							ValueFrom: &corev1.EnvVarSource{
-								FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
-							},
-						},
-						{Name: "KEESE_TENANT", Value: tenantName},
-						{Name: "KEESE_WORKSPACE", Value: ws.Name},
-						// HOME points to a writable subPath on the session PVC
-						// so goose can write ~/.local/state/goose/... without
-						// needing to disable readOnlyRootFilesystem.
-						{Name: "HOME", Value: "/var/run/keese/session/home"},
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "session",
-							MountPath: "/var/run/keese/session",
-						},
-						{
-							Name:      "session",
-							MountPath: "/var/run/keese/memory",
-							SubPath:   "memory",
-						},
-						{
-							Name:      "sa-token",
-							MountPath: "/var/run/keese/tokens",
-							ReadOnly:  true,
-						},
-						{
-							Name:      "scratch",
-							MountPath: "/tmp",
-						},
-					},
+					Env:          sessionPodEnv(ws, tenantName),
+					VolumeMounts: sessionPodVolumeMounts(ws),
 					SecurityContext: &corev1.SecurityContext{
 						RunAsNonRoot:             ptr(true),
 						ReadOnlyRootFilesystem:   ptr(true),
@@ -616,12 +604,22 @@ func buildSessionPodObject(
 							corev1.ResourceMemory: resource.MustParse("2Gi"),
 						},
 					},
-					// Best-effort drain on SIGTERM. The full Drain/Resume SPI
-					// (TD-P1-02) replaces this with a real checkpoint call.
+					// Drain hook: write the SQLite checkpoint and JSON marker file to
+					// the session PVC before kubelet deletes the pod (TD-P1-02).
+					// /usr/local/bin/keese-drain is the runtime-drain sidecar
+					// entrypoint bundled into the goose runtime image.
+					// Mirrors AgentRuntime.Drain: checkpoints WAL, writes
+					// /var/run/keese/session/sessions/<uid>/draining atomically.
+					// Budget: 25 s (terminationGracePeriodSeconds 60 − 30 s for
+					// goose SIGTERM drain − 5 s kubelet buffer).
 					Lifecycle: &corev1.Lifecycle{
 						PreStop: &corev1.LifecycleHandler{
 							Exec: &corev1.ExecAction{
-								Command: []string{"/bin/sh", "-c", "kill -TERM 1 && sleep 25"},
+								Command: []string{
+									"/usr/local/bin/keese-drain",
+									"--pvc-root=/var/run/keese/session",
+									"--timeout=25s",
+								},
 							},
 						},
 					},
@@ -635,6 +633,146 @@ func buildSessionPodObject(
 func ptrQuantity(s string) *resource.Quantity {
 	q := resource.MustParse(s)
 	return &q
+}
+
+// gatewayCAConfigMapName is the in-namespace ConfigMap that mirrors
+// the AI Gateway's serving CA cert. The dev/bootstrap/aigateway/
+// install (or a per-tenant infra-bootstrap step) is responsible for
+// keeping the mirror up to date. Without this volume the session
+// pod's TLS to the gateway fails with curl exit 77 (no trust root).
+const gatewayCAConfigMapName = "keese-aigateway-ca"
+
+// sessionPodVolumes builds the per-session pod's volume slice.
+// Always-on: session PVC, projected SA token, scratch /tmp.
+// Conditional: gateway-CA ConfigMap (mounted unconditionally —
+// keese-aigateway-ca should always exist where the AI Gateway is
+// deployed), recipe ConfigMap (only when Workspace.spec.recipeRef
+// is set; the goose runtime's `goose run --recipe` reads this).
+func sessionPodVolumes(
+	ws *keesev1alpha1.Workspace,
+	pvcName, tenantName string,
+	saTokenExpiry int64,
+) []corev1.Volume {
+	vols := []corev1.Volume{
+		{
+			Name: "session",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+				},
+			},
+		},
+		{
+			Name: "sa-token",
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{
+						{
+							ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+								Audience:          fmt.Sprintf("keese-egress-%s", tenantName),
+								ExpirationSeconds: &saTokenExpiry,
+								Path:              "egress",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			// Writable scratch — readOnlyRootFilesystem requires this for /tmp.
+			Name: "scratch",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					SizeLimit: ptrQuantity("256Mi"),
+				},
+			},
+		},
+		{
+			// Gateway CA bundle mirrored from keese-system into the
+			// workspace namespace so the agent's curl/Go-TLS stack
+			// trusts the gateway's serving cert without --insecure.
+			// `optional: true` so a missing CM doesn't block pod
+			// creation — agent will fall back to no-mount and emit
+			// a clear TLS error in logs.
+			Name: "gateway-ca",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: gatewayCAConfigMapName,
+					},
+					Optional: ptr(true),
+				},
+			},
+		},
+	}
+	if ws != nil && ws.Spec.RecipeRef != nil && ws.Spec.RecipeRef.Name != "" {
+		vols = append(vols, corev1.Volume{
+			Name: "recipe",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ws.Spec.RecipeRef.Name,
+					},
+				},
+			},
+		})
+	}
+	return vols
+}
+
+// sessionPodEnv builds the goose container's env slice. Always-on:
+// GOOSE_PROVIDER/MODEL, ANTHROPIC_BASE_URL/HOST (path-prefixed with
+// /anthropic so goose's hardcoded /v1/messages lands at the AI
+// Gateway's extProc Anthropic-schema entry), SSL_CERT_FILE pointing
+// at the mirrored gateway CA, KEESE_SESSION_ID/TENANT/WORKSPACE,
+// HOME on the writable session PVC subdir. Conditional:
+// KEESE_RECIPE_PATH when Workspace.spec.recipeRef is set.
+func sessionPodEnv(ws *keesev1alpha1.Workspace, tenantName string) []corev1.EnvVar {
+	env := []corev1.EnvVar{
+		{Name: "GOOSE_PROVIDER", Value: "anthropic"},
+		{Name: "GOOSE_MODEL", Value: "claude-opus-4-7"},
+		{Name: "ANTHROPIC_BASE_URL", Value: "https://envoy-ai-gateway.keese-system.svc:443/anthropic"},
+		{Name: "ANTHROPIC_HOST", Value: "https://envoy-ai-gateway.keese-system.svc:443/anthropic"},
+		{Name: "SSL_CERT_FILE", Value: "/var/run/keese/ca/ca.crt"},
+		{
+			Name: "KEESE_SESSION_ID",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
+			},
+		},
+		{Name: "KEESE_TENANT", Value: tenantName},
+		{Name: "KEESE_WORKSPACE", Value: ws.Name},
+		// HOME on the writable session PVC subdir so goose can
+		// write ~/.local/state/goose/... under readOnlyRootFilesystem.
+		{Name: "HOME", Value: "/var/run/keese/session/home"},
+	}
+	if ws.Spec.RecipeRef != nil && ws.Spec.RecipeRef.Name != "" {
+		env = append(env, corev1.EnvVar{
+			Name:  "KEESE_RECIPE_PATH",
+			Value: "/var/run/keese/recipes/recipe.yaml",
+		})
+	}
+	return env
+}
+
+// sessionPodVolumeMounts pairs with sessionPodVolumes — same gating
+// on the optional recipe mount.
+func sessionPodVolumeMounts(ws *keesev1alpha1.Workspace) []corev1.VolumeMount {
+	mounts := []corev1.VolumeMount{
+		{Name: "session", MountPath: "/var/run/keese/session"},
+		{Name: "session", MountPath: "/var/run/keese/memory", SubPath: "memory"},
+		{Name: "sa-token", MountPath: "/var/run/keese/tokens", ReadOnly: true},
+		{Name: "scratch", MountPath: "/tmp"},
+		{Name: "gateway-ca", MountPath: "/var/run/keese/ca", ReadOnly: true},
+	}
+	if ws != nil && ws.Spec.RecipeRef != nil && ws.Spec.RecipeRef.Name != "" {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      "recipe",
+			MountPath: "/var/run/keese/recipes",
+			ReadOnly:  true,
+		})
+	}
+	return mounts
 }
 
 // ptr returns a pointer to the given value (generic helper).

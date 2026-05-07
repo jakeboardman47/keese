@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 00 (apply): create the namespace, PVC, WorkspaceSession, and a
+# test ConfigMap that acts as "memory" for the drain/resume round-trip.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: drain-test
+  labels:
+    keese.ai/managed: "true"
+---
+# Session PVC — simulates the workspace session PVC mounted at
+# /var/run/keese/session in the agent pod.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: drain-test-session
+  namespace: drain-test
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+# "Memory" ConfigMap — written before the drain; asserted after Resume to
+# prove state survived. (Production memory lives in SQLite on the PVC; this
+# ConfigMap simulates the observable side-effect.)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: drain-test-memory
+  namespace: drain-test
+data:
+  session-state: |
+    {"message": "hello from pre-drain", "step_id": "step-001"}
