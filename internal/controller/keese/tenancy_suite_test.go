@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	capsulev1beta2 "github.com/projectcapsule/capsule/api/v1beta2"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -56,9 +57,14 @@ func TestControllers(t *testing.T) {
 // per-package isolated. See rule 04-kubernetes.md §16 and the CRD-install
 // timeout root-cause documented in this file's package comment.
 var tenancyCRDs = []string{
-	"tenancy.operator.keese.ai_tenants.yaml",
-	"tenancy.operator.keese.ai_crosstenantagreements.yaml",
+	"keese.ai_tenants.yaml",
+	"keese.ai_crosstenantagreements.yaml",
 }
+
+// capsuleCRDPath is the path to the vendored Capsule Tenant CRD used by
+// Mode B envtest cases. It is kept in hack/testdata/capsule/ so it is
+// portable (not a reference into the read-only module cache).
+var capsuleCRDPath = filepath.Join("..", "..", "..", "hack", "testdata", "capsule")
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
@@ -68,12 +74,17 @@ var _ = BeforeSuite(func() {
 	var err error
 	err = keesev1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
+	// capsulev1beta2 is needed so the controller's r.Get of a Capsule Tenant resolves.
+	err = capsulev1beta2.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
 
 	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
 	crdPaths := make([]string, 0, len(tenancyCRDs))
 	for _, f := range tenancyCRDs {
 		crdPaths = append(crdPaths, filepath.Join(crdBasePath, f))
 	}
+	// Also load the Capsule Tenant CRD for Mode B tests.
+	crdPaths = append(crdPaths, capsuleCRDPath)
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{

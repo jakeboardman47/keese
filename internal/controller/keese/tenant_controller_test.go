@@ -12,6 +12,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	capsulev1beta2 "github.com/projectcapsule/capsule/api/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -199,6 +200,110 @@ var _ = Describe("TenantReconciler", func() {
 			var fresh keesev1alpha1.Tenant
 			Expect(k8sClient.Get(ctx, nsn(tenant.Name), &fresh)).To(Succeed())
 			Expect(fresh.Status.Namespaces).To(ContainElement(ns.Name))
+		})
+	})
+
+	// --- TD-P2-06: real Capsule Tenant lookup ---
+
+	// Case 1: Capsule Tenant exists → status.namespaces populated + CapsuleTenantResolved=True.
+	Describe("Mode B: Capsule Tenant exists — namespaces mirrored", func() {
+		It("populates status.namespaces from Capsule Tenant.status.namespaces and sets CapsuleTenantResolved=True", func() {
+			// Create a Capsule Tenant with two namespaces pre-populated in status.
+			capTenant := &capsulev1beta2.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: fmt.Sprintf("acme-cap-%d", GinkgoRandomSeed()),
+				},
+				Spec: capsulev1beta2.TenantSpec{
+					Owners: capsulev1beta2.OwnerListSpec{
+						{
+							Name: "alice",
+							Kind: "User",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, capTenant)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, capTenant) })
+
+			// Patch the Capsule Tenant status to report two namespaces.
+			ns1 := fmt.Sprintf("ns-acme-a-%d", GinkgoRandomSeed())
+			ns2 := fmt.Sprintf("ns-acme-b-%d", GinkgoRandomSeed())
+			origCap := capTenant.DeepCopy()
+			capTenant.Status.Namespaces = []string{ns1, ns2}
+			Expect(k8sClient.Status().Patch(ctx, capTenant, client.MergeFrom(origCap))).To(Succeed())
+
+			// Create the keese Tenant referencing the Capsule Tenant.
+			tenant := makeTenant(fmt.Sprintf("tenant-cap-found-%d", GinkgoRandomSeed()))
+			tenant.Spec.CapsuleTenantRef = &keesev1alpha1.CapsuleTenantRef{Name: capTenant.Name}
+			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
+			DeferCleanup(func() { _ = forceDeleteTenant(tenant.Name) })
+
+			r := makeTenantReconciler(nil)
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn(tenant.Name)})
+			Expect(err).NotTo(HaveOccurred())
+
+			var fresh keesev1alpha1.Tenant
+			Expect(k8sClient.Get(ctx, nsn(tenant.Name), &fresh)).To(Succeed())
+
+			// status.namespaces must mirror the Capsule Tenant's namespace list.
+			Expect(fresh.Status.Namespaces).To(ConsistOf(ns1, ns2))
+
+			// status.capsuleTenantResolved must be true.
+			Expect(fresh.Status.CapsuleTenantResolved).To(BeTrue())
+
+			// CapsuleTenantResolved condition must be True.
+			var resolvedCond *metav1.Condition
+			for i := range fresh.Status.Conditions {
+				if fresh.Status.Conditions[i].Type == "CapsuleTenantResolved" {
+					resolvedCond = &fresh.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(resolvedCond).NotTo(BeNil(), "CapsuleTenantResolved condition must be present")
+			Expect(resolvedCond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(resolvedCond.Reason).To(Equal("CapsuleTenantFound"))
+		})
+	})
+
+	// Case 2: Capsule Tenant NotFound → CapsuleTenantResolved=False + requeue.
+	Describe("Mode B: Capsule Tenant NotFound — condition False + requeue", func() {
+		It("sets CapsuleTenantResolved=False and emits CapsuleTenantNotFound warning when Capsule Tenant is absent", func() {
+			tenant := makeTenant(fmt.Sprintf("tenant-cap-missing-%d", GinkgoRandomSeed()))
+			tenant.Spec.CapsuleTenantRef = &keesev1alpha1.CapsuleTenantRef{
+				Name: fmt.Sprintf("does-not-exist-%d", GinkgoRandomSeed()),
+			}
+			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
+			DeferCleanup(func() { _ = forceDeleteTenant(tenant.Name) })
+
+			recorder := &capturingRecorder{}
+			r := makeTenantReconciler(nil)
+			r.Recorder = recorder
+
+			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn(tenant.Name)})
+			// No error returned to the queue — caller uses RequeueAfter.
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(requeueAfterTenantBackoff))
+
+			// Warning event must be emitted.
+			Expect(recorder.hasReason(ReasonCapsuleTenantNotFound)).To(BeTrue(),
+				"expected CapsuleTenantNotFound warning event")
+
+			// status.capsuleTenantResolved must be false.
+			var fresh keesev1alpha1.Tenant
+			Expect(k8sClient.Get(ctx, nsn(tenant.Name), &fresh)).To(Succeed())
+			Expect(fresh.Status.CapsuleTenantResolved).To(BeFalse())
+
+			// CapsuleTenantResolved condition must be False.
+			var resolvedCond *metav1.Condition
+			for i := range fresh.Status.Conditions {
+				if fresh.Status.Conditions[i].Type == "CapsuleTenantResolved" {
+					resolvedCond = &fresh.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(resolvedCond).NotTo(BeNil(), "CapsuleTenantResolved condition must be present")
+			Expect(resolvedCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(resolvedCond.Reason).To(Equal("CapsuleTenantNotFound"))
 		})
 	})
 

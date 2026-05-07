@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	argov1alpha1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	capsulev1beta2 "github.com/projectcapsule/capsule/api/v1beta2"
 	envoyaigatewayv1alpha1 "github.com/envoyproxy/ai-gateway/api/v1alpha1"
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
@@ -77,6 +78,8 @@ func init() {
 
 	// External operator API schemes.
 	utilruntime.Must(argov1alpha1.AddToScheme(scheme))
+	// capsulev1beta2: required for Mode B Tenant namespace aggregation (TD-P2-06).
+	utilruntime.Must(capsulev1beta2.AddToScheme(scheme))
 	utilruntime.Must(eventingv1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1beta1.AddToScheme(scheme))
