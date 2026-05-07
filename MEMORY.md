@@ -12,6 +12,91 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-05-06 — Wave-0/Wave-1 partial: D5 retarget, infra hardening, AgentRuntime SPI
+
+- **D5 retargeted to local kind T1+T2 only.** Cloud deploy (D4) deferred. New [scripts/dev/d5-anthropic-smoke.sh](scripts/dev/d5-anthropic-smoke.sh) runs the Anthropic round-trip + memory-persistence checks; `make d5-smoke` wraps it. T2 carries soft-fail semantics (exit 2) until full Drain/Resume SPI lands per TD-P1-02 (now closed).
+- **OpenBao dev-mode divergence documented.** `dev/bootstrap/values/openbao.yaml` runs in dev mode (`server.dev.enabled: true`, in-memory, root-token); the bootstrap README previously claimed "manual unseal for dev parity with prod" but that was aspirational. Replaced with the actual divergence + a clear pointer at `values/openbao-prod.yaml.example` for the prod template (Shamir or KMS auto-unseal on PVC-backed storage).
+- **Closed: TD-P1-02 (AgentRuntime SPI Bootstrap/Drain/Resume), TD-P1-08 (helmfile chart pinning), TD-P2-09 (config/overlays/prod), TD-P2-17 (90s grace + probe alignment).** New SPI surface lives at [internal/runtime/spi/v1alpha1/](internal/runtime/spi/v1alpha1/) with goose provider at [internal/runtime/providers/goose/](internal/runtime/providers/goose/) and the new `keese-drain` preStop sidecar at [cmd/keese-drain/main.go](cmd/keese-drain/main.go). 9-file kuttl suite at [tests/e2e/agentruntime-drain/](tests/e2e/agentruntime-drain/).
+- **Pre-commit blockers fixed:** [scripts/check-signal-handling.sh](scripts/check-signal-handling.sh) regex was choking on `signal.NotifyContext(context.Background(), syscall.SIGTERM, ...)` because `[^)]*` stops at the first `)` of `Background()` and the same regex couldn't see SIGTERM if the call spanned two lines. Replaced with two-grep pass requiring `signal.Notify(Context)?` AND `syscall.SIGTERM` in the same file. Also added 6 `+keese:rebac-tuple` markers that were missing on `api/{keese,authz}/v1alpha1/` after the group-rename commit `ce2436e`.
+- **Still open from Wave 1: TD-P1-01 (real OpenFGA SDK across packages).** First dispatch attempt produced a worktree from stale base (see Gotchas) and was abandoned without merge. Re-dispatch needed.
+
+### 2026-05-06 — Feature gates (D27 OpenFeature) + cosign webhook retrofit
+
+- New design [27-feature-gates-openfeature.md](docs/designs/27-feature-gates-openfeature.md) (rubric 100/100, iter 2): every keese capability ships behind a `policy.keese.ai/v1alpha1.FeatureGate` cluster-scoped CR. The operator's `FeatureGateController` projects effective values into ConfigMap `keese-system/keese-features`; every binary mounts that CM (projected volume + fsnotify) and reads via `internal/featuregate.Enabled(ctx, gate)`. OpenFeature Go SDK is the public API surface; in-process provider over `atomic.Value[map[string]bool]` is the impl.
+- **Why CRD → CM not CRD-direct**: pods already mount ConfigMaps, projected volumes survive apiserver outages, one CM means one watch per binary. CRD owns schema + audit; CM is the boring delivery vehicle.
+- **Stage rules cribbed from k8s**: alpha=off, beta=on, ga=code unconditional + CR set to deprecated for one minor, deprecated=frozen + Warning event on read.
+- **Cosign as first consumer (TD-P1-04 retrofit)**: two gates land — `cosign.installplan.verify` (alpha, override:true in prod) wraps the whole `Handle` short-circuit, and `cosign.installplan.failClosed` (alpha, default-off) downgrades verify failures to Allowed+Warning+`Event(BundleUnsignedAdmittedDryRun)` for staged rollouts.
+- **Tamper resistance**: kyverno `ClusterPolicy` denies CM writes from any SA other than `keese-controller-manager`. Cosign-signed operator image (rule 05.12 + TD-P1-04) is the trust root — only the signed controller's SA can write the projection.
+
+### 2026-05-06 — Five more P1 items closed (P1-06, P1-07, P1-09, P1-10, P1-11) + post-rename regression fixed
+
+- **TD-P1-06** (Workspace predicate ADR): [docs/designs/26-workspace-managed-predicate-adr.md](docs/designs/26-workspace-managed-predicate-adr.md) commits to predicate-free reconcile permanently. Reasoning: keese owns its API groups (no shadow consumer), label-stamping is a footgun, RBAC + break-glass already cover the legitimate escape hatches.
+- **TD-P1-07** (kuttl progression case): [tests/e2e/workspace-progression/](tests/e2e/workspace-progression/) asserts `Tenant=Active`, `Workspace=Ready`, `WorkspaceSession=Active` via `kubectl wait` (NOT native kuttl resource matching — its slice matcher is exact-length, too strict for status conditions). `kuttl` added to flake.nix (nixpkgs attr `kuttl`; binary `kubectl-kuttl`). Both kuttl tests (`workspace-progression` + `aigw-defense`) pass in 18.5s.
+- **TD-P1-09** (sqlite invariant): `keese.ai-v1alpha1-memory.md` documents the single-pod-per-Memory invariant — three controller-side enforcements (RWO PVC, per-Memory UID-named PVC, single session pod per workspace+subject) + production guidance to switch to network-attached providers for multi-replica. VAP `SqliteSingleConsumer` for admission-time enforcement deferred to TD-P2-08.
+- **TD-P1-10** (chart CRD pre-apply): [dev/bootstrap/install-crds.sh](dev/bootstrap/install-crds.sh) pulls each chart's `crds/*.yaml` and SSA-applies before helmfile sync. Wired into `make bootstrap-infra`. Currently lists `envoyproxy/gateway-helm` (the chart that bit us twice — v1.4→v1.6 BackendTLSPolicy GA promotion, v1.6→v1.7 churn).
+- **TD-P1-11** (WorkspaceSession watches): [internal/controller/keese/workspacesession_controller.go](internal/controller/keese/workspacesession_controller.go) `SetupWithManager` now does `Owns(&corev1.Pod{})` + `Owns(&corev1.PersistentVolumeClaim{})` and a poke-friendly predicate. Annotations matching `keese.ai/poke*` trigger reconcile without bumping spec generation. Pod deletion / PVC deletion now requeues the parent (was the "delete pod, watch status drift to Ready=True forever" pain).
+- **TD-P1-07-followon** (rename regression): the group-rename agent merge dropped the gateway-CA + recipe ConfigMap mounts on the session pod. Restored via extracted `sessionPodVolumes` / `sessionPodVolumeMounts` / `sessionPodEnv` helpers. Env now includes `SSL_CERT_FILE`, path-prefixed `ANTHROPIC_BASE_URL`/`ANTHROPIC_HOST`, optional `KEESE_RECIPE_PATH`.
+- **aigw-defense test reframed**: pre-TD-P1-03 the test asserted that garbage Bearer tokens get stripped+replaced; that contract is gone now that ext_authz treats `Authorization: Bearer <SA-token>` as the identity claim. New test surface: `no-auth → 403`, `garbage Bearer → 403`, `valid SA token + hostile x-api-key → 200` (Lua strips the vendor header before BSP injection), `valid SA token + hostile anthropic-api-key → 200`, `valid SA token + both vendor headers → 200`. 5 cases, all pass.
+- **Eight P1 items closed across the two sessions**: P1-01 (OpenFGA SDK), P1-02 (AgentRuntime SPI), P1-03 (ext_authz), P1-06, P1-07, P1-09, P1-10, P1-11. Two remain (P1-04 cosign webhook, P1-05 signed bundle) — both heavy CI/release-pipeline work that needs GitHub Actions OIDC + OLM on the demo cluster to fully verify.
+
+### 2026-05-06 — TD-P1-03 closed: keese-authz Envoy ext_authz wired against OpenFGA
+
+- New service [cmd/keese-authz/](cmd/keese-authz/main.go) implements
+  `envoy.service.auth.v3.Authorization` on `:9001`. Per request:
+  match against in-memory trie → extract subject from SA-token JWT
+  → `OpenFGA.Check(user, can_call, tool:<name>)` → ALLOW + injected
+  `x-keese-tool` / `x-keese-workspace` headers, or DENY with audit
+  log line.
+- Trie compilation lives in [internal/authz/extauth/](internal/authz/extauth/):
+  `resolver.go` (atomic.Value snapshot, cluster-first then
+  namespace-scoped), `match.go` (Gateway API HTTPRouteMatch subset
+  + restricted JSONPath body discriminator), `subject.go` (SA-token
+  sub-claim parse OR named JWTClaim), `check.go` (Authorize
+  orchestration), `audit.go` (strict-allowlist redacted log).
+- Two new CRDs in `authz.keese.ai/v1alpha1`: `ToolBinding`
+  (cluster, platform-admin catalogue) + `WorkspaceTool` (namespaced,
+  tenant-admin per-workspace tools). See
+  [docs/designs/22-egress-toolbinding.md](docs/designs/22-egress-toolbinding.md).
+- `Workspace.spec.egress.allowedTools[]` writes one
+  `tool:<n>#allowed_in@workspace:<wsname>` ReBAC tuple per element.
+  Closes the orphan-tuple gap from TD-P1-01 (the FGA `tool` type
+  was declared but no controller wrote tuples).
+- Bootstrap manifest [dev/bootstrap/aigateway/keese-authz.yaml](dev/bootstrap/aigateway/keese-authz.yaml)
+  ships Deployment + Service + ClusterRoleBinding + Envoy Gateway
+  `SecurityPolicy.spec.extAuth.grpc` wiring. Image
+  `keese-authz:demo` built from [Dockerfile.keese-authz](Dockerfile.keese-authz)
+  (distroless static, multi-arch).
+- **End-to-end verified on demo cluster (2026-05-06)**: with
+  `tool:anthropic.messages#allowed_in@workspace:my-ws` tuple
+  present + valid SA token, gateway returns HTTP 200 from Anthropic
+  with audit log `decision: allow, duration_ms: 18`. Without tuple:
+  HTTP 403 `permission_denied`, audit log `decision: deny, reason:
+  openfga_denied`. Without SA token: HTTP 403, audit log
+  `subject_extraction_failed`.
+- **Subject-format gotcha**: SA-token JWT `sub` shape is
+  `system:serviceaccount:<ns>:<sa>` — naively prefixing with
+  `service_account:` produces 4 colons which OpenFGA rejects as
+  "user field malformed". The fix in `subject.go` extracts just the
+  SA name (last colon segment) so the FGA user-id is
+  `service_account:ksa-<wsuid>` — matching the keese Workspace
+  controller's tuple shape.
+- **Body-discriminator gotcha**: Envoy doesn't buffer the request
+  body for ext_authz by default. The bodyDiscriminator's sub-tool
+  resolution (`model=opus → .opus-4`) therefore never fires
+  end-to-end today; the bare `tool:anthropic.messages` is what
+  reaches keese-authz. Workaround in demo:
+  `Workspace.spec.egress.allowedTools` includes both the bare and
+  per-model entries. Production fix: configure
+  `with_request_body` on `SecurityPolicy.spec.extAuth.grpc` —
+  tracked as a TD-P1-03 follow-on.
+- **OpenFGA config CM mirror**: keese-authz reads `OPENFGA_STORE_ID`
+  and `OPENFGA_AUTHORIZATION_MODEL_ID` from a ConfigMap in
+  `keese-system`, but the seed Job populates the canonical CM in
+  `openfga` namespace. Today it's a manual
+  `kubectl get cm -n openfga | sed | apply -n keese-system` step.
+  Tracked as a TD-P1-03 follow-on alongside the existing TD-P1-01
+  follow-on for the seed image.
+
 ### 2026-05-06 — A9 doc sweep: 10-group → 3-group rename complete
 
 - 21 spec files renamed (`git mv`) to `keese.ai-v1alpha1-<kind>.md`, `authz.keese.ai-v1alpha1*.md`, `policy.keese.ai-v1alpha1*.md`; ~55 other files had text rewritten; CLAUDE.md, MEMORY.md, `.claude/agents/`, `.claude/skills/` updated.
@@ -98,6 +183,14 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   clone/move.
 
 ## Gotchas
+
+### 2026-05-06 — Agent-tool worktree pool returns stale-base branches
+
+- The Claude Agent tool's `isolation: "worktree"` parameter creates worktrees from a pool/cache, NOT from current `main` HEAD. A Wave-1 dispatch on 2026-05-06 produced three worktrees branched from `2994872` — two commits before the API-group rename `ce2436e` (which collapsed `api/{transport,memory,tenancy,guardrail,…}/v1alpha1/` into `api/{keese,authz,policy}/v1alpha1/` and similarly for `internal/controller/`).
+- Symptom: every modified file in the worktree references the **old** path layout. Merge-back via `scripts/worktree-merge.sh` produces a 7000+/12000− diff because git sees the rename as "create the old paths, delete the new paths."
+- Workaround: cherry-pick **new files** from the worktree (paths the rename didn't touch), and **manually re-apply** in-place edits at the new file locations. Worked for TD-P1-08+P2-09+P2-17 (helmfile.yaml, manager.yaml, config/overlays/prod/* — all path-stable) and TD-P1-02 (cmd/keese-drain/, internal/runtime/spi/, internal/runtime/providers/goose/, tests/e2e/agentruntime-drain/ all clean; only workspacesession_controller.go preStop + workspace_events.go reasons needed in-place re-apply at the new `internal/controller/keese/` path).
+- Did NOT work for TD-P1-01 (OpenFGA SDK swap touched 22 *_rebac_openfga.go files, all in old paths) — abandoned.
+- **Recommendation for next session:** dispatch agents inline-sequentially without `isolation: "worktree"` (work on `main` directly), or pre-create a fresh worktree from current HEAD via `git worktree add <path> main` and pass that path to the agent's prompt.
 
 ### 2026-04-30 — AI Gateway BSP injection requires EG `extensionManager.hooks.xdsTranslator`
 
