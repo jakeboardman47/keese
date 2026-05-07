@@ -1,6 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 # Decision refs: D16 OLM bundle, D17 cosign keyless OIDC signing
+#
+# Tag-triggered bundle publish. The "skip if bundle/ missing" pathway
+# was removed in TD-P1-05 — a missing bundle/ on a tag build is a CI
+# failure (silent skips let local-build fallbacks ship unsigned).
+#
+# Main-branch pushes still run `make bundle bundle-validate` to
+# surface generation drift; only tags push + sign.
 
 name: Bundle
 
@@ -19,44 +26,62 @@ jobs:
   generate-validate-push:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - name: check bundle/ exists
-        id: bundle
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: assert bundle/ present
         run: |
-          if [ -d bundle ]; then echo "present=true" >> "$GITHUB_OUTPUT"
-          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
-      - uses: actions/setup-go@v5
-        if: steps.bundle.outputs.present == 'true'
+          test -d bundle || {
+            echo "::error file=bundle/::missing — CI cannot publish without a bundle"
+            exit 1
+          }
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
       - name: make bundle + bundle-validate
-        if: steps.bundle.outputs.present == 'true'
         run: make bundle bundle-validate
       - name: log in to ghcr.io
-        if: steps.bundle.outputs.present == 'true' && startsWith(github.ref, 'refs/tags/')
-        uses: docker/login-action@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: build + push bundle image
-        if: steps.bundle.outputs.present == 'true' && startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/')
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: bundle/
           push: true
+          provenance: true
+          sbom: true
           tags: ghcr.io/keese-ai/keese-bundle:${{ github.ref_name }}
       - name: install cosign
-        if: steps.bundle.outputs.present == 'true' && startsWith(github.ref, 'refs/tags/')
-        uses: sigstore/cosign-installer@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - name: cosign sign (keyless OIDC)
-        if: steps.bundle.outputs.present == 'true' && startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           cosign sign --yes \
             ghcr.io/keese-ai/keese-bundle@${{ steps.push.outputs.digest }}
-      - name: skip (no bundle/)
-        if: steps.bundle.outputs.present == 'false'
-        run: echo "bundle/ not present — skipping bundle workflow"
+      - name: install syft
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+      - name: generate SBOM + attest
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          syft ghcr.io/keese-ai/keese-bundle@${{ steps.push.outputs.digest }} \
+            -o spdx-json=bundle-sbom.spdx.json
+          cosign attest --yes --type spdxjson \
+            --predicate bundle-sbom.spdx.json \
+            ghcr.io/keese-ai/keese-bundle@${{ steps.push.outputs.digest }}
+      - name: bundle-sign-verify (required CI status check)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          BUNDLE_IMG=ghcr.io/keese-ai/keese-bundle@${{ steps.push.outputs.digest }} \
+            make bundle-sign-verify

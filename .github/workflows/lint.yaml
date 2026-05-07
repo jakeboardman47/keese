@@ -20,10 +20,12 @@ jobs:
   pre-commit-all:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v15
-      - uses: actions/cache@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: DeterminateSystems/nix-installer-action@b92f66560d6f97d6576405a7bae901ab57e72b6a # v15
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -34,21 +36,23 @@ jobs:
   golangci:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: check go.mod exists
         id: gomod
         run: |
           if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"
           else echo "present=false" >> "$GITHUB_OUTPUT"; fi
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         if: steps.gomod.outputs.present == 'true'
         with:
           go-version-file: go.mod
           cache: true
       - name: golangci-lint
         if: steps.gomod.outputs.present == 'true'
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6
         with:
           version: latest
       - name: skip (no go.mod)
@@ -58,8 +62,10 @@ jobs:
   kubeconform:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: check config/ exists
         id: cfg
         run: |
@@ -83,8 +89,10 @@ jobs:
   pluto:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: check config/ exists
         id: cfg
         run: |
@@ -92,7 +100,7 @@ jobs:
           else echo "present=false" >> "$GITHUB_OUTPUT"; fi
       - name: install pluto
         if: steps.cfg.outputs.present == 'true'
-        uses: FairwindsOps/pluto/contrib/github-action@v5
+        uses: FairwindsOps/pluto/contrib/github-action@e7460d33e0f76cc4232b5f6429bc99cfd7b6ef1c # v5.20.0
       - name: pluto detect-files (k8s 1.30)
         if: steps.cfg.outputs.present == 'true'
         run: pluto detect-files -d config/ --target-versions k8s=v1.30.0

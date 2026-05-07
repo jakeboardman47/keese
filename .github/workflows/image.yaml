@@ -1,6 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 # Decision refs: D17 cosign keyless, D19 SBOM syft attestation, D20 multi-arch
+#
+# Tag-triggered publish for every keese-published image:
+#   - ghcr.io/keese-ai/keese                 (operator)
+#   - ghcr.io/keese-ai/keese-cosign-webhook  (TD-P1-04 admission gate)
+#
+# Each image is buildx multi-arch, cosign keyless OIDC signed, and
+# carries an SBOM cosign attestation. On main pushes (non-tag) we
+# only build to surface compile errors — no push, no signing.
+#
+# The Dockerfile presence check that used to gate this workflow has
+# been removed (TD-P1-05): a missing Dockerfile is now a CI failure
+# rather than a silent skip, because the local-build fallback that
+# justified the skip has been cut.
 
 name: Image
 
@@ -18,56 +31,65 @@ jobs:
   build-push-sign:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: keese
+            dockerfile: Dockerfile
+            repo: ghcr.io/keese-ai/keese
+          - name: keese-cosign-webhook
+            dockerfile: Dockerfile.keese-cosign-webhook
+            repo: ghcr.io/keese-ai/keese-cosign-webhook
     steps:
-      - uses: actions/checkout@v4
-      - name: check Dockerfile exists
-        id: df
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: assert dockerfile present
         run: |
-          if [ -f Dockerfile ]; then echo "present=true" >> "$GITHUB_OUTPUT"
-          else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+          test -f ${{ matrix.dockerfile }} || {
+            echo "::error file=${{ matrix.dockerfile }}::missing — CI cannot publish without a Dockerfile"
+            exit 1
+          }
       - name: set up QEMU
-        if: steps.df.outputs.present == 'true'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - name: set up buildx
-        if: steps.df.outputs.present == 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: log in to ghcr.io
-        if: steps.df.outputs.present == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: build + push image
-        if: steps.df.outputs.present == 'true'
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: true
           sbom: true
-          tags: ghcr.io/keese-ai/keese:${{ github.ref_name }}
+          tags: ${{ matrix.repo }}:${{ github.ref_name }}
       - name: install cosign
-        if: steps.df.outputs.present == 'true'
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - name: cosign sign (keyless OIDC)
-        if: steps.df.outputs.present == 'true'
         run: |
           cosign sign --yes \
-            ghcr.io/keese-ai/keese@${{ steps.push.outputs.digest }}
+            ${{ matrix.repo }}@${{ steps.push.outputs.digest }}
       - name: install syft
-        if: steps.df.outputs.present == 'true'
-        uses: anchore/sbom-action/download-syft@v0
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
       - name: generate SBOM + attest
-        if: steps.df.outputs.present == 'true'
         run: |
-          syft ghcr.io/keese-ai/keese@${{ steps.push.outputs.digest }} \
+          syft ${{ matrix.repo }}@${{ steps.push.outputs.digest }} \
             -o spdx-json=sbom.spdx.json
           cosign attest --yes --type spdxjson \
             --predicate sbom.spdx.json \
-            ghcr.io/keese-ai/keese@${{ steps.push.outputs.digest }}
-      - name: skip (no Dockerfile)
-        if: steps.df.outputs.present == 'false'
-        run: echo "Dockerfile not present — skipping image build"
+            ${{ matrix.repo }}@${{ steps.push.outputs.digest }}
+      - name: cosign verify (self-check)
+        run: |
+          bash scripts/bundle-sign-verify.sh \
+            ${{ matrix.repo }}@${{ steps.push.outputs.digest }}

@@ -89,6 +89,15 @@ use Conventional Commits (hook-enforced). Every source file carries an
 SPDX `Apache-2.0` header. Rubric in
 [docs/plans/rubric.md](docs/plans/rubric.md).
 
+## Supply-chain posture
+
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/keese-ai/keese/badge)](https://securityscorecards.dev/viewer/?uri=github.com/keese-ai/keese)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/0/badge)](https://www.bestpractices.dev/projects/0)
+
+> The OpenSSF Best Practices badge above links to project ID 0 (placeholder).
+> Enroll at <https://www.bestpractices.dev/> and update this link — tracked in
+> [docs/references/scorecard-deferrals.md](docs/references/scorecard-deferrals.md).
+
 ## Security posture (5 invariants)
 
 - Agent runtime pods never see Kubernetes API kubeconfigs or upstream

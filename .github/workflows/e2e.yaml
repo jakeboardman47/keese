@@ -19,11 +19,14 @@ jobs:
   kind-kuttl:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
     strategy:
       matrix:
         k8s: ['1.30.x', '1.31.x']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: check config/ exists
         id: cfg
         run: |
@@ -31,11 +34,11 @@ jobs:
           else echo "present=false" >> "$GITHUB_OUTPUT"; fi
       - name: create kind cluster
         if: steps.cfg.outputs.present == 'true'
-        uses: helm/kind-action@v1
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
         with:
           node_image: kindest/node:v${{ matrix.k8s }}
           cluster_name: keese-e2e
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         if: steps.cfg.outputs.present == 'true'
         with:
           go-version-file: go.mod
@@ -45,7 +48,7 @@ jobs:
         run: make bootstrap-infra test-e2e
       - name: upload kuttl report
         if: steps.cfg.outputs.present == 'true' && always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: kuttl-report-${{ matrix.k8s }}
           path: kuttl-report.xml

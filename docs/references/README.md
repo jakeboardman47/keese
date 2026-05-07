@@ -29,6 +29,8 @@ or specs (what), references tell you **how** to do a recurring operation.
 | End-to-end kind smoke harness | [e2e-smoke.md](e2e-smoke.md) |
 | Rotate a running CSV to a CI-signed bundle | [csv-rotate-to-signed-bundle.md](csv-rotate-to-signed-bundle.md) |
 | Backup and DR (OpenBao, OpenFGA, NATS) | [backup-and-dr.md](backup-and-dr.md) |
+| OpenSSF Scorecard deferred checks + rationale | [scorecard-deferrals.md](scorecard-deferrals.md) |
+| Branch protection rules for main | [branch-protection.md](branch-protection.md) |
 
 Add a reference when you find yourself explaining the same "how" twice. Update it when
 a vendor or tool changes.

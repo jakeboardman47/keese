@@ -53,8 +53,12 @@ jobs:
       bundle_digest: ${{ steps.push_bundle.outputs.digest }}
       tag: ${{ steps.resolve_tag.outputs.tag }}
 
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
@@ -67,7 +71,7 @@ jobs:
             echo "tag=${{ github.event.inputs.tag }}" >> "${GITHUB_OUTPUT}"
           fi
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
@@ -83,7 +87,7 @@ jobs:
         run: make bundle bundle-validate
 
       - name: Log in to ghcr.io
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -91,7 +95,7 @@ jobs:
 
       - name: Build and push bundle image
         id: push_bundle
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: bundle/
           push: true
@@ -103,7 +107,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/keese-ai/keese
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Sign bundle image (keyless OIDC)
         run: |
@@ -111,7 +115,7 @@ jobs:
             "${{ env.BUNDLE_IMAGE }}@${{ steps.push_bundle.outputs.digest }}"
 
       - name: Install syft
-        uses: anchore/sbom-action/download-syft@v0
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
 
       - name: Generate SBOM + attest bundle
         run: |
@@ -131,12 +135,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: publish-bundle
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Log in to ghcr.io
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -193,7 +201,7 @@ jobs:
 
       - name: Build and push catalog image
         id: push_catalog
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: catalog-out/
           push: true
@@ -206,7 +214,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/keese-ai/keese
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Sign catalog image (keyless OIDC)
         run: |
