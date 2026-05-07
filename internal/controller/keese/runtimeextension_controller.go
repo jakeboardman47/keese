@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	runtimeExtensionFinalizer  = "finalizers.runtimeextension.operator.keese.ai/rebac-cleanup"
+	runtimeExtensionFinalizer  = "finalizers.runtimeextension.keese.ai/rebac-cleanup"
 	runtimeExtensionFieldOwner = "keese-runtimeextension-controller"
 
 	// defaultTenantName is the synthetic tenant used for owner tuples in the absence
@@ -39,10 +39,10 @@ type RuntimeExtensionReconciler struct {
 	Rebac    RuntimeRebacWriter
 }
 
-// +kubebuilder:rbac:groups=runtime.operator.keese.ai,resources=runtimeextensions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=runtime.operator.keese.ai,resources=runtimeextensions/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=runtime.operator.keese.ai,resources=runtimeextensions/finalizers,verbs=update
-// +kubebuilder:rbac:groups=runtime.operator.keese.ai,resources=agentruntimes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=runtimeextensions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=runtimeextensions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=runtimeextensions/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=agentruntimes,verbs=get;list;watch
 
 // Reconcile moves the RuntimeExtension toward its desired state.
 // Idiom: fetch → DeepCopy for patch → compute desired → SSA → status patch.

@@ -32,7 +32,7 @@ func TestBuildArgoWorkflowTemplate_FieldShape(t *testing.T) {
 		},
 	}
 	// Populate GVK so owner-ref is non-empty (normally set by the scheme on fetch).
-	wf.APIVersion = "workflow.operator.keese.ai/v1alpha1"
+	wf.APIVersion = "keese.ai/v1alpha1"
 	wf.Kind = "Workflow"
 
 	name := argoTemplateName(wf)

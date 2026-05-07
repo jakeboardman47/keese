@@ -60,9 +60,9 @@ var _ = BeforeSuite(func() {
 		CRDInstallOptions: envtest.CRDInstallOptions{
 			Paths: []string{
 				filepath.Join("..", "..", "..", "config", "crd", "bases",
-					"runtime.operator.keese.ai_agentruntimes.yaml"),
+					"keese.ai_agentruntimes.yaml"),
 				filepath.Join("..", "..", "..", "config", "crd", "bases",
-					"runtime.operator.keese.ai_runtimeextensions.yaml"),
+					"keese.ai_runtimeextensions.yaml"),
 			},
 		},
 		ErrorIfCRDPathMissing: true,

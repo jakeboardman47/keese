@@ -22,7 +22,7 @@ type CTAInfo struct {
 // Read-only against the Kubernetes API. Injected as a dependency so the controller can
 // be tested without a live API server CRD for CrossTenantAgreement.
 //
-// TODO(spec-followup): real implementation lists tenancy.operator.keese.ai/v1alpha1
+// TODO(spec-followup): real implementation lists keese.ai/v1alpha1
 // CrossTenantAgreements via the K8s client and checks phase=Approved + expiry.
 type CTAResolver interface {
 	// HasApprovedCTA returns true when an Approved CrossTenantAgreement exists that

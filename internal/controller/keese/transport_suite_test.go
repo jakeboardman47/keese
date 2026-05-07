@@ -56,7 +56,7 @@ var _ = BeforeSuite(func() {
 
 	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
 	transportCRDs := []string{
-		"transport.operator.keese.ai_transports.yaml",
+		"keese.ai_transports.yaml",
 	}
 	crdPaths := make([]string, 0, len(transportCRDs))
 	for _, f := range transportCRDs {

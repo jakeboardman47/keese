@@ -23,15 +23,15 @@ import (
 )
 
 const (
-	sharedMemoryFinalizer  = "finalizers.sharedmemory.operator.keese.ai/cleanup"
+	sharedMemoryFinalizer  = "finalizers.sharedmemory.keese.ai/cleanup"
 	sharedMemoryFieldOwner = "keese-sharedmemory-controller"
 )
 
 // SharedMemoryReconciler reconciles a SharedMemory object.
 //
-// +kubebuilder:rbac:groups=memory.operator.keese.ai,resources=sharedmemories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=memory.operator.keese.ai,resources=sharedmemories/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=memory.operator.keese.ai,resources=sharedmemories/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=sharedmemories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=sharedmemories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=sharedmemories/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 type SharedMemoryReconciler struct {
 	client.Client

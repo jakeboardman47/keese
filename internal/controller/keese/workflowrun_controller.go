@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	workflowRunFinalizer  = "finalizers.workflowrun.operator.keese.ai/cleanup"
+	workflowRunFinalizer  = "finalizers.workflowrun.keese.ai/cleanup"
 	workflowRunFieldOwner = "keese-workflowrun-controller"
 	requeueAfterDuration  = 15 * time.Second
 	natsStreamReplicas    = 3
@@ -43,10 +43,10 @@ type WorkflowRunReconciler struct {
 	}
 }
 
-// +kubebuilder:rbac:groups=workflow.operator.keese.ai,resources=workflowruns,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=workflow.operator.keese.ai,resources=workflowruns/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=workflow.operator.keese.ai,resources=workflowruns/finalizers,verbs=update
-// +kubebuilder:rbac:groups=workflow.operator.keese.ai,resources=workflows,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=workflowruns,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=workflowruns/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=workflowruns/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=workflows,verbs=get;list;watch
 
 // Reconcile moves the WorkflowRun toward the desired state.
 //

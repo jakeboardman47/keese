@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	agentRuntimeFinalizer  = "finalizers.agentruntime.operator.keese.ai/drain"
+	agentRuntimeFinalizer  = "finalizers.agentruntime.keese.ai/drain"
 	agentRuntimeFieldOwner = "keese-agentruntime-controller"
 )
 
@@ -35,10 +35,10 @@ type AgentRuntimeReconciler struct {
 	Recorder record.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=runtime.operator.keese.ai,resources=agentruntimes,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=runtime.operator.keese.ai,resources=agentruntimes/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=runtime.operator.keese.ai,resources=agentruntimes/finalizers,verbs=update
-// +kubebuilder:rbac:groups=runtime.operator.keese.ai,resources=runtimeextensions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=keese.ai,resources=agentruntimes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=keese.ai,resources=agentruntimes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=agentruntimes/finalizers,verbs=update
+// +kubebuilder:rbac:groups=keese.ai,resources=runtimeextensions,verbs=get;list;watch
 
 // Reconcile moves the AgentRuntime toward its desired state.
 // Idiom: fetch → DeepCopy for patch → compute desired → SSA → status patch.

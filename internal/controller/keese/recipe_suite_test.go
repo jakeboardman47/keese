@@ -52,8 +52,8 @@ var _ = BeforeSuite(func() {
 
 	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
 	recipeCRDs := []string{
-		"recipe.operator.keese.ai_recipes.yaml",
-		"recipe.operator.keese.ai_recipesources.yaml",
+		"keese.ai_recipes.yaml",
+		"keese.ai_recipesources.yaml",
 	}
 	crdPaths := make([]string, 0, len(recipeCRDs))
 	for _, f := range recipeCRDs {
