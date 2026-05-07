@@ -189,6 +189,33 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Gotchas
 
+### 2026-05-07 — Parallel inline agents can stomp the git index
+
+- When dispatching agents WITHOUT `isolation: "worktree"` they share the
+  parent's git index. Agent A's `git add` in flight + parent's
+  `git commit` produces a commit that includes A's staged-but-not-yet-
+  committed work under the parent's commit message.
+- Concrete example this session: [`a5d0082`](https://github.com/keese-ai/keese/commit/a5d0082)
+  ("refactor(api): finish post-rename cleanup in authz + policy
+  controllers"). The message describes only the post-rename string
+  rewrites in `internal/controller/authz/oidcprovider_controller.go` +
+  `internal/controller/policy/{tokenbudget_controller.go,suite_test.go}`,
+  but the diff also includes the entire TD-P2-07 Recipe webhook
+  scaffolding (`config/{certmanager,webhook,default}/...`,
+  `internal/controller/keese/recipe_webhook{,_test}.go`,
+  `cmd/main.go`'s `SetupRecipeWebhookWithManager` call) **and** the
+  D27 `featuregate_controller{,_test}.go` from a different concurrent
+  session. The work is correct, the message is incomplete. Diff stat:
+  16 files / 992 insertions (vs. ~30 the message implies).
+- Closure summaries in [docs/plans/demo/tech-debt.md](docs/plans/demo/tech-debt.md)
+  are accurate (TD-P2-07 row points at the right files); only the
+  commit-log reader is misled.
+- **Recommendation for next session:** when dispatching parallel inline
+  agents without worktree isolation, either (a) issue `git add <exact
+  paths>` not `git add <directory>` so other agents' staged files
+  don't get swept, or (b) `git stash --keep-index --include-untracked`
+  before any commit to capture only what you intentionally staged.
+
 ### 2026-05-06 — Agent-tool worktree pool returns stale-base branches
 
 - The Claude Agent tool's `isolation: "worktree"` parameter creates worktrees from a pool/cache, NOT from current `main` HEAD. A Wave-1 dispatch on 2026-05-06 produced three worktrees branched from `2994872` — two commits before the API-group rename `ce2436e` (which collapsed `api/{transport,memory,tenancy,guardrail,…}/v1alpha1/` into `api/{keese,authz,policy}/v1alpha1/` and similarly for `internal/controller/`).
