@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 00 (apply): install the operator bundle v0.0.1-demo.1 via
+# operator-sdk run bundle, then provision a Tenant, Workspace, and
+# WorkspaceSession in the olm-upgrade-test namespace.
+#
+# operator-sdk run bundle targets a local kind cluster only.
+# The bundle image must be pre-loaded into kind via:
+#   make docker-build docker-load bundle-build
+#   kind load docker-image ghcr.io/keese-ai/keese-bundle:v0.0.1-demo.1
+#
+# Design reference: docs/designs/14a-olm-channels-upgrades.md §8-step assertion
+# Owner: TD-P2-10
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Install bundle v1 from the pre-loaded local image.
+  - command: operator-sdk run bundle ghcr.io/keese-ai/keese-bundle:v0.0.1-demo.1
+      --namespace keese-system
+      --install-mode OwnNamespace
+      --timeout 120s
+  # Wait for the CSV to reach Succeeded before provisioning test resources.
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Succeeded
+      csv/keese.v0.0.1-demo.1
+      -n keese-system
+      --timeout=120s
+---
+# Test namespace for all olm-upgrade assertions.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: olm-upgrade-test
+  labels:
+    keese.ai/tenant: olm-upgrade-tenant
+---
+# Tenant CR — cluster-scoped.
+apiVersion: keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: olm-upgrade-tenant
+spec:
+  adminSubjects:
+    - kind: User
+      name: tester@example.com
+---
+# AgentRuntime — cluster-scoped.
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  name: goose-olm-upgrade
+spec:
+  implementation:
+    goose:
+      image: ghcr.io/block/goose:latest
+---
+# Workspace in the test namespace.
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: olm-upgrade-ws
+  namespace: olm-upgrade-test
+spec:
+  runtimeRef:
+    name: goose-olm-upgrade
+  tenantRef:
+    name: olm-upgrade-tenant
+  interactive: true
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow
+  egress:
+    allowedTools:
+      - anthropic.messages
+---
+# WorkspaceSession — provision before upgrade to prove continuity.
+apiVersion: keese.ai/v1alpha1
+kind: WorkspaceSession
+metadata:
+  name: olm-upgrade-session
+  namespace: olm-upgrade-test
+spec:
+  workspaceRef: olm-upgrade-ws
+  attachSubject: "user:tester@example.com"
+  sessionName: olm-upgrade-session
+  mode: per-user

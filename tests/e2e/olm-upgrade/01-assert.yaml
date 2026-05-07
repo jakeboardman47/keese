@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 01 (assert): v0.0.1-demo.1 is installed and all test resources
+# reach their active phases before the upgrade begins.
+#
+# All kubectl wait calls use --timeout to bound step duration; kuttl will
+# fail the step if the TestAssert timeout (180s) is exceeded before all
+# commands succeed. Never use sleep — poll via kubectl wait (rule 06).
+#
+# Owner: TD-P2-10
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 180
+commands:
+  # CSV installed and Succeeded.
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Succeeded
+      csv/keese.v0.0.1-demo.1 -n keese-system --timeout=120s
+  # Tenant reaches Active.
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active
+      tenant.keese.ai/olm-upgrade-tenant --timeout=120s
+  # Workspace reaches Ready.
+  - command: kubectl wait --for=condition=Ready
+      workspace/olm-upgrade-ws -n olm-upgrade-test --timeout=120s
+  # WorkspaceSession reaches Active.
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active
+      workspacesession/olm-upgrade-session -n olm-upgrade-test --timeout=120s

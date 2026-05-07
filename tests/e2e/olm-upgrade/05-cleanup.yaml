@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 05 (apply + assert): remove the operator installation and test
+# resources via operator-sdk cleanup.
+#
+# operator-sdk cleanup removes the CSVs, the Subscription, and the
+# OperatorGroup in the target namespace. Test-specific CRs and the
+# olm-upgrade-test namespace are deleted explicitly to ensure a clean slate
+# for subsequent runs (idempotency, rule 06.6).
+#
+# Owner: TD-P2-10
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Delete test resources before cleanup so finalizers drain cleanly.
+  - command: kubectl delete workspacesession olm-upgrade-session
+      -n olm-upgrade-test --ignore-not-found --timeout=60s
+  - command: kubectl delete workspace olm-upgrade-ws
+      -n olm-upgrade-test --ignore-not-found --timeout=60s
+  - command: kubectl delete tenant.keese.ai olm-upgrade-tenant
+      --ignore-not-found --timeout=60s
+  - command: kubectl delete agentruntime goose-olm-upgrade
+      --ignore-not-found --timeout=60s
+  - command: kubectl delete namespace olm-upgrade-test
+      --ignore-not-found --timeout=60s
+  # operator-sdk cleanup removes CSVs, Subscription, OperatorGroup.
+  - command: operator-sdk cleanup keese --namespace keese-system --timeout 120s

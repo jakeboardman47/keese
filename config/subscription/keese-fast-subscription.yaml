@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Subscription — fast channel (CI / dev clusters).
+#
+# installPlanApproval: Automatic is appropriate here: fast receives every
+# semver cut and is intended for CI clusters where operators want the
+# newest bundle applied without human gating (design 14a §1, channel map).
+#
+# WARNING: do NOT apply this manifest to a production or staging cluster.
+# Use keese-stable-subscription.yaml or keese-candidate-subscription.yaml.
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: keese
+  namespace: keese-system
+spec:
+  channel: fast
+  installPlanApproval: Automatic
+  name: keese
+  source: keese-catalog
+  sourceNamespace: olm

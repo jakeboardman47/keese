@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Subscription — candidate channel (pre-production / staging).
+#
+# installPlanApproval: Manual mirrors the stable channel so that staging
+# environments must explicitly approve upgrades, enabling a deliberate
+# ≥ 72h bake window before promoting to stable (design 14a §1).
+#
+# Typical consumers: release-staging clusters, pre-prod namespaces.
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: keese
+  namespace: keese-system
+spec:
+  channel: candidate
+  installPlanApproval: Manual
+  name: keese
+  source: keese-catalog
+  sourceNamespace: olm

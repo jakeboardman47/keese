@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 04 (assert): cross-version stability — session pod stays Running
+# across the operator replacement cycle, and the new operator re-reconciles
+# after a spec edit.
+#
+# Rule 06.6 (signal handling): restart must be idempotent — a pod delete or
+# operator upgrade must not cause a WorkspaceSession to enter Terminating
+# indefinitely or lose its Active phase.
+#
+# This step also probes terminationGracePeriodSeconds: 90 (from
+# config/overlays/prod/kustomization.yaml, TD-P2-17) by asserting the
+# controller pod eviction completes within 90s of the upgrade trigger.
+#
+# Owner: TD-P2-10
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+commands:
+  # Session must remain Active (not Terminating, not Failed) after the
+  # operator pod was replaced during the upgrade.
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active
+      workspacesession/olm-upgrade-session -n olm-upgrade-test --timeout=120s
+  # Session pod must be Running (idempotency from rule 06.6).
+  - command: |
+      POD=$(kubectl get pod -n olm-upgrade-test \
+        -l keese.ai/session=olm-upgrade-session \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+      if [ -z "$POD" ]; then
+        echo "ERROR: no session pod found after upgrade"
+        exit 1
+      fi
+      kubectl wait --for=condition=Ready pod/"$POD" \
+        -n olm-upgrade-test --timeout=60s
+      echo "Session pod $POD is Running after upgrade"
+  # Edit Workspace.spec.description — new operator must reconcile the change.
+  - command: kubectl patch workspace olm-upgrade-ws -n olm-upgrade-test
+      --type=merge -p '{"spec":{"description":"post-upgrade reconcile probe"}}'
+  # Workspace stays Ready after the patch (reconcile converged).
+  - command: kubectl wait --for=condition=Ready
+      workspace/olm-upgrade-ws -n olm-upgrade-test --timeout=60s

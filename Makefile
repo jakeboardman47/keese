@@ -127,6 +127,25 @@ test-e2e-extended:  ## kuttl extended suites: workspace-progression + agentrunti
 	$${KUTTL} test tests/e2e/multi-tenant --config tests/e2e/kuttl-config.yaml && \
 	$${KUTTL} test tests/e2e/chaos-network --config tests/e2e/kuttl-config.yaml
 
+.PHONY: test-e2e-olm-upgrade
+test-e2e-olm-upgrade:  ## kuttl OLM upgrade suite: install v1, upgrade to v2, assert cross-version stability (requires kind cluster + pre-loaded bundle images)
+	@$(GUARD_CONTEXT)
+	@if ! command -v kubectl-kuttl >/dev/null 2>&1 && ! command -v kuttl >/dev/null 2>&1; then \
+		echo "ERROR: kuttl (kubectl-kuttl) not found — install via Nix flake or brew install kuttl"; \
+		exit 1; \
+	fi
+	@if ! kind get clusters 2>/dev/null | grep -q "$(KIND_CLUSTER)"; then \
+		echo "ERROR: kind cluster '$(KIND_CLUSTER)' not found — run 'make kind-up && make bootstrap-infra' first"; \
+		exit 1; \
+	fi
+	@if ! command -v operator-sdk >/dev/null 2>&1; then \
+		echo "ERROR: operator-sdk not found — install via Nix flake or https://sdk.operatorframework.io/docs/installation/"; \
+		exit 1; \
+	fi
+	@KUTTL=$$(command -v kubectl-kuttl || command -v kuttl); \
+	echo "Running OLM upgrade kuttl suite (tests/e2e/olm-upgrade)..."; \
+	$${KUTTL} test tests/e2e/olm-upgrade --config tests/e2e/kuttl-config.yaml
+
 .PHONY: test
 test: test-unit test-integration  ## Composed: unit + integration
 

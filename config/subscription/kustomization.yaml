@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Kustomize base for OLM Subscription manifests.
+#
+# All three channel subscriptions are listed here for documentation purposes.
+# Consumers MUST NOT apply all three to the same cluster — doing so creates
+# duplicate Subscription objects and OLM will reject all but the first.
+#
+# Intended usage:
+#   kubectl apply -f config/subscription/keese-stable-subscription.yaml
+#   kubectl apply -f config/subscription/keese-candidate-subscription.yaml
+#   kubectl apply -f config/subscription/keese-fast-subscription.yaml
+#
+# For kustomize overlays, reference exactly one subscription file in your
+# overlay's resources list.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - keese-stable-subscription.yaml
+  - keese-candidate-subscription.yaml
+  - keese-fast-subscription.yaml

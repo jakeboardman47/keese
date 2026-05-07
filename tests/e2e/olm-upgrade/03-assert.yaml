@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 03 (assert): CSV phase transitions Replacing → Succeeded for
+# v0.0.1-demo.2. The old CSV (v0.0.1-demo.1) enters Replacing before the
+# new CSV reaches Succeeded.
+#
+# The assert polls until the new CSV Succeeded — kubectl wait cannot
+# observe transient Replacing directly, so we check only the terminal state.
+# CI rule: no sleep; use kubectl wait with --timeout to bound the poll.
+#
+# Owner: TD-P2-10
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 240
+commands:
+  # New CSV must reach Succeeded.
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Succeeded
+      csv/keese.v0.0.1-demo.2 -n keese-system --timeout=180s
+  # Old CSV must be gone (OLM deletes it after new CSV Succeeds).
+  - command: |
+      if kubectl get csv keese.v0.0.1-demo.1 -n keese-system 2>/dev/null; then
+        echo "ERROR: old CSV still present after upgrade"
+        exit 1
+      fi
+      echo "Old CSV cleaned up — upgrade complete"

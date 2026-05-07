@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Subscription — stable channel (production).
+#
+# installPlanApproval: Manual is required for stable per design 14a §1 so
+# that operations teams review CRD diffs before approving an upgrade.
+# Approve via: kubectl patch installplan <name> -n keese-system \
+#              --type=merge -p '{"spec":{"approved":true}}'
+#
+# source: the CatalogSource name is keese-catalog, expected in the olm
+# namespace. Update if your catalog delivery differs.
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: keese
+  namespace: keese-system
+spec:
+  channel: stable
+  installPlanApproval: Manual
+  name: keese
+  source: keese-catalog
+  sourceNamespace: olm

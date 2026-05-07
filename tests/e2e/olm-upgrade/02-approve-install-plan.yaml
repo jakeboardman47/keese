@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 02 (apply): push bundle v0.0.1-demo.2 (no-op CSV bump) into the
+# catalog then approve the resulting InstallPlan.
+#
+# installPlanApproval: Manual (from the stable Subscription) means OLM will
+# create an InstallPlan but hold it in status.approved=false until operator
+# approval — this step simulates the ops-team approval workflow (14a §1,
+# F1 failure mode).
+#
+# Prerequisites: the bundle image v0.0.1-demo.2 must be pre-loaded in kind
+# before running this suite. See README.md §Prerequisites.
+#
+# Owner: TD-P2-10
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Run the v2 bundle alongside v1 so OLM sees the upgrade path.
+  - command: operator-sdk run bundle-upgrade ghcr.io/keese-ai/keese-bundle:v0.0.1-demo.2
+      --namespace keese-system
+      --timeout 120s
+  # Locate the pending InstallPlan and approve it.
+  # The InstallPlan name is dynamic; query by label and JSON patch.
+  - command: |
+      IP=$(kubectl get installplan -n keese-system \
+        -o jsonpath='{.items[?(@.spec.approved==false)].metadata.name}' \
+        | awk '{print $1}')
+      if [ -z "$IP" ]; then
+        echo "ERROR: no unapproved InstallPlan found — check Subscription approval mode"
+        exit 1
+      fi
+      kubectl patch installplan "$IP" -n keese-system \
+        --type=merge -p '{"spec":{"approved":true}}'
+      echo "Approved InstallPlan: $IP"
