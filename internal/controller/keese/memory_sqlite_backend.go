@@ -24,7 +24,8 @@ const (
 )
 
 // SQLiteBackend provisions a single ReadWriteOnce PVC per Memory CR for the
-// sqlite backend. Non-sqlite providers are deferred to TD-P2-12.
+// sqlite backend. The MultiBackendProvisioner routes calls to this backend only
+// when provider.Type == ProviderSQLite.
 type SQLiteBackend struct {
 	Client client.Client
 }
@@ -34,19 +35,17 @@ func NewSQLiteBackend(c client.Client) *SQLiteBackend {
 	return &SQLiteBackend{Client: c}
 }
 
-// Provision implements BackendProvisioner. For sqlite it SSA-applies a PVC
-// named "<memory-name>-memory" sized per spec.provider.sqlite.storageSize
-// (default 1Gi). For other providers it returns a "not yet implemented" error
-// so the controller can mark Degraded and the user sees a clear reason.
+// Provision implements BackendProvisioner. SSA-applies a PVC named
+// "<memory-name>-memory" sized per spec.provider.sqlite.storageSize (default 1Gi).
+// Callers must only invoke this with provider.Type == ProviderSQLite; the
+// MultiBackendProvisioner dispatcher enforces this invariant.
 func (s *SQLiteBackend) Provision(
 	ctx context.Context,
 	provider keesev1alpha1.MemoryProvider,
 	name, namespace string,
 ) (bool, error) {
 	if provider.Type != keesev1alpha1.ProviderSQLite {
-		return false, fmt.Errorf(
-			"backend provisioner only supports sqlite at v1alpha1 demo; got %q (TD-P2-12)",
-			provider.Type)
+		return false, fmt.Errorf("SQLiteBackend.Provision called with non-sqlite provider %q", provider.Type)
 	}
 	cfg := provider.SQLite
 	storageSize := sqliteDefaultSize

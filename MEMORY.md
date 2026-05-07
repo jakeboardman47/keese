@@ -12,6 +12,11 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-05-07 — TD-P2-12 closed: 6 Memory backends wired
+
+- Six new `memory_<backend>_backend.go` files + `memory_multi_backend.go` dispatcher implement `BackendProvisioner` for redis/qdrant/pgvector/neo4j/mem0/zep. `MemoryReconciler.SetupWithManager` now wires `NewMultiBackendProvisioner` instead of `NewSQLiteBackend`. External-endpoint/credential-ref config fields bypass in-cluster provisioning; in-cluster fallbacks use `apps/v1.StatefulSet` for redis/neo4j/pgvector/zep and `external-secrets.io/v1.ExternalSecret` (unstructured) for mem0/zep-cloud. Operator CRDs (QdrantCluster, CNPG Cluster, ExternalSecret) all use `unstructured.Unstructured` SSA — zero go.mod churn. Credentials mounted as projected files, never env vars (rule 05.7). `memory_backends_test.go` adds 50+ unit tests. `go test -short -race ./internal/controller/keese/...` green.
+- **fake-client SSA gotcha**: `controller-runtime@v0.21` fake client `Patch(client.Apply)` returns "not found" for resources not in the tracker, even if the scheme is registered. Tests that need SSA creation must use envtest. Unit tests restructured to cover external/no-op modes + pure builder functions only; full SSA path covered by the existing integration suite (`FakeBackendProvisioner`).
+
 ### 2026-05-06 — Wave-0/Wave-1 partial: D5 retarget, infra hardening, AgentRuntime SPI
 
 - **D5 retargeted to local kind T1+T2 only.** Cloud deploy (D4) deferred. New [scripts/dev/d5-anthropic-smoke.sh](scripts/dev/d5-anthropic-smoke.sh) runs the Anthropic round-trip + memory-persistence checks; `make d5-smoke` wraps it. T2 carries soft-fail semantics (exit 2) until full Drain/Resume SPI lands per TD-P1-02 (now closed).
