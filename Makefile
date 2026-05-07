@@ -26,6 +26,7 @@ DEPLOY_OPENTOFU  := $(REPO_ROOT)/deploy/opentofu
 # Images (override via .env.local)
 IMG             ?= ghcr.io/keese-ai/keese:dev
 BUNDLE_IMG      ?= ghcr.io/keese-ai/keese-bundle:dev
+COSIGN_WEBHOOK_IMG ?= ghcr.io/keese-ai/keese-cosign-webhook:dev
 
 # Kubernetes versions (used by envtest + kubeconform + pluto)
 K8S_VERSION     ?= 1.30.x
@@ -140,15 +141,46 @@ bundle-validate:  ## operator-sdk bundle validate (CI)
 bundle-build:  ## Build bundle container (CI)
 	@if [ -f Makefile.operator-sdk-generated ]; then $(MAKE) -f Makefile.operator-sdk-generated bundle-build BUNDLE_IMG=$(BUNDLE_IMG); else echo "Makefile.operator-sdk-generated not present yet (P6)"; fi
 
-# ==== Docker image (CI) =================================================
+.PHONY: bundle-sign-verify
+bundle-sign-verify:  ## cosign verify keyless OIDC on $(BUNDLE_IMG) — required CI status check before catalog-push (CI)
+	@bash $(SCRIPTS_DIR)/bundle-sign-verify.sh $(BUNDLE_IMG)
 
+# ==== Feature gates (D27) ===============================================
+
+.PHONY: featuregate-list
+featuregate-list:  ## Print every keese FeatureGate with stage, override, effective value
+	@bash $(SCRIPTS_DIR)/featuregate-list.sh
+
+.PHONY: featuregate-diff
+featuregate-diff:  ## Diff a candidate seed FeatureGate file (NEW=<file>) against current cluster state
+	@if [ -z "$(NEW)" ]; then echo "usage: make featuregate-diff NEW=path/to/file.yaml"; exit 64; fi
+	@kubectl diff -f $(NEW) || true
+
+# ==== Docker image (CI) =================================================
+#
+# Local docker-build/push is a developer convenience that misses cosign
+# signing. Production images publish via .github/workflows/image.yaml on
+# tag push (CI-only credentials, GitHub OIDC keyless). The cosign-webhook
+# fails-closed on any unsigned keese image reaching an InstallPlan, so
+# locally-built images cannot land in a real cluster without a
+# break-glass override (rule 05.13).
 .PHONY: docker-build
-docker-build:  ## buildx multi-arch operator image (CI)
+docker-build:  ## buildx multi-arch operator image — local/dev only; CI runs image.yaml
 	@docker buildx build --platform linux/amd64,linux/arm64 -t $(IMG) -f Dockerfile .
 
 .PHONY: docker-push
-docker-push:  ## push operator image (CI; tag-gated)
+docker-push:  ## push operator image — local/dev only; production uses CI tag flow
+	@echo "WARN: local push is unsigned — production must use image.yaml on tag push"
 	@docker push $(IMG)
+
+.PHONY: cosign-webhook-build
+cosign-webhook-build:  ## buildx multi-arch keese-cosign-webhook image (CI)
+	@docker buildx build --platform linux/amd64,linux/arm64 -t $(COSIGN_WEBHOOK_IMG) -f Dockerfile.keese-cosign-webhook .
+
+.PHONY: cosign-webhook-push
+cosign-webhook-push:  ## push keese-cosign-webhook image — CI only
+	@echo "WARN: local push is unsigned — production must use image.yaml on tag push"
+	@docker push $(COSIGN_WEBHOOK_IMG)
 
 # ==== Deploy / install (delegated) ======================================
 
@@ -185,6 +217,8 @@ kind-down:  ## delete kind cluster $(KIND_CLUSTER)
 .PHONY: bootstrap-infra
 bootstrap-infra:  ## helmfile sync dev/bootstrap/ + apply aigateway CRs
 	@$(GUARD_CONTEXT)
+	@echo "==> pre-applying chart-shipped CRDs (TD-P1-10)"
+	@$(DEV_DIR)/bootstrap/install-crds.sh
 	@helmfile -f $(DEV_DIR)/bootstrap/helmfile.yaml sync
 	@echo "==> applying NATS streams"
 	@kubectl apply -k $(DEV_DIR)/bootstrap/nats
@@ -207,6 +241,10 @@ tilt-down:  ## tilt down
 .PHONY: e2e-smoke
 e2e-smoke:  ## End-to-end kind smoke (kind + bootstrap + operator + samples). Pass --no-keep to tear down.
 	@bash $(SCRIPTS_DIR)/dev/e2e-smoke.sh $(MAKEFLAGS)
+
+.PHONY: d5-smoke
+d5-smoke:  ## D5 T1+T2 (Anthropic round-trip + memory persistence). Requires e2e-smoke --keep first.
+	@bash $(SCRIPTS_DIR)/dev/d5-anthropic-smoke.sh
 
 .PHONY: smoke
 smoke:  ## Post-gate smoke test
