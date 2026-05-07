@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# BreakGlassAnnotation — rejects any annotation matching keese.ai/unsafe-* on
+# keese.ai/* and authz.keese.ai/* resources unless the containing namespace
+# carries label keese.ai/break-glass=true.
+#
+# The break-glass path is intentionally narrow: the namespace label requires a
+# privileged out-of-band kubectl (or GitOps) action; the resulting admission
+# event is recorded by the reconciler with reason UnsafeAnnotationAllowed
+# (see workspace_events.go). CEL-only check; no external lookup needed.
+#
+# Security reference: .claude/rules/05-security-zero-trust.md §13
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: break-glass-annotation
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/policy-tier: static
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["keese.ai", "authz.keese.ai"]
+        apiVersions: ["v1alpha1"]
+        resources: ["*"]
+        operations: ["CREATE", "UPDATE"]
+  variables:
+    - name: hasUnsafeAnnotation
+      expression: >
+        object.metadata.annotations.exists(k, k.startsWith("keese.ai/unsafe-"))
+    - name: breakGlassEnabled
+      expression: >
+        namespaceObject.metadata.labels.exists(k, k == "keese.ai/break-glass") &&
+        namespaceObject.metadata.labels["keese.ai/break-glass"] == "true"
+  validations:
+    - expression: >
+        !variables.hasUnsafeAnnotation || variables.breakGlassEnabled
+      message: >
+        annotations matching keese.ai/unsafe-* are forbidden unless the namespace
+        carries label keese.ai/break-glass=true (rule 05.13)
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: break-glass-annotation-binding
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  policyName: break-glass-annotation
+  validationActions: [Deny]
+  matchResources: {}

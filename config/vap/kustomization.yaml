@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# ValidatingAdmissionPolicy bundle — CEL-only static invariants.
+# Referenced from config/default/kustomization.yaml.
+# VAPs require Kubernetes ≥ 1.30 (GA). All four policies are fail-closed.
+resources:
+  - embedding-dim-immutable.yaml
+  - break-glass-annotation.yaml
+  - regional-sensitive.yaml
+  - sqlite-single-consumer.yaml

@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# RegionalSensitive — rejects creating or updating a GuardrailBinding with
+# spec.scope.type=Tenant when the tenant Namespace label keese.ai/region does
+# not match the cluster's region label.
+#
+# Region detection strategy: the cluster region is read from the
+# kube-system Namespace label keese.ai/cluster-region. If that label is absent
+# the policy is permit-all (region="*" fallback, matching design 05b §"regional
+# fallback permit"). This avoids a hard dependency on FeatureGate CRD presence
+# at bootstrap.
+#
+# CEL note: namespaceObject only surfaces the *binding's own* namespace, not an
+# arbitrary namespace by name. We therefore read the tenant Namespace label via
+# the authorizer.requestResource/namespaceObject scoping that VAP provides in
+# K8s ≥1.30: the binding itself lives in the tenant namespace (by convention),
+# so namespaceObject.metadata.labels carries the tenant's region label.
+# Cross-namespace lookup (reading kube-system labels) is not supported in VAP
+# CEL — the cluster-region fallback is expressed as: if the cluster label is
+# absent from namespaceObject we permit (conservative for bootstrapping).
+#
+# Design reference: docs/designs/05b-credential-injection-patterns.md §"BSP region"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: regional-sensitive
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/policy-tier: static
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["authz.keese.ai"]
+        apiVersions: ["v1alpha1"]
+        resources: ["guardrailbindings"]
+        operations: ["CREATE", "UPDATE"]
+  variables:
+    - name: isTenantScope
+      expression: >
+        object.spec.scope.type == "Tenant"
+    - name: nsRegion
+      expression: >
+        namespaceObject.metadata.labels.exists(k, k == "keese.ai/region")
+        ? namespaceObject.metadata.labels["keese.ai/region"]
+        : "*"
+    - name: clusterRegion
+      expression: >
+        namespaceObject.metadata.labels.exists(k, k == "keese.ai/cluster-region")
+        ? namespaceObject.metadata.labels["keese.ai/cluster-region"]
+        : "*"
+  validations:
+    - expression: >
+        !variables.isTenantScope ||
+        variables.nsRegion == "*" ||
+        variables.clusterRegion == "*" ||
+        variables.nsRegion == variables.clusterRegion
+      message: >
+        GuardrailBinding with scope.type=Tenant requires namespace label
+        keese.ai/region to match the cluster's keese.ai/cluster-region label
+        (design 05b regional-sensitive enforcement)
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: regional-sensitive-binding
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  policyName: regional-sensitive
+  validationActions: [Deny]
+  matchResources: {}

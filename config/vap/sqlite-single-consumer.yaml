@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# SqliteSingleConsumer — admission-time enforcement of the SQLite single-pod
+# invariant documented in docs/specs/keese.ai-v1alpha1-memory.md §"sqlite
+# single-pod-per-Memory invariant".
+#
+# SQLite with WAL mode and an RWO PVC cannot safely be shared across pods.
+# Setting spec.provider.sqlite simultaneously with any replicas field > 1 in
+# the redis or qdrant sub-fields is rejected here at admission time. This
+# closes the admission-time follow-on noted in TD-P1-09.
+#
+# Note: Memory.spec does not expose a top-level replicas field; replicas live
+# inside the provider-specific sub-structs (redis.replicas, qdrant.replicas).
+# The invariant is: if sqlite is the selected backend, neither redis.replicas
+# nor qdrant.replicas may be set to > 1 in the same object (they would be
+# non-canonical anyway given the oneOf XValidation, but a belt-and-suspenders
+# check is cheap and clarifies intent).
+#
+# Design reference: docs/designs/15-memory-management.md §"sqlite"
+# Spec reference:   docs/specs/keese.ai-v1alpha1-memory.md §"sqlite single-pod"
+# Tech-debt ref:    TD-P1-09 admission-time follow-on, TD-P2-08
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: sqlite-single-consumer
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/policy-tier: static
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["keese.ai"]
+        apiVersions: ["v1alpha1"]
+        resources: ["memories"]
+        operations: ["CREATE", "UPDATE"]
+  variables:
+    - name: isSqlite
+      expression: >
+        object.spec.provider.type == "sqlite"
+    - name: redisReplicasGtOne
+      expression: >
+        has(object.spec.provider.redis) &&
+        has(object.spec.provider.redis.replicas) &&
+        object.spec.provider.redis.replicas > 1
+    - name: qdrantReplicasGtOne
+      expression: >
+        has(object.spec.provider.qdrant) &&
+        has(object.spec.provider.qdrant.replicas) &&
+        object.spec.provider.qdrant.replicas > 1
+  validations:
+    - expression: >
+        !variables.isSqlite || (!variables.redisReplicasGtOne && !variables.qdrantReplicasGtOne)
+      message: >
+        Memory with spec.provider.type=sqlite cannot set replicas > 1 in any
+        provider sub-field; SQLite requires a single consumer pod (TD-P1-09,
+        docs/specs/keese.ai-v1alpha1-memory.md §sqlite-single-pod)
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: sqlite-single-consumer-binding
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  policyName: sqlite-single-consumer
+  validationActions: [Deny]
+  matchResources: {}

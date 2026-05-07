@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EmbeddingDimImmutable — prevents changes to spec.embeddingDim on Memory and
+# SharedMemory after creation. Changing embedding dimensions mid-lifecycle
+# corrupts stored vectors and requires a full re-index. CEL only; no
+# cross-resource lookup needed, so VAP is preferred over an admission webhook
+# per rule 04.12.
+#
+# Design reference: docs/designs/15-memory-management.md §"embeddingDim immutable"
+# Spec reference:   docs/specs/keese.ai-v1alpha1-memory.md §"single-pod invariant"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: embedding-dim-immutable
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/policy-tier: static
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["keese.ai"]
+        apiVersions: ["v1alpha1"]
+        resources: ["memories", "sharedmemories"]
+        operations: ["UPDATE"]
+  validations:
+    - expression: >
+        !has(oldObject.spec.embeddingDim) && !has(object.spec.embeddingDim) ||
+        has(oldObject.spec.embeddingDim) && has(object.spec.embeddingDim) &&
+        oldObject.spec.embeddingDim == object.spec.embeddingDim ||
+        !has(oldObject.spec.embeddingDim) && has(object.spec.embeddingDim) && oldObject.spec.embeddingDim == 0
+      message: "spec.embeddingDim is immutable after creation; create a new Memory resource instead"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: embedding-dim-immutable-binding
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  policyName: embedding-dim-immutable
+  validationActions: [Deny]
+  matchResources: {}
