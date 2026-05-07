@@ -48,8 +48,8 @@ type Runtime struct {
 
 // Capabilities is the static CapabilityMatrix declared at registration.
 // Streaming + MCP + Recipes + ACP + SubAgents are all supported as of
-// goose v1.33.1; InjectPrompt and CredentialRotation are pending the
-// upstream SPI methods (see spec §Failure modes).
+// goose v1.33.1; InjectPrompt is implemented in TD-P3-04 via the
+// inject-fifo mechanism. CredentialRotation remains pending TD-P2-13.
 var capabilities = spi.CapabilityMatrix{
 	ProviderName:               ProviderName,
 	SPIVersion:                 "1.0.0",
@@ -58,7 +58,7 @@ var capabilities = spi.CapabilityMatrix{
 	MaxSubAgents:               10,
 	SupportsResume:             true,
 	SupportsSubAgentCleanup:    true,
-	SupportsInjectPrompt:       false, // TODO: TD-P3-04 InjectPrompt SPI
+	SupportsInjectPrompt:       true, // TD-P3-04: fifo inject via podexec
 	SupportsStreaming:          true,
 	SupportsMCP:                true,
 	SupportsRecipes:            true,
@@ -240,6 +240,82 @@ cp -f %s /var/run/keese/session/home/.local/share/goose/sessions/
 	return nil
 }
 
+// --- InjectPrompt ----------------------------------------------------
+
+// injectFifoPath is the named pipe goose reads for synthetic user turns.
+// Goose v1.33.1+ monitors this path and injects any line written to it
+// as a user turn in the running session. The path lives on the session
+// PVC so it survives pod restarts.
+//
+// Design ref: docs/designs/23-agent-supervision.md §Step 2 mechanism
+const injectFifoPath = "/var/run/keese/session/home/.local/state/goose/inject-fifo"
+
+// InjectPrompt injects a synthetic user turn into the running goose session
+// via the session pod's named FIFO at injectFifoPath.
+//
+// Implementation (approach a from TD-P3-04): shells into the session pod
+// via the PodExecutor and writes the prompt line to the FIFO. Goose reads
+// the FIFO on its next event-loop iteration and treats the line as a user
+// turn with source: supervisor (design 23 §step 2).
+//
+// Safety: the prompt is sanitised to remove embedded newlines (a newline
+// would terminate the FIFO write prematurely and could start a second
+// injected turn). The script creates the FIFO if absent (idempotent) but
+// does NOT block: it uses a sub-shell with a timeout to avoid hanging if
+// goose is not listening on the FIFO yet.
+//
+// Rule 02: no secrets or tokens in the prompt are logged or surfaced in
+// events by this method — the caller is responsible.
+// Rule 04.8: returns an error, never panics.
+// Rule 05.11: no privileged exec; podexec carries no special capabilities.
+func (r *Runtime) InjectPrompt(ctx context.Context, sess spi.WorkspaceSession, prompt string) error {
+	if r.executor == nil {
+		return fmt.Errorf("goose InjectPrompt: no PodExecutor wired")
+	}
+	if sess.PodName == "" {
+		return fmt.Errorf("goose InjectPrompt: session has no PodName")
+	}
+
+	// Sanitise: collapse embedded newlines to a space so one write = one turn.
+	sanitised := strings.ReplaceAll(prompt, "\n", " ")
+	sanitised = strings.ReplaceAll(sanitised, "\r", " ")
+
+	// The shell script:
+	//   1. mkfifo if absent (idempotent; fails silently if already present).
+	//   2. Writes the prompt with a 5 s timeout (goose may not be listening
+	//      yet; timeout prevents the exec from blocking indefinitely).
+	//      Uses a background write + sleep to avoid blocking on open(2) of a
+	//      FIFO with no reader, which would hang the subshell forever.
+	sh := fmt.Sprintf(`set -e
+FIFO=%s
+[ -p "$FIFO" ] || mkfifo "$FIFO" 2>/dev/null || true
+# Write with a 5s deadline. If goose is not reading the FIFO, the
+# write blocks on open; the background sleep + kill ensures we exit.
+(
+  echo %s > "$FIFO" &
+  WRITE_PID=$!
+  sleep 5
+  kill "$WRITE_PID" 2>/dev/null || true
+)
+`, injectFifoPath, shellescape(sanitised))
+
+	_, stderr, err := r.executor.Exec(ctx, sess.Namespace, sess.PodName, agentContainerName,
+		[]string{"/bin/sh", "-c", sh})
+	if err != nil {
+		return fmt.Errorf("goose InjectPrompt: podexec: %w (stderr=%s)", err, string(stderr))
+	}
+	return nil
+}
+
+// shellescape wraps s in single quotes, escaping any embedded single quotes.
+// This prevents shell injection when the prompt is interpolated into the
+// script string above.
+func shellescape(s string) string {
+	// Replace every ' with '\'' (end quote, escaped quote, reopen quote).
+	escaped := strings.ReplaceAll(s, "'", `'\''`)
+	return "'" + escaped + "'"
+}
+
 // --- Stubs for follow-on SPI methods ---------------------------------
 
 func (r *Runtime) Run(_ context.Context, _ string, _ map[string]string) (*spi.RunResult, error) {
@@ -251,10 +327,6 @@ func (r *Runtime) Attach(_ context.Context, _ spi.WorkspaceSession) (*spi.Attach
 }
 
 func (r *Runtime) CleanupSubAgents(_ context.Context, _ spi.Workspace) error {
-	return spi.ErrUnsupported
-}
-
-func (r *Runtime) InjectPrompt(_ context.Context, _ spi.WorkspaceSession, _ string) error {
 	return spi.ErrUnsupported
 }
 

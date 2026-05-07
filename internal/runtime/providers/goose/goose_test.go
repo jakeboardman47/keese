@@ -202,9 +202,6 @@ func TestUnsupportedMethodsReturnSentinel(t *testing.T) {
 	if err := r.CleanupSubAgents(ctx, ws); !errors.Is(err, spi.ErrUnsupported) {
 		t.Errorf("CleanupSubAgents: got %v", err)
 	}
-	if err := r.InjectPrompt(ctx, sess, "x"); !errors.Is(err, spi.ErrUnsupported) {
-		t.Errorf("InjectPrompt: got %v", err)
-	}
 	if _, err := r.InvokeSubAgent(ctx, ws, spi.SubAgentSpec{}); !errors.Is(err, spi.ErrUnsupported) {
 		t.Errorf("InvokeSubAgent: got %v", err)
 	}
@@ -213,6 +210,109 @@ func TestUnsupportedMethodsReturnSentinel(t *testing.T) {
 	}
 	if _, err := r.StreamEvents(ctx); !errors.Is(err, spi.ErrUnsupported) {
 		t.Errorf("StreamEvents: got %v", err)
+	}
+}
+
+// TestInjectPromptWritesToFifo verifies that InjectPrompt shells into the
+// session pod and writes the prompt (shell-escaped) to injectFifoPath.
+// It also asserts that embedded newlines are collapsed before writing
+// (one write = one supervisor turn).
+func TestInjectPromptWritesToFifo(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name           string
+		prompt         string
+		wantFifoInCmd  bool
+		wantSanitised  string
+	}{
+		{
+			name:          "simple prompt",
+			prompt:        "you appear stuck — what are you doing?",
+			wantFifoInCmd: true,
+			wantSanitised: "you appear stuck — what are you doing?",
+		},
+		{
+			name:          "newlines collapsed",
+			prompt:        "line1\nline2\r\nline3",
+			wantFifoInCmd: true,
+			wantSanitised: "line1 line2  line3",
+		},
+		{
+			name:          "single quotes escaped",
+			prompt:        "it's stuck",
+			wantFifoInCmd: true,
+			wantSanitised: "it's stuck",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var capturedCmd []string
+			exec := &fakeExecutor{
+				respond: func(argv []string) ([]byte, []byte, error) {
+					capturedCmd = argv
+					return nil, nil, nil
+				},
+			}
+			r := FactoryWithExecutor("keese-goose:1.33.1", exec)
+			sess := spi.WorkspaceSession{
+				PodName:   "sess-pod-1",
+				Namespace: "alpha",
+			}
+			if err := r.InjectPrompt(context.Background(), sess, tc.prompt); err != nil {
+				t.Fatalf("InjectPrompt: %v", err)
+			}
+			if len(capturedCmd) < 3 {
+				t.Fatalf("expected exec argv ≥ 3, got %v", capturedCmd)
+			}
+			script := capturedCmd[2]
+			if tc.wantFifoInCmd && !strings.Contains(script, injectFifoPath) {
+				t.Errorf("script does not reference fifo path %q; script=%q", injectFifoPath, script)
+			}
+			// Verify the sanitised prompt appears in the script (shell-quoted).
+			sanitised := strings.ReplaceAll(tc.prompt, "\n", " ")
+			sanitised = strings.ReplaceAll(sanitised, "\r", " ")
+			escaped := shellescape(sanitised)
+			if !strings.Contains(script, escaped) {
+				t.Errorf("script does not contain escaped prompt %q; script=%q", escaped, script)
+			}
+		})
+	}
+}
+
+// TestInjectPromptNoPodName ensures InjectPrompt returns an error when the
+// session has no pod name (prevents a silent no-op).
+func TestInjectPromptNoPodName(t *testing.T) {
+	t.Parallel()
+	exec := &fakeExecutor{}
+	r := FactoryWithExecutor("keese-goose:1.33.1", exec)
+	err := r.InjectPrompt(context.Background(), spi.WorkspaceSession{}, "hello")
+	if err == nil {
+		t.Fatal("expected error for empty PodName, got nil")
+	}
+	if len(exec.callsCopy()) != 0 {
+		t.Fatal("expected 0 exec calls for empty PodName")
+	}
+}
+
+// TestInjectPromptNoExecutor ensures InjectPrompt returns an error when no
+// PodExecutor is wired (e.g. pre-startup or factory without executor).
+func TestInjectPromptNoExecutor(t *testing.T) {
+	t.Parallel()
+	r, _ := Factory(nil)
+	err := r.InjectPrompt(context.Background(), spi.WorkspaceSession{PodName: "p1", Namespace: "alpha"}, "hello")
+	if err == nil {
+		t.Fatal("expected error for nil executor, got nil")
+	}
+}
+
+// TestInjectPromptCapabilityEnabled verifies SupportsInjectPrompt is true
+// after TD-P3-04 implementation.
+func TestInjectPromptCapabilityEnabled(t *testing.T) {
+	t.Parallel()
+	r, _ := Factory(map[string]string{"image": "keese-goose:1.33.1"})
+	if !r.Capabilities().SupportsInjectPrompt {
+		t.Fatal("expected SupportsInjectPrompt=true after TD-P3-04 implementation")
 	}
 }
 

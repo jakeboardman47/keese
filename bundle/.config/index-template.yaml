@@ -1,0 +1,155 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# File-Based Catalog (FBC) template for keese-catalog.
+# Rendered by opm alpha render-template basic → catalog/keese/catalog.json.
+# Consumed by CatalogSource referencing ghcr.io/keese-ai/keese-catalog.
+#
+# Design ref: docs/designs/14b-olm-dependencies.md §dependencies
+---
+schema: olm.template.basic
+entries:
+  # ------------------------------------------------------------------ #
+  # keese — the primary package                                          #
+  # ------------------------------------------------------------------ #
+  - schema: olm.package
+    name: keese
+    defaultChannel: alpha
+
+  - schema: olm.channel
+    package: keese
+    name: alpha
+    entries:
+      # Initial release — no replaces yet; set-csv-replaces.sh extends
+      # this list on each release as replaces: chain grows.
+      - name: keese.v0.0.1
+
+  - schema: olm.bundle
+    image: ghcr.io/keese-ai/keese-bundle:v0.0.1
+    # Populated at publish time with full digest by catalog-publish.yaml.
+    name: keese.v0.0.1
+    package: keese
+    properties:
+      - type: olm.maxOpenShiftVersion
+        value: "4.99"
+
+  # ------------------------------------------------------------------ #
+  # cert-manager — required dependency (webhooks + TLS)                 #
+  # Design ref: docs/designs/14b-olm-dependencies.md §cert-manager      #
+  # ------------------------------------------------------------------ #
+  - schema: olm.package
+    name: cert-manager
+    defaultChannel: stable
+
+  - schema: olm.channel
+    package: cert-manager
+    name: stable
+    entries:
+      - name: cert-manager.v1.14.5
+
+  - schema: olm.bundle
+    image: quay.io/jetstack/cert-manager-bundle:v1.14.5
+    name: cert-manager.v1.14.5
+    package: cert-manager
+    properties:
+      - type: olm.gvk
+        value:
+          group: cert-manager.io
+          kind: Certificate
+          version: v1
+      - type: olm.gvk
+        value:
+          group: cert-manager.io
+          kind: ClusterIssuer
+          version: v1
+
+  # ------------------------------------------------------------------ #
+  # Capsule — required dependency (multi-tenancy namespaces + policies) #
+  # Design ref: docs/designs/14b-olm-dependencies.md §capsule           #
+  # ------------------------------------------------------------------ #
+  - schema: olm.package
+    name: capsule
+    defaultChannel: stable
+
+  - schema: olm.channel
+    package: capsule
+    name: stable
+    entries:
+      - name: capsule.v0.7.2
+
+  - schema: olm.bundle
+    image: quay.io/projectcapsule/capsule-bundle:v0.7.2
+    name: capsule.v0.7.2
+    package: capsule
+    properties:
+      - type: olm.gvk
+        value:
+          group: capsule.clastix.io
+          kind: Tenant
+          version: v1beta2
+      - type: olm.gvk
+        value:
+          group: capsule.clastix.io
+          kind: CapsuleConfiguration
+          version: v1beta2
+
+  # ------------------------------------------------------------------ #
+  # argo-workflows — required dependency (Workflow + WorkflowRun CRDs)  #
+  # Design ref: docs/designs/14b-olm-dependencies.md §argo              #
+  # ------------------------------------------------------------------ #
+  - schema: olm.package
+    name: argo-workflows
+    defaultChannel: alpha
+
+  - schema: olm.channel
+    package: argo-workflows
+    name: alpha
+    entries:
+      - name: argo-workflows.v0.47.5
+
+  - schema: olm.bundle
+    image: quay.io/argoprojlabs/argoworkflows-operator-bundle:v0.47.5
+    name: argo-workflows.v0.47.5
+    package: argo-workflows
+    properties:
+      - type: olm.gvk
+        value:
+          group: argoproj.io
+          kind: Workflow
+          version: v1alpha1
+      - type: olm.gvk
+        value:
+          group: argoproj.io
+          kind: WorkflowTemplate
+          version: v1alpha1
+
+  # ------------------------------------------------------------------ #
+  # external-secrets — required dependency (OpenBao credential bridge)  #
+  # Design ref: docs/designs/14b-olm-dependencies.md §external-secrets  #
+  # Note: pinned at 0.10.5; upgrade tracked under TD-P2-18.            #
+  # ------------------------------------------------------------------ #
+  - schema: olm.package
+    name: external-secrets-operator
+    defaultChannel: stable
+
+  - schema: olm.channel
+    package: external-secrets-operator
+    name: stable
+    entries:
+      - name: external-secrets-operator.v0.10.5
+
+  - schema: olm.bundle
+    image: ghcr.io/external-secrets/external-secrets-operator-bundle:v0.10.5
+    name: external-secrets-operator.v0.10.5
+    package: external-secrets-operator
+    properties:
+      - type: olm.gvk
+        value:
+          group: external-secrets.io
+          kind: ExternalSecret
+          version: v1beta1
+      - type: olm.gvk
+        value:
+          group: external-secrets.io
+          kind: SecretStore
+          version: v1beta1

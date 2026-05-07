@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Dockerfile.keese-catalog — File-Based Catalog (FBC) image.
+# Base: quay.io/operator-framework/opm (provides grpc-catalog server binary).
+# Built image: ghcr.io/keese-ai/keese-catalog:dev (dev tag only; prod pins digest per rule 05.12).
+#
+# Build: docker build -f Dockerfile.keese-catalog -t ghcr.io/keese-ai/keese-catalog:dev .
+# Prereq: run scripts/build-catalog.sh first to populate catalog/keese/catalog.json.
+#
+# Design ref: docs/designs/14b-olm-dependencies.md §OperatorHub catalog image
+
+FROM quay.io/operator-framework/opm:latest
+
+# Embed the rendered FBC JSON so this image is fully self-contained.
+# The CatalogSource grpcPodConfig picks up the catalog via the embedded path.
+COPY catalog/ /configs/
+
+# Validate at image build time — catches broken catalog.json before push.
+RUN ["/bin/opm", "validate", "/configs/keese"]
+
+# opm serves the catalog on gRPC 50051.
+EXPOSE 50051
+
+ENTRYPOINT ["/bin/opm"]
+CMD ["serve", "/configs", "--cache-dir=/tmp/cache"]

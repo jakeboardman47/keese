@@ -1,0 +1,140 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# catalog-publish.yaml — File-Based Catalog (FBC) image build, validate, push, and sign.
+#
+# Trigger: tag push (v*). Produces ghcr.io/keese-ai/keese-catalog:<tag>.
+#
+# Steps:
+#   1. Render FBC template via scripts/build-catalog.sh
+#   2. Validate via opm validate
+#   3. Build catalog image (Dockerfile.keese-catalog)
+#   4. Push to ghcr.io/keese-ai/keese-catalog
+#   5. Cosign keyless OIDC sign (rule 05.12 identity regex)
+#   6. Attach SBOM via cosign attest (syft)
+#
+# Design ref: docs/designs/14b-olm-dependencies.md §OperatorHub catalog (TD-P3-03)
+
+name: Catalog Publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag override (default: github.ref_name)'
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+  # Required for cosign keyless OIDC token (rule 05.12)
+  id-token: write
+
+env:
+  CATALOG_IMAGE: ghcr.io/keese-ai/keese-catalog
+  # OPM version pinned; update here and in Dockerfile.keese-catalog together.
+  OPM_VERSION: v1.43.1
+
+jobs:
+  build-validate-push-sign:
+    name: Build, validate, push, and sign catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute image tag
+        id: tag
+        run: |
+          if [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            echo "value=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install opm
+        run: |
+          curl -fsSL \
+            "https://github.com/operator-framework/operator-registry/releases/download/${OPM_VERSION}/linux-amd64-opm" \
+            -o /usr/local/bin/opm
+          chmod +x /usr/local/bin/opm
+          opm version
+
+      - name: Render FBC template
+        run: scripts/build-catalog.sh --skip-validate
+
+      - name: Validate catalog (opm validate)
+        run: opm validate catalog/keese
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft (SBOM)
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push catalog image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.keese-catalog
+          push: true
+          tags: |
+            ${{ env.CATALOG_IMAGE }}:${{ steps.tag.outputs.value }}
+            ${{ env.CATALOG_IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/keese-ai/keese
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.tag.outputs.value }}
+
+      - name: Sign catalog image (cosign keyless OIDC)
+        # Rule 05.12: identity-regexp must match GitHub Actions OIDC issuer path.
+        run: |
+          cosign sign --yes \
+            "${{ env.CATALOG_IMAGE }}@${{ steps.build.outputs.digest }}"
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+
+      - name: Verify cosign signature (self-check)
+        run: |
+          cosign verify \
+            --certificate-identity-regexp \
+              "https://github.com/keese-ai/keese/.github/workflows/catalog-publish.yaml@refs/.*" \
+            --certificate-oidc-issuer \
+              "https://token.actions.githubusercontent.com" \
+            "${{ env.CATALOG_IMAGE }}@${{ steps.build.outputs.digest }}"
+
+      - name: Generate SBOM (syft)
+        run: |
+          syft "${{ env.CATALOG_IMAGE }}@${{ steps.build.outputs.digest }}" \
+            -o spdx-json=catalog-sbom.spdx.json
+
+      - name: Attest SBOM (cosign)
+        run: |
+          cosign attest --yes \
+            --predicate catalog-sbom.spdx.json \
+            --type spdxjson \
+            "${{ env.CATALOG_IMAGE }}@${{ steps.build.outputs.digest }}"
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+
+      - name: Output catalog image digest
+        run: |
+          echo "Catalog image: ${{ env.CATALOG_IMAGE }}@${{ steps.build.outputs.digest }}"
+          echo "Tag: ${{ steps.tag.outputs.value }}"
