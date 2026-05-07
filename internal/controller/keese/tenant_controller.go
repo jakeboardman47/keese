@@ -65,6 +65,7 @@ type TenantReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=capsule.clastix.io,resources=tenants,verbs=get;list;watch
 
 // Reconcile is the main reconciliation loop for Tenant.
 // Idiom: fetch → deepcopy for patch → handle deletion → compute desired → update status.

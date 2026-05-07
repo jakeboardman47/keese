@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	bindingFinalizer = "finalizers.guardrailbinding.operator.keese.ai/cleanup"
+	bindingFinalizer = "finalizers.guardrailbinding.keese.ai/cleanup"
 	fieldOwner       = "keese-guardrailbinding-controller"
 
 	// bindingScopeLabel is set by the user to indicate the scope tier for display.
@@ -43,11 +43,16 @@ type GuardrailBindingReconciler struct {
 	Recorder record.EventRecorder
 	Rebac    GuardrailRebacWriter
 	Kyverno  KyvernoPolicyProjector
+	// Envoy projects the effective tool policy into an Envoy Gateway SecurityPolicy
+	// via SSA. CEL expressions are compiled for structural validation before projection.
+	// May be nil in installations that do not use the Envoy AI Gateway integration;
+	// the controller skips Envoy projection when nil or when spec.envoy is absent.
+	Envoy EnvoySecurityPolicyProjector
 }
 
-// +kubebuilder:rbac:groups=guardrail.operator.keese.ai,resources=guardrailbindings,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=guardrail.operator.keese.ai,resources=guardrailbindings/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=guardrail.operator.keese.ai,resources=guardrailbindings/finalizers,verbs=update
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=guardrailbindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=guardrailbindings/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=guardrailbindings/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=securitypolicies,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;create;update
@@ -111,14 +116,17 @@ func (r *GuardrailBindingReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	r.Recorder.Eventf(&binding, corev1.EventTypeNormal, ReasonBindingMerged, "effective policy computed from %d binding(s)", len(chain))
 
-	// --- Validate CEL expressions in Envoy SecurityPolicy ---
-	if err := r.validateCEL(ctx, &binding); err != nil {
-		log.Error(err, "CEL compile error")
-		r.setCondition(&binding, authzv1alpha1.ConditionReady, metav1.ConditionFalse, "CELCompileError", err.Error())
+	// --- Project Envoy SecurityPolicy (compiles + validates CEL, then SSA-applies) ---
+	if projErr := r.projectEnvoySecurityPolicy(ctx, &binding, ep); projErr != nil {
+		log.Error(projErr, "Envoy SecurityPolicy projection failed")
+		r.setCondition(&binding, ConditionCELCompilationFailed, metav1.ConditionTrue, "CELCompileError", projErr.Error())
+		r.setCondition(&binding, authzv1alpha1.ConditionReady, metav1.ConditionFalse, "CELCompileError", projErr.Error())
 		r.setPhase(&binding, authzv1alpha1.BindingPhaseDegraded)
-		r.Recorder.Eventf(&binding, corev1.EventTypeWarning, ReasonCELCompileError, "CEL compile error: %v", err)
+		r.Recorder.Eventf(&binding, corev1.EventTypeWarning, ReasonCELCompileError, "Envoy SecurityPolicy projection failed: %v", projErr)
 		return ctrl.Result{RequeueAfter: requeueAfterBackoff}, r.patchStatus(ctx, &binding, orig)
 	}
+	// Clear any prior CELCompilationFailed condition on success.
+	r.setCondition(&binding, ConditionCELCompilationFailed, metav1.ConditionFalse, "CELCompileOK", "CEL expression compiled and SecurityPolicy projected")
 
 	// --- Project Kyverno ClusterPolicies ---
 	for _, kp := range binding.Spec.Kyverno {
@@ -157,6 +165,14 @@ func (r *GuardrailBindingReconciler) Reconcile(ctx context.Context, req ctrl.Req
 // cleanup removes external resources and then removes the finalizer.
 func (r *GuardrailBindingReconciler) cleanup(ctx context.Context, binding *authzv1alpha1.GuardrailBinding, orig *authzv1alpha1.GuardrailBinding) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+
+	// Delete Envoy SecurityPolicy projection owned by this binding.
+	if r.Envoy != nil {
+		if err := r.Envoy.Delete(ctx, binding.Namespace, binding.Name); err != nil {
+			log.Error(err, "failed to delete Envoy SecurityPolicy projection")
+			return ctrl.Result{RequeueAfter: requeueAfterBackoff}, nil
+		}
+	}
 
 	// Delete Kyverno ClusterPolicy projections owned by this binding.
 	for _, kp := range binding.Spec.Kyverno {
@@ -211,20 +227,27 @@ func (r *GuardrailBindingReconciler) checkDefaultBinding(ctx context.Context, bi
 	return err
 }
 
-// validateCEL validates CEL expressions from the Envoy SecurityPolicy reference.
-// Per design 05c §CEL compile-error fallback, compile errors make the binding Degraded.
-// This is a structural check; runtime type-errors are handled at the gateway layer.
-func (r *GuardrailBindingReconciler) validateCEL(_ context.Context, binding *authzv1alpha1.GuardrailBinding) error {
-	// For now this is a stub: once the Envoy AI GW CEL variable schema is confirmed
-	// (see 05c §FEATURE_MCP_ARGUMENT_CEL residual), implement full CEL compilation
-	// via github.com/google/cel-go.
-	// The binding carries a securityPolicyRef not inline CEL — the real validation
-	// will fetch the policy and compile each rule expression.
-	if binding.Spec.Envoy == nil {
+// projectEnvoySecurityPolicy compiles the effective tool policy into a CEL expression
+// for structural validation (per design 06 §CEL compile-error fallback), then
+// SSA-applies a SecurityPolicy encoding the allow/deny authorisation rules.
+//
+// The method is a no-op when:
+//   - r.Envoy is nil (gateway integration not configured), or
+//   - the effective policy has no tool allow or deny rules.
+//
+// A non-nil error causes the binding to enter Degraded with condition
+// CELCompilationFailed=True. Rule 02 (security): the error message MUST NOT
+// contain request-body content or decoded CEL runtime values — only structural
+// compile diagnostics are safe to surface.
+func (r *GuardrailBindingReconciler) projectEnvoySecurityPolicy(
+	ctx context.Context,
+	binding *authzv1alpha1.GuardrailBinding,
+	ep *authzv1alpha1.EffectivePolicy,
+) error {
+	if r.Envoy == nil {
 		return nil
 	}
-	// TODO(05c-followup): fetch SecurityPolicy and compile CEL rule expressions.
-	return nil
+	return r.Envoy.Apply(ctx, binding, ep)
 }
 
 // rebacTuplesFor constructs the OpenFGA tuples for a GuardrailBinding.

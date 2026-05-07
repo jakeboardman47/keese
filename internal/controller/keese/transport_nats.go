@@ -30,9 +30,10 @@ type StreamConfig struct {
 }
 
 // NatsStreamer manages JetStream stream lifecycle.
-// The real implementation uses github.com/nats-io/nack; the fake is used in tests.
 //
-// TODO(spec-followup): implement via nack once NATS is in go.mod.
+// Production: ClientNatsStreamer (transport_nats_nack.go) — SSA-projects
+// jetstream.nats.io/v1beta2.Stream CRDs via the controller-runtime client.
+// Tests: FakeNatsStreamer defined below.
 type NatsStreamer interface {
 	// StreamExists returns true and stream info if the named stream exists, false otherwise.
 	StreamExists(ctx context.Context, streamName string) (bool, *StreamInfo, error)

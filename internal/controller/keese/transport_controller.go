@@ -32,6 +32,11 @@ const (
 	// autoCreateStreamAnnotation enables controller-owned NATS stream lifecycle.
 	autoCreateStreamAnnotation = "keese.ai/auto-create-stream"
 
+	// autoManageCertAnnotation enables controller-owned cert-manager Certificate projection.
+	// When set to "true", the controller SSA-projects a Certificate for TLS-needing types.
+	// The tenant ClusterIssuer name is derived as keese-<namespace> by convention.
+	autoManageCertAnnotation = "keese.ai/auto-manage-cert"
+
 	// managedByLabel is the predicate label required on watched transports.
 	managedByLabel = "keese.ai/managed"
 )
@@ -42,21 +47,22 @@ const (
 // Finalizer: finalizers.transport.keese.ai/cleanup (annotation-gated, rule 04.10)
 type TransportReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	Recorder    record.EventRecorder
-	Rebac       TransportRebacWriter
-	Nats        NatsStreamer
-	CTA         CTAResolver
-	CertManager CertManagerReader
+	Scheme           *runtime.Scheme
+	Recorder         record.EventRecorder
+	Rebac            TransportRebacWriter
+	Nats             NatsStreamer
+	CTA              CTAResolver
+	CertManager      CertManagerReader
+	CertProjector    CertificateProjector
 }
 
 // +kubebuilder:rbac:groups=keese.ai,resources=transports,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=keese.ai,resources=transports/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=keese.ai,resources=transports/finalizers,verbs=update
-// +kubebuilder:rbac:groups=jetstream.nats.io,resources=streams;consumers,verbs=get;list;watch;create;update;delete
+// +kubebuilder:rbac:groups=jetstream.nats.io,resources=streams;consumers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=referencegrants,verbs=get;list;watch
 // +kubebuilder:rbac:groups=mcp.keese.ai,resources=mcproutes,verbs=get;list;watch
-// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile drives Transport toward the desired state.
@@ -68,9 +74,10 @@ type TransportReconciler struct {
 //  4. Set phase → Provisioning
 //  5. Validate dependencies (cert, MCPRoute, NATS stream, CTA)
 //  6. Manage finalizer (annotation-gated)
-//  7. Manage NATS stream lifecycle (opt-in)
-//  8. Write ReBAC tuples
-//  9. Transition → Ready; patch status
+//  7. Manage NATS stream lifecycle (opt-in, annotation-gated)
+//  8. Project cert-manager Certificate (opt-in, annotation-gated)
+//  9. Write ReBAC tuples
+// 10. Transition → Ready; patch status
 func (r *TransportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -104,6 +111,13 @@ func (r *TransportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if tr.Spec.Type == keesev1alpha1.TransportTypeNATS && tr.Spec.NATS != nil {
 		if streamResult, streamErr := r.reconcileNATSStream(ctx, &tr, orig); streamErr != nil || streamResult.Requeue || streamResult.RequeueAfter > 0 {
 			return streamResult, streamErr
+		}
+	}
+
+	// --- cert-manager Certificate projection (opt-in) ---
+	if tr.Annotations[autoManageCertAnnotation] == "true" {
+		if certResult, certErr := r.reconcileCertificate(ctx, &tr, orig); certErr != nil || certResult.Requeue || certResult.RequeueAfter > 0 {
+			return certResult, certErr
 		}
 	}
 
@@ -362,6 +376,96 @@ func (r *TransportReconciler) reconcileNATSStream(ctx context.Context, tr *keese
 	return ctrl.Result{}, nil
 }
 
+// reconcileCertificate SSA-projects a cert-manager Certificate for TLS-needing transport
+// types when annotation keese.ai/auto-manage-cert=true is set.
+//
+// Certificate name convention: keese-transport-<transport-name>-tls.
+// Issuer convention: ClusterIssuer keese-<transport-namespace> (tenant default issuer).
+// The SANs are derived from the NATS cluster ref or A2A endpoint hostname.
+//
+// Sets condition CertificateProjected=True on success.
+func (r *TransportReconciler) reconcileCertificate(ctx context.Context, tr *keesev1alpha1.Transport, orig *keesev1alpha1.Transport) (ctrl.Result, error) {
+	certName := "keese-transport-" + tr.Name + "-tls"
+	// Tenant default ClusterIssuer: keese-<namespace>. Each tenant namespace gets one
+	// issued by the operator's self-signed root (see dev/bootstrap/ trust-manager setup).
+	issuerName := "keese-" + tr.Namespace
+
+	// Derive SANs from transport type.
+	var dnsNames []string
+	switch tr.Spec.Type {
+	case keesev1alpha1.TransportTypeNATS:
+		if tr.Spec.NATS != nil {
+			// Use the NATS cluster ref name as the primary SAN; consumers resolve it
+			// via the in-cluster DNS of the NATS StatefulSet headless service.
+			ref := tr.Spec.NATS.ClusterRef
+			ns := ref.Namespace
+			if ns == "" {
+				ns = tr.Namespace
+			}
+			dnsNames = []string{
+				fmt.Sprintf("%s.%s.svc", ref.Name, ns),
+				fmt.Sprintf("%s.%s.svc.cluster.local", ref.Name, ns),
+			}
+		}
+	case keesev1alpha1.TransportTypeA2A:
+		if tr.Spec.A2A != nil {
+			// Strip grpc:// / grpcs:// scheme to obtain the hostname.
+			endpoint := tr.Spec.A2A.Endpoint
+			for _, pfx := range []string{"grpcs://", "grpc://"} {
+				if len(endpoint) > len(pfx) && endpoint[:len(pfx)] == pfx {
+					endpoint = endpoint[len(pfx):]
+					break
+				}
+			}
+			// Strip port if present.
+			for i := len(endpoint) - 1; i >= 0; i-- {
+				if endpoint[i] == ':' {
+					endpoint = endpoint[:i]
+					break
+				}
+				if endpoint[i] == '/' {
+					break
+				}
+			}
+			if endpoint != "" {
+				dnsNames = []string{endpoint}
+			}
+		}
+	}
+
+	if len(dnsNames) == 0 {
+		// No SANs derivable; skip projection without error (cert is optional for this type).
+		return ctrl.Result{}, nil
+	}
+
+	if err := r.CertProjector.ProjectCertificate(ctx, tr.Namespace, certName, dnsNames, issuerName); err != nil {
+		r.Recorder.Eventf(tr, corev1.EventTypeWarning, ReasonCertificateProjectionFailed,
+			"Failed to project Certificate %s/%s: %v", tr.Namespace, certName, err)
+		r.setCondition(&tr.Status.Conditions, metav1.Condition{
+			Type:               "CertificateProjected",
+			Status:             metav1.ConditionFalse,
+			Reason:             "ProjectionFailed",
+			Message:            fmt.Sprintf("cert-manager Certificate projection failed: %v", err),
+			ObservedGeneration: tr.Generation,
+		})
+		tr.Status.ObservedGeneration = tr.Generation
+		return ctrl.Result{RequeueAfter: requeueAfterBackoff},
+			r.Status().Patch(ctx, tr, client.MergeFrom(orig))
+	}
+
+	r.setCondition(&tr.Status.Conditions, metav1.Condition{
+		Type:               "CertificateProjected",
+		Status:             metav1.ConditionTrue,
+		Reason:             "CertificateProjected",
+		Message:            fmt.Sprintf("cert-manager Certificate %s/%s projected", tr.Namespace, certName),
+		ObservedGeneration: tr.Generation,
+	})
+	r.Recorder.Eventf(tr, corev1.EventTypeNormal, ReasonCertificateProjected,
+		"Certificate %s/%s projected via ClusterIssuer %s", tr.Namespace, certName, issuerName)
+
+	return ctrl.Result{}, nil
+}
+
 // reconcileFinalizer adds the cleanup finalizer when the transport owns a NATS stream.
 func (r *TransportReconciler) reconcileFinalizer(ctx context.Context, tr *keesev1alpha1.Transport, orig *keesev1alpha1.Transport) {
 	ownsStream := tr.Spec.Type == keesev1alpha1.TransportTypeNATS &&
@@ -473,6 +577,9 @@ func (r *TransportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	if r.CertManager == nil {
 		r.CertManager = NewFakeCertManagerReader()
+	}
+	if r.CertProjector == nil {
+		r.CertProjector = NewFakeCertificateProjector()
 	}
 
 	labelSelector := predicate.NewPredicateFuncs(func(obj client.Object) bool {

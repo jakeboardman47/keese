@@ -60,4 +60,17 @@ const (
 	// ReasonStreamLagged is emitted when the stdio outboundQueueDepth ceiling is
 	// reached and the oldest frame is dropped.
 	ReasonStreamLagged = "StreamLagged"
+
+	// ReasonCertificateProjected is emitted when the controller successfully SSA-projects
+	// a cert-manager Certificate for a TLS-needing transport type
+	// (annotation keese.ai/auto-manage-cert=true).
+	ReasonCertificateProjected = "CertificateProjected"
+
+	// ReasonCertificateProjectionFailed is emitted when the controller fails to
+	// SSA-project a cert-manager Certificate.
+	ReasonCertificateProjectionFailed = "CertificateProjectionFailed"
+
+	// ReasonNATSStreamProjected is emitted when the controller successfully SSA-projects
+	// the NACK jetstream.nats.io/v1beta2.Stream CRD for an owned NATS transport.
+	ReasonNATSStreamProjected = "NATSStreamProjected"
 )

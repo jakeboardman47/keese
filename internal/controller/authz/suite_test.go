@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	authzv1alpha1 "github.com/keese-ai/keese/api/authz/v1alpha1"
 	// +kubebuilder:scaffold:imports
@@ -56,7 +57,9 @@ func TestControllers(t *testing.T) {
 // per-package isolated. See rule 04-kubernetes.md §16 and the CRD-install
 // timeout root-cause documented in this file's package comment.
 var authzCRDs = []string{
-	"authz.operator.keese.ai_oidcproviders.yaml",
+	"authz.keese.ai_oidcproviders.yaml",
+	// Required by GuardrailBindingReconciler tests in guardrailbinding_controller_test.go.
+	"authz.keese.ai_guardrailbindings.yaml",
 }
 
 var _ = BeforeSuite(func() {
@@ -99,7 +102,13 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).NotTo(BeNil())
 
 	// Start a controller manager so reconcilers run against envtest.
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
+	// Metrics disabled to avoid port conflicts with other test packages.
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme.Scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
+	})
 	Expect(err).NotTo(HaveOccurred())
 
 	err = (&OIDCProviderReconciler{
@@ -108,6 +117,21 @@ var _ = BeforeSuite(func() {
 		Recorder:     mgr.GetEventRecorderFor("oidcprovider-controller"),
 		JwksFetcher:  &FakeJwksFetcher{},
 		CacheFlusher: &FakeCacheFlusher{},
+	}).SetupWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Wire the GuardrailBindingReconciler with fakes so guardrailbinding_controller_test.go
+	// can exercise it in the same envtest environment.
+	fakeRebac = &FakeRebacWriter{}
+	fakeKyverno = &FakeKyvernoProjector{}
+	fakeEnvoy = &FakeEnvoyProjector{}
+	err = (&GuardrailBindingReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("guardrailbinding-controller"),
+		Rebac:    fakeRebac,
+		Kyverno:  fakeKyverno,
+		Envoy:    fakeEnvoy,
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 

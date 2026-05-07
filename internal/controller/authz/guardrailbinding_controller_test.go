@@ -7,6 +7,7 @@ package authz
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -278,7 +279,96 @@ var _ = Describe("GuardrailBinding Controller", func() {
 		})
 	})
 
-	// ── Test 6: finalizer cascade ─────────────────────────────────────────────
+	// ── Test 6: CEL valid → SecurityPolicy projected ─────────────────────────
+
+	Describe("CEL valid — SecurityPolicy projected", func() {
+		const ns = "default"
+		const name = "cel-valid-test"
+		var key = types.NamespacedName{Name: name, Namespace: ns}
+
+		BeforeEach(func() {
+			// Reset fakeEnvoy state and ensure no error is injected.
+			fakeEnvoy.Applied = nil
+			fakeEnvoy.ApplyErr = nil
+		})
+
+		AfterEach(func() {
+			b := &authzv1alpha1.GuardrailBinding{}
+			if err := k8sClient.Get(context.Background(), key, b); err == nil {
+				_ = k8sClient.Delete(context.Background(), b)
+			}
+		})
+
+		It("should reach Ready and record Apply when effective policy has allow/deny tools", func() {
+			b := makeClusterBinding(name, ns, []string{"tool_a", "tool_b"}, []string{"bad_1"})
+			Expect(k8sClient.Create(ctx, b)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				got := &authzv1alpha1.GuardrailBinding{}
+				g.Expect(k8sClient.Get(ctx, key, got)).To(Succeed())
+				g.Expect(got.Status.Phase).To(Equal(authzv1alpha1.BindingPhaseReady))
+				// CELCompilationFailed condition must be False (cleared on success).
+				var celCond *metav1.Condition
+				for i := range got.Status.Conditions {
+					if got.Status.Conditions[i].Type == ConditionCELCompilationFailed {
+						celCond = &got.Status.Conditions[i]
+					}
+				}
+				g.Expect(celCond).NotTo(BeNil(), "CELCompilationFailed condition should be present")
+				g.Expect(celCond.Status).To(Equal(metav1.ConditionFalse))
+				// FakeEnvoyProjector must have recorded the Apply call.
+				g.Expect(fakeEnvoy.Applied).To(ContainElement(ns + "/" + name))
+			}, "10s", "250ms").Should(Succeed())
+		})
+	})
+
+	// ── Test 7: CEL compile error → Degraded, no SecurityPolicy ─────────────
+
+	Describe("CEL compile error — Degraded with CELCompilationFailed condition", func() {
+		const ns = "default"
+		const name = "cel-error-test"
+		var key = types.NamespacedName{Name: name, Namespace: ns}
+
+		BeforeEach(func() {
+			// Inject a CEL compile error. The "[CEL]" prefix triggers the specific
+			// CELCompilationFailed condition path in the controller.
+			fakeEnvoy.Applied = nil
+			fakeEnvoy.ApplyErr = fmt.Errorf("[CEL] compile: expression parse failed: undeclared reference to 'bad_var'")
+		})
+
+		AfterEach(func() {
+			fakeEnvoy.ApplyErr = nil
+			b := &authzv1alpha1.GuardrailBinding{}
+			if err := k8sClient.Get(context.Background(), key, b); err == nil {
+				_ = k8sClient.Delete(context.Background(), b)
+			}
+		})
+
+		It("should enter Degraded with CELCompilationFailed=True when projector returns a CEL error", func() {
+			b := makeClusterBinding(name, ns, []string{"tool_a"}, []string{"bad_1"})
+			Expect(k8sClient.Create(ctx, b)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				got := &authzv1alpha1.GuardrailBinding{}
+				g.Expect(k8sClient.Get(ctx, key, got)).To(Succeed())
+				g.Expect(got.Status.Phase).To(Equal(authzv1alpha1.BindingPhaseDegraded))
+				// CELCompilationFailed condition must be True.
+				var celCond *metav1.Condition
+				for i := range got.Status.Conditions {
+					if got.Status.Conditions[i].Type == ConditionCELCompilationFailed {
+						celCond = &got.Status.Conditions[i]
+					}
+				}
+				g.Expect(celCond).NotTo(BeNil(), "CELCompilationFailed condition must be present")
+				g.Expect(celCond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(celCond.Reason).To(Equal("CELCompileError"))
+				// No Apply call should have been recorded since the error was injected.
+				g.Expect(fakeEnvoy.Applied).To(BeEmpty())
+			}, "10s", "250ms").Should(Succeed())
+		})
+	})
+
+	// ── Test 8: finalizer cascade ─────────────────────────────────────────────
 
 	Describe("finalizer cascade on delete", func() {
 		const ns = "default"
