@@ -81,11 +81,17 @@ spec:
           capabilities:
             drop:
             - "ALL"
-        # Probe schedule aligned to terminationGracePeriodSeconds: 60
-        # per docs/designs/18-process-lifecycle.md (D1-T4 demo plan).
-        # initialDelay(30) + period(10) * failureThreshold(3) = 60s,
-        # equal to the grace period so the kubelet does not SIGKILL
-        # mid-drain (lease release + queue drain + OTEL flush).
+        # Probe schedule vs terminationGracePeriodSeconds (rule 06.8):
+        #   initialDelaySeconds(30) + periodSeconds(10) * failureThreshold(3)
+        #   = 30 + 30 = 60s headroom.
+        # Grace period is 90s (see below), giving 30s margin above the probe
+        # window. This ensures the kubelet does not SIGKILL mid-drain.
+        # Rationale for 90s grace (not relaxed probes): the drain budget is
+        # lease release(5s) + queue drain(30s) + OTEL flush(15s) + buffer(10s)
+        # = 60s. At exactly 60s grace the probe window offered zero slack.
+        # Bumping grace to 90s adds 30s safety margin without weakening the
+        # liveness check, which is the preferable trade-off.
+        # See docs/designs/18-process-lifecycle.md and rule 06.8.
         livenessProbe:
           httpGet:
             path: /healthz
@@ -111,6 +117,9 @@ spec:
         volumeMounts: []
       volumes: []
       serviceAccountName: controller-manager
-      # 60s drain budget (rule 06 + design 18): release lease (5s) +
-      # drain queue (30s) + flush OTEL (15s) + buffer (10s).
-      terminationGracePeriodSeconds: 60
+      # 90s grace period = 60s drain budget + 30s safety margin.
+      # Drain budget: lease release(5s) + queue drain(30s) + OTEL flush(15s)
+      # + buffer(10s) = 60s. The extra 30s ensures the probe window (30+30=60s)
+      # never races the drain on a loaded node. Rule 06.8 satisfied:
+      # 60s probe window < 90s grace. See docs/designs/18-process-lifecycle.md.
+      terminationGracePeriodSeconds: 90
