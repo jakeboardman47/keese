@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -65,15 +66,15 @@ func TestControllers(t *testing.T) {
 // the API server is running. This is the recommended pattern per controller-runtime
 // issue #3106. See commit 3dcdc19 for the original root-cause history.
 var workspaceCRDs = []string{
-	"workspace.operator.keese.ai_workspaces.yaml",
-	"workspace.operator.keese.ai_workspaceshares.yaml",
-	// runtime CRD is in a different GroupVersion (runtime.operator.keese.ai),
+	"keese.ai_workspaces.yaml",
+	"keese.ai_workspaceshares.yaml",
+	// runtime CRD is in a different GroupVersion (keese.ai),
 	// so it does not trigger the same-GV WaitForCRDs limitation noted above.
-	"runtime.operator.keese.ai_agentruntimes.yaml",
+	"keese.ai_agentruntimes.yaml",
 }
 
 // sessionCRD is installed in a second phase after envtest starts (see BeforeSuite).
-const sessionCRD = "workspace.operator.keese.ai_workspacesessions.yaml"
+const sessionCRD = "keese.ai_workspacesessions.yaml"
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
@@ -84,6 +85,8 @@ var _ = BeforeSuite(func() {
 	err = keesev1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 	err = keesev1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = gatewayv1beta1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
@@ -138,7 +141,7 @@ var _ = BeforeSuite(func() {
 	Expect(aexErr).NotTo(HaveOccurred())
 	Eventually(func(g Gomega) {
 		crd, err := aexClient.ApiextensionsV1().CustomResourceDefinitions().Get(
-			context.TODO(), "workspacesessions.workspace.operator.keese.ai", metav1.GetOptions{})
+			context.TODO(), "workspacesessions.keese.ai", metav1.GetOptions{})
 		g.Expect(err).NotTo(HaveOccurred())
 		established := false
 		for _, cond := range crd.Status.Conditions {

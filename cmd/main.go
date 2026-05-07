@@ -47,6 +47,7 @@ import (
 	kyvernov2 "github.com/kyverno/kyverno/api/kyverno/v2"
 	eventingv1 "knative.dev/eventing/pkg/apis/eventing/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	authzv1alpha1 "github.com/keese-ai/keese/api/authz/v1alpha1"
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
@@ -78,6 +79,7 @@ func init() {
 	utilruntime.Must(argov1alpha1.AddToScheme(scheme))
 	utilruntime.Must(eventingv1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1beta1.AddToScheme(scheme))
 	// kyvernov1 hosts ClusterPolicy; kyvernov2 hosts PolicyException + CleanupPolicy.
 	utilruntime.Must(kyvernov1.AddToScheme(scheme))
 	utilruntime.Must(kyvernov2.AddToScheme(scheme))
