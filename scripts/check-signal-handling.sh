@@ -23,7 +23,11 @@ while IFS= read -r -d '' f; do
   #   signal.NotifyContext(*, syscall.SIGTERM)
   #   ctrl.SetupSignalHandler()            # controller-runtime: installs SIGTERM+SIGINT
   #   signals.SetupSignalHandler()         # alternate import alias
-  if grep -qE 'signal\.(Notify|NotifyContext)[^)]*SIGTERM' "${f}" \
+  # Two-grep pass so the call and the SIGTERM constant can sit on different lines
+  # (e.g. signal.NotifyContext spread over two lines for readability) and so
+  # nested parens like context.Background() don't choke a single-grep regex.
+  if { grep -qE 'signal\.(Notify|NotifyContext)\b' "${f}" \
+    && grep -qE 'syscall\.SIGTERM\b' "${f}"; } \
     || grep -qE '(ctrl|signals)\.SetupSignalHandler\(\)' "${f}"; then
     continue
   fi
