@@ -1,0 +1,189 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# azure-openai-stack.yaml — Azure OpenAI provider stack for Envoy AI Gateway.
+#
+# Pattern: Entra Workload Identity (OIDC federated credential) per 05b §Azure-Entra.
+# Agent pods carry only the projected SA token (04b); the gateway exchanges it
+# for an Entra access token via the federated credential — no Azure client
+# secrets ever reach agent pods (rules 05.1, 05.2, 05.6).
+#
+# Prerequisites (not created here):
+#   - Azure AD App Registration with a Federated Credential:
+#       Issuer:  <cluster OIDC issuer URL>
+#       Subject: system:serviceaccount:<ws-namespace>:<sa-name>
+#       Audience: keese-egress-<tenant>
+#   - App Registration granted Cognitive Services OpenAI User on the
+#     Azure OpenAI resource.
+#   - Azure OpenAI resource + deployment created in the target subscription.
+#   (see docs/designs/04b-ii-oidc-trust.md §azure,
+#        deploy/opentofu/azure/identity.tf for automation)
+#
+# Uncomment in dev/bootstrap/aigateway/kustomization.yaml to activate.
+# Replace AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_SUBSCRIPTION_ID,
+# AZURE_RESOURCE_GROUP, and DEPLOYMENT_NAME placeholders before applying.
+#
+# Design refs:
+#   docs/designs/05a-envoy-ai-gateway-topology.md
+#   docs/designs/05b-credential-injection-patterns.md §Azure-Entra
+#   docs/designs/05b-ii-bsp-examples.md §azure-entra
+#   deploy/opentofu/azure/ — Entra federated credential provisioning
+
+# ── 1. ExternalSecret — pull Entra config from OpenBao ──────────────────────
+# OpenBao path: keese/tenants/<tenant>/credentials/azure-openai
+#   Fields: tenant_id, client_id, deployment_name, resource_name
+# Populate with:
+#   bao kv put -mount=keese tenants/<tenant>/credentials/azure-openai \
+#     tenant_id=72f988bf-86f1-41af-91ab-2d7cd011db47 \
+#     client_id=8f94b6e5-3c41-4b7f-9e80-2a1d5c3f1234 \
+#     deployment_name=gpt-4o-keese-demo \
+#     resource_name=keese-demo-openai
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: azure-openai-credentials
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: azure-openai
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    name: keese-openbao
+    kind: ClusterSecretStore
+  target:
+    name: azure-openai-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: tenantId
+      remoteRef:
+        key: tenants/demo-tenant/credentials/azure-openai
+        property: tenant_id
+    - secretKey: clientId
+      remoteRef:
+        key: tenants/demo-tenant/credentials/azure-openai
+        property: client_id
+    - secretKey: deploymentName
+      remoteRef:
+        key: tenants/demo-tenant/credentials/azure-openai
+        property: deployment_name
+    - secretKey: resourceName
+      remoteRef:
+        key: tenants/demo-tenant/credentials/azure-openai
+        property: resource_name
+---
+# ── 2. Backend — Azure OpenAI deployment endpoint ───────────────────────────
+# Format: <resource-name>.openai.azure.com
+# The deployment name is carried in the URL path, not the hostname.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: azure-openai
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: azure-openai
+spec:
+  endpoints:
+    - fqdn:
+        # Replace with your Azure OpenAI resource name.
+        hostname: keese-demo-openai.openai.azure.com
+        port: 443
+---
+# ── 3. BackendTLSPolicy — TLS to Azure OpenAI endpoint ──────────────────────
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: azure-openai-tls
+  namespace: keese-system
+  labels:
+    keese.ai/provider: azure-openai
+spec:
+  targetRefs:
+    - group: gateway.envoyproxy.io
+      kind: Backend
+      name: azure-openai
+  validation:
+    hostname: keese-demo-openai.openai.azure.com
+    caCertificateRefs:
+      - kind: ConfigMap
+        group: ""
+        name: public-ca-bundle
+---
+# ── 4. BackendSecurityPolicy — Entra OIDC credential injection ───────────────
+# type=AzureCredentials instructs the AI Gateway extProc to exchange the agent
+# SA token via Azure Entra OIDC (federated credential) before forwarding to
+# Azure OpenAI. No client secret is stored anywhere.
+#
+# The federatedIdentityCredentialRef names the K8s Secret (synced above) that
+# contains tenantId + clientId for the Entra App Registration.
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: BackendSecurityPolicy
+metadata:
+  name: azure-openai-bsp
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: azure-openai
+spec:
+  type: AzureCredentials
+  azureCredentials:
+    credentialsFile:
+      secretRef:
+        # ExternalSecret above syncs tenantId + clientId here.
+        name: azure-openai-credentials
+  targetRefs:
+    - group: aigateway.envoyproxy.io
+      kind: AIServiceBackend
+      name: azure-openai
+---
+# ── 5. AIServiceBackend — Azure OpenAI with OpenAI schema ───────────────────
+# Azure OpenAI uses the OpenAI-compatible API schema.
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIServiceBackend
+metadata:
+  name: azure-openai
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: azure-openai
+spec:
+  schema:
+    name: AzureOpenAI
+  backendRef:
+    group: gateway.envoyproxy.io
+    kind: Backend
+    name: azure-openai
+---
+# ── 6. AIGatewayRoute — route Azure OpenAI model requests ───────────────────
+# Path prefix /azure-openai is used so agent SDK config can set the base URL.
+# Matches on x-ai-eg-model headers for Azure-deployed OpenAI model IDs.
+# The deployment name in matches should match your Azure OpenAI deployment.
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIGatewayRoute
+metadata:
+  name: azure-openai
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: azure-openai
+spec:
+  parentRefs:
+    - kind: Gateway
+      name: keese-aigateway
+  rules:
+    - backendRefs:
+        - name: azure-openai
+      matches:
+        - headers:
+            - name: x-ai-eg-model
+              value: gpt-4o
+              type: Exact
+        - headers:
+            - name: x-ai-eg-model
+              value: gpt-4o-mini
+              type: Exact
+        - headers:
+            - name: x-ai-eg-model
+              value: gpt-4.1
+              type: Exact

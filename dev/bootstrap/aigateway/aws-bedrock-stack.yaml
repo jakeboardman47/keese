@@ -1,0 +1,179 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# aws-bedrock-stack.yaml — AWS Bedrock provider stack for Envoy AI Gateway.
+#
+# Pattern: OIDC-STS (AssumeRoleWithWebIdentity) per 05b §AWS-OIDC-STS.
+# Agent pods carry only the projected SA token (04b); the gateway exchanges it
+# for short-lived AWS credentials via STS — no AWS keys ever reach agent pods
+# (rules 05.1, 05.2, 05.6).
+#
+# Prerequisites (not created here):
+#   - AWS IAM role with trust policy constraining:
+#       aud = keese-egress-<tenant>
+#       sub = system:serviceaccount:<ws-namespace>:<sa-name>
+#     (see docs/designs/04b-ii-oidc-trust.md §aws)
+#   - ExternalSecret populating the role ARN + region from OpenBao path:
+#       keese/tenants/<tenant>/credentials/bedrock
+#
+# Uncomment in dev/bootstrap/aigateway/kustomization.yaml to activate.
+# Configure TENANT, AWS_REGION, AWS_ACCOUNT_ID, and ROLE_SUFFIX placeholders
+# before applying.
+#
+# Design refs:
+#   docs/designs/05a-envoy-ai-gateway-topology.md
+#   docs/designs/05b-credential-injection-patterns.md §AWS-OIDC-STS
+#   docs/designs/05b-ii-bsp-examples.md §aws-oidc-sts
+
+# ── 1. ExternalSecret — pull role ARN + region from OpenBao ─────────────────
+# OpenBao path: keese/tenants/<tenant>/credentials/bedrock
+#   Fields: role_arn, region
+# Populate with:
+#   bao kv put -mount=keese tenants/<tenant>/credentials/bedrock \
+#     role_arn=arn:aws:iam::<account>:role/keese-<tenant>-bedrock \
+#     region=us-east-1
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: bedrock-credentials
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: aws-bedrock
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    name: keese-openbao
+    kind: ClusterSecretStore
+  target:
+    name: bedrock-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: roleArn
+      remoteRef:
+        key: tenants/demo-tenant/credentials/bedrock
+        property: role_arn
+    - secretKey: region
+      remoteRef:
+        key: tenants/demo-tenant/credentials/bedrock
+        property: region
+---
+# ── 2. Backend — Bedrock regional endpoint ──────────────────────────────────
+# Region is dynamic per tenant; the placeholder us-east-1 is the demo default.
+# For production, parameterize via kustomize ConfigMapGenerator or a separate
+# Backend per region.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: aws-bedrock
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: aws-bedrock
+spec:
+  endpoints:
+    - fqdn:
+        hostname: bedrock-runtime.us-east-1.amazonaws.com
+        port: 443
+---
+# ── 3. BackendTLSPolicy — TLS to Bedrock endpoint ───────────────────────────
+# Uses the trust-manager public-ca-bundle (same pattern as Anthropic stack).
+# See dev/bootstrap/cert-manager-issuers/public-ca-bundle.yaml.
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: aws-bedrock-tls
+  namespace: keese-system
+  labels:
+    keese.ai/provider: aws-bedrock
+spec:
+  targetRefs:
+    - group: gateway.envoyproxy.io
+      kind: Backend
+      name: aws-bedrock
+  validation:
+    hostname: bedrock-runtime.us-east-1.amazonaws.com
+    caCertificateRefs:
+      - kind: ConfigMap
+        group: ""
+        name: public-ca-bundle
+---
+# ── 4. BackendSecurityPolicy — OIDC-STS credential injection ────────────────
+# type=AWSCredentials instructs the AI Gateway extProc to call
+# sts:AssumeRoleWithWebIdentity using the agent SA token (projected by 04b)
+# before forwarding to Bedrock. No static AWS key is stored anywhere.
+#
+# targetRefs attaches to the AIServiceBackend (not the route), so any route
+# that resolves to aws-bedrock gets STS-exchanged credentials automatically.
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: BackendSecurityPolicy
+metadata:
+  name: aws-bedrock-bsp
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: aws-bedrock
+spec:
+  type: AWSCredentials
+  awsCredentials:
+    region: us-east-1
+    credentialsFile:
+      secretRef:
+        # The ExternalSecret above syncs roleArn + region here.
+        # The gateway uses roleArn to call STS with the agent SA token.
+        name: bedrock-credentials
+  targetRefs:
+    - group: aigateway.envoyproxy.io
+      kind: AIServiceBackend
+      name: aws-bedrock
+---
+# ── 5. AIServiceBackend — Bedrock with OpenAI-compat schema ─────────────────
+# Bedrock Converse API is OpenAI-schema-compatible when using the
+# aws-bedrock runtime path; the AI Gateway extProc translates.
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIServiceBackend
+metadata:
+  name: aws-bedrock
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: aws-bedrock
+spec:
+  schema:
+    name: AWS
+  backendRef:
+    group: gateway.envoyproxy.io
+    kind: Backend
+    name: aws-bedrock
+---
+# ── 6. AIGatewayRoute — route Bedrock model requests ────────────────────────
+# Matches on x-ai-eg-model headers for AWS Bedrock model IDs.
+# Add additional matches for other Bedrock-hosted models as needed.
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIGatewayRoute
+metadata:
+  name: aws-bedrock
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: aws-bedrock
+spec:
+  parentRefs:
+    - kind: Gateway
+      name: keese-aigateway
+  rules:
+    - backendRefs:
+        - name: aws-bedrock
+      matches:
+        - headers:
+            - name: x-ai-eg-model
+              value: amazon.nova-pro-v1:0
+              type: Exact
+        - headers:
+            - name: x-ai-eg-model
+              value: amazon.titan-text-premier-v1:0
+              type: Exact
+        - headers:
+            - name: x-ai-eg-model
+              value: us.meta.llama3-3-70b-instruct-v1:0
+              type: Exact

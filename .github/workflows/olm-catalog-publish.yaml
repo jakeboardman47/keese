@@ -1,0 +1,237 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# olm-catalog-publish.yaml — tag-triggered release workflow.
+#
+# On tag push (v*):
+#   1. Build + push bundle image to ghcr.io.
+#   2. Sign with cosign keyless OIDC (rule 05.12 identity regexp).
+#   3. Run bundle-sign-verify.sh (required CI status check).
+#   4. Pull the current catalog index image.
+#   5. Append the new bundle to the catalog via opm render.
+#   6. Push + sign the updated catalog image.
+#
+# Cosign identity:
+#   certificate-identity-regexp: https://github.com/keese-ai/keese/.github/workflows/olm-catalog-publish.yaml
+#   certificate-oidc-issuer:     https://token.actions.githubusercontent.com
+#
+# Design refs:
+#   docs/designs/14a-olm-channels-upgrades.md
+#   docs/designs/14b-olm-dependencies.md
+#   docs/references/olm-bundle-authoring.md
+
+name: OLM Catalog Publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write   # required for cosign keyless OIDC
+
+env:
+  REGISTRY: ghcr.io
+  BUNDLE_IMAGE: ghcr.io/keese-ai/keese-bundle
+  CATALOG_IMAGE: ghcr.io/keese-ai/keese-catalog
+  # Identity anchored from rule 05.12
+  COSIGN_IDENTITY_REGEXP: 'https://github\.com/keese-ai/keese/\.github/workflows/.*'
+  COSIGN_OIDC_ISSUER: 'https://token.actions.githubusercontent.com'
+
+jobs:
+  publish-bundle:
+    name: Build, push, and sign bundle image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      bundle_digest: ${{ steps.push_bundle.outputs.digest }}
+      tag: ${{ steps.resolve_tag.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: resolve_tag
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "tag=${{ github.event.inputs.tag }}" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Assert bundle/ present
+        run: |
+          test -d bundle || {
+            echo "::error file=bundle/::bundle/ missing — cannot publish without a bundle"
+            exit 1
+          }
+
+      - name: Regenerate + validate bundle
+        run: make bundle bundle-validate
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push bundle image
+        id: push_bundle
+        uses: docker/build-push-action@v6
+        with:
+          context: bundle/
+          push: true
+          provenance: true
+          sbom: true
+          tags: ${{ env.BUNDLE_IMAGE }}:${{ steps.resolve_tag.outputs.tag }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/keese-ai/keese
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign bundle image (keyless OIDC)
+        run: |
+          cosign sign --yes \
+            "${{ env.BUNDLE_IMAGE }}@${{ steps.push_bundle.outputs.digest }}"
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Generate SBOM + attest bundle
+        run: |
+          syft "${{ env.BUNDLE_IMAGE }}@${{ steps.push_bundle.outputs.digest }}" \
+            -o spdx-json=bundle-sbom.spdx.json
+          cosign attest --yes --type spdxjson \
+            --predicate bundle-sbom.spdx.json \
+            "${{ env.BUNDLE_IMAGE }}@${{ steps.push_bundle.outputs.digest }}"
+
+      - name: Verify bundle signature (bundle-sign-verify.sh)
+        run: |
+          BUNDLE_IMG="${{ env.BUNDLE_IMAGE }}@${{ steps.push_bundle.outputs.digest }}" \
+            make bundle-sign-verify
+
+  update-catalog:
+    name: Update catalog index image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: publish-bundle
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install opm
+        run: |
+          OPM_VERSION=1.47.0
+          curl -fsSL \
+            "https://github.com/operator-framework/operator-registry/releases/download/v${OPM_VERSION}/linux-amd64-opm" \
+            -o /usr/local/bin/opm
+          chmod +x /usr/local/bin/opm
+          opm version
+
+      - name: Pull existing catalog (or start fresh)
+        id: pull_catalog
+        run: |
+          CATALOG_REF="${{ env.CATALOG_IMAGE }}:latest"
+          # Attempt to pull; if not found, we start with an empty catalog.
+          if docker pull "${CATALOG_REF}" 2>/dev/null; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Render bundle into catalog
+        run: |
+          mkdir -p catalog-out
+          BUNDLE_REF="${{ env.BUNDLE_IMAGE }}@${{ needs.publish-bundle.outputs.bundle_digest }}"
+          TAG="${{ needs.publish-bundle.outputs.tag }}"
+          CATALOG_REF="${{ env.CATALOG_IMAGE }}:latest"
+
+          if [[ "${{ steps.pull_catalog.outputs.exists }}" == "true" ]]; then
+            # Migrate existing catalog to file-based format and render new bundle.
+            opm migrate "${CATALOG_REF}" catalog-out/
+            opm render "${BUNDLE_REF}" \
+              --output=yaml >> catalog-out/keese-catalog.yaml
+          else
+            # Bootstrap: render the first bundle.
+            opm render "${BUNDLE_REF}" \
+              --output=yaml > catalog-out/keese-catalog.yaml
+          fi
+
+          # Validate the catalog.
+          opm validate catalog-out/
+
+      - name: Write catalog Dockerfile
+        run: |
+          cat > catalog-out/Dockerfile <<'EOF'
+          FROM scratch
+          ADD keese-catalog.yaml /configs/keese-catalog.yaml
+          LABEL operators.operatorframework.io.index.configs.v1=/configs
+          EOF
+
+      - name: Build and push catalog image
+        id: push_catalog
+        uses: docker/build-push-action@v6
+        with:
+          context: catalog-out/
+          push: true
+          provenance: true
+          tags: |
+            ${{ env.CATALOG_IMAGE }}:${{ needs.publish-bundle.outputs.tag }}
+            ${{ env.CATALOG_IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/keese-ai/keese
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign catalog image (keyless OIDC)
+        run: |
+          cosign sign --yes \
+            "${{ env.CATALOG_IMAGE }}@${{ steps.push_catalog.outputs.digest }}"
+
+      - name: Verify catalog signature
+        run: |
+          cosign verify \
+            --certificate-identity-regexp="${{ env.COSIGN_IDENTITY_REGEXP }}" \
+            --certificate-oidc-issuer="${{ env.COSIGN_OIDC_ISSUER }}" \
+            "${{ env.CATALOG_IMAGE }}@${{ steps.push_catalog.outputs.digest }}"
+
+      - name: Summary
+        run: |
+          echo "### OLM Catalog Publish Complete" >> "${GITHUB_STEP_SUMMARY}"
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Image | Digest |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "|---|---|" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| bundle | \`${{ needs.publish-bundle.outputs.bundle_digest }}\` |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| catalog | \`${{ steps.push_catalog.outputs.digest }}\` |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Verify with:" >> "${GITHUB_STEP_SUMMARY}"
+          echo '```' >> "${GITHUB_STEP_SUMMARY}"
+          echo "cosign verify --certificate-identity-regexp='${COSIGN_IDENTITY_REGEXP}' \\" >> "${GITHUB_STEP_SUMMARY}"
+          echo "  --certificate-oidc-issuer='${COSIGN_OIDC_ISSUER}' \\" >> "${GITHUB_STEP_SUMMARY}"
+          echo "  ${{ env.CATALOG_IMAGE }}@${{ steps.push_catalog.outputs.digest }}" >> "${GITHUB_STEP_SUMMARY}"
+          echo '```' >> "${GITHUB_STEP_SUMMARY}"

@@ -12,3 +12,23 @@ resources:
   - cluster-secret-store.yaml
   - service-alias.yaml
   - anthropic-llm-stack.yaml
+  # keese-authz Envoy ext_authz sidecar — wires OpenFGA Check on
+  # every gateway request via the SecurityPolicy at the bottom of the
+  # file. See docs/designs/22-egress-toolbinding.md.
+  - keese-authz.yaml
+
+  # ── Additional LLM provider stacks (TD-P2-13) ─────────────────────────────
+  # Default: all three are commented out. Anthropic is the demo path.
+  # Uncomment the desired provider(s) AFTER populating the corresponding
+  # OpenBao secret paths (see each file's header for bao kv put commands)
+  # and after configuring the cloud-side trust prerequisites
+  # (IAM role / WIF pool / Entra federated credential).
+  #
+  # AWS Bedrock (OIDC-STS): sts:AssumeRoleWithWebIdentity, no static key.
+  # - aws-bedrock-stack.yaml
+  #
+  # GCP Vertex AI (Workload Identity Federation): sts.googleapis.com exchange.
+  # - gcp-vertex-stack.yaml
+  #
+  # Azure OpenAI (Entra Workload Identity): federated credential OIDC exchange.
+  # - azure-openai-stack.yaml

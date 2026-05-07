@@ -1,0 +1,187 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# gcp-vertex-stack.yaml — GCP Vertex AI provider stack for Envoy AI Gateway.
+#
+# Pattern: Workload Identity Federation (WIF) per 05b §GCP-WIF.
+# Agent pods carry only the projected SA token (04b); the gateway exchanges it
+# for a GCP access token via sts.googleapis.com + impersonateServiceAccount —
+# no GCP service account keys ever reach agent pods (rules 05.1, 05.2, 05.6).
+#
+# Prerequisites (not created here):
+#   - GCP Workload Identity Pool + provider pointing at the cluster OIDC issuer.
+#   - IAM binding: keese SA can impersonate the GCP SA.
+#     gcloud iam service-accounts add-iam-policy-binding \
+#       keese-<tenant>@<project>.iam.gserviceaccount.com \
+#       --member="principal://iam.googleapis.com/projects/<n>/locations/global/workloadIdentityPools/<pool>/subject/system:serviceaccount:<ns>:<sa>" \
+#       --role=roles/iam.workloadIdentityUser
+#   - GCP SA with roles/aiplatform.user on the project.
+#   (see docs/designs/04b-ii-oidc-trust.md §gcp)
+#
+# Uncomment in dev/bootstrap/aigateway/kustomization.yaml to activate.
+# Replace GCP_PROJECT, GCP_REGION, WIF_POOL, WIF_PROVIDER, GCP_SA_EMAIL
+# with real values before applying.
+#
+# Design refs:
+#   docs/designs/05a-envoy-ai-gateway-topology.md
+#   docs/designs/05b-credential-injection-patterns.md §GCP-WIF
+#   docs/designs/05b-ii-bsp-examples.md §gcp-wif
+
+# ── 1. ExternalSecret — pull WIF config from OpenBao ────────────────────────
+# OpenBao path: keese/tenants/<tenant>/credentials/vertex
+#   Fields: workload_identity_pool, provider, service_account_email, project, region
+# Populate with:
+#   bao kv put -mount=keese tenants/<tenant>/credentials/vertex \
+#     workload_identity_pool=keese-prod-pool \
+#     provider=keese-k8s-provider \
+#     service_account_email=keese-demo-tenant@my-project.iam.gserviceaccount.com \
+#     project=my-gcp-project \
+#     region=us-central1
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: vertex-credentials
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: gcp-vertex
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    name: keese-openbao
+    kind: ClusterSecretStore
+  target:
+    name: vertex-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: workloadIdentityPool
+      remoteRef:
+        key: tenants/demo-tenant/credentials/vertex
+        property: workload_identity_pool
+    - secretKey: provider
+      remoteRef:
+        key: tenants/demo-tenant/credentials/vertex
+        property: provider
+    - secretKey: serviceAccountEmail
+      remoteRef:
+        key: tenants/demo-tenant/credentials/vertex
+        property: service_account_email
+    - secretKey: project
+      remoteRef:
+        key: tenants/demo-tenant/credentials/vertex
+        property: project
+    - secretKey: region
+      remoteRef:
+        key: tenants/demo-tenant/credentials/vertex
+        property: region
+---
+# ── 2. Backend — Vertex AI regional endpoint ────────────────────────────────
+# Region is per GCP project; default is us-central1.
+# Update the hostname when targeting a different region.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: gcp-vertex
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: gcp-vertex
+spec:
+  endpoints:
+    - fqdn:
+        hostname: us-central1-aiplatform.googleapis.com
+        port: 443
+---
+# ── 3. BackendTLSPolicy — TLS to Vertex endpoint ────────────────────────────
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: gcp-vertex-tls
+  namespace: keese-system
+  labels:
+    keese.ai/provider: gcp-vertex
+spec:
+  targetRefs:
+    - group: gateway.envoyproxy.io
+      kind: Backend
+      name: gcp-vertex
+  validation:
+    hostname: us-central1-aiplatform.googleapis.com
+    caCertificateRefs:
+      - kind: ConfigMap
+        group: ""
+        name: public-ca-bundle
+---
+# ── 4. BackendSecurityPolicy — WIF credential injection ─────────────────────
+# type=GoogleCredentials instructs the AI Gateway extProc to exchange the
+# agent SA token via sts.googleapis.com → impersonateServiceAccount before
+# calling Vertex. No GCP service account key is stored anywhere.
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: BackendSecurityPolicy
+metadata:
+  name: gcp-vertex-bsp
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: gcp-vertex
+spec:
+  type: GoogleCredentials
+  googleCredentials:
+    credentialsFile:
+      secretRef:
+        # ExternalSecret above syncs WIF config fields here.
+        name: vertex-credentials
+  targetRefs:
+    - group: aigateway.envoyproxy.io
+      kind: AIServiceBackend
+      name: gcp-vertex
+---
+# ── 5. AIServiceBackend — Vertex AI with Gemini schema ──────────────────────
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIServiceBackend
+metadata:
+  name: gcp-vertex
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: gcp-vertex
+spec:
+  schema:
+    name: GeminiVertexAI
+  backendRef:
+    group: gateway.envoyproxy.io
+    kind: Backend
+    name: gcp-vertex
+---
+# ── 6. AIGatewayRoute — route Vertex/Gemini model requests ──────────────────
+# Path prefix /vertex is used so agent SDK config can set:
+#   ANTHROPIC_BASE_URL=https://<gateway>/vertex  (or equivalent SDK override)
+# Matches on x-ai-eg-model headers for Gemini model IDs.
+apiVersion: aigateway.envoyproxy.io/v1alpha1
+kind: AIGatewayRoute
+metadata:
+  name: gcp-vertex
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+    keese.ai/provider: gcp-vertex
+spec:
+  parentRefs:
+    - kind: Gateway
+      name: keese-aigateway
+  rules:
+    - backendRefs:
+        - name: gcp-vertex
+      matches:
+        - headers:
+            - name: x-ai-eg-model
+              value: gemini-2.0-flash
+              type: Exact
+        - headers:
+            - name: x-ai-eg-model
+              value: gemini-2.0-flash-lite
+              type: Exact
+        - headers:
+            - name: x-ai-eg-model
+              value: gemini-1.5-pro
+              type: Exact
