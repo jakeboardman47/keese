@@ -33,6 +33,29 @@ const (
 	sessionFieldOwner     = "keese-workspacesession-controller"
 	sessionRequeueBackoff = 5 * time.Second
 
+	// Annotation keys used to carry per-session context from other controllers.
+	//
+	// AnnotationWorkflowRunUID is set by the Workflow controller on a
+	// WorkspaceSession when the session is spawned inside a WorkflowRun pod
+	// tree. The value is the WorkflowRun .metadata.uid; it drives the
+	// keese-wf-<uid> projected SA token audience (design 04b §workflowRun).
+	AnnotationWorkflowRunUID = "keese.ai/workflowrun-uid"
+
+	// AnnotationSupervisorUID is set on the parent Workspace when
+	// Workspace.spec.supervisorRef is configured (design 23 / design 04b
+	// §supervisor). The value is the workspace UID used to scope the
+	// keese-supervisor-<ws-uid> projected SA token audience.
+	// This annotation is read from Workspace.metadata.annotations at
+	// pod-build time so that no API field change is required before the
+	// SupervisorRef field lands in v1alpha1 (TD-P2-15 scope constraint).
+	AnnotationSupervisorUID = "keese.ai/supervisor-uid"
+
+	// Token mount paths (rule 05.7 — projected files, never env var values).
+	tokenMountDir        = "/var/run/keese/tokens"
+	tokenPathEgress      = tokenMountDir + "/egress"
+	tokenPathWorkflowRun = tokenMountDir + "/workflowRun"
+	tokenPathSupervisor  = tokenMountDir + "/supervisor"
+
 	// sessionConditionReady is the Ready condition type for WorkspaceSession.
 	sessionConditionReady = "Ready"
 	// sessionConditionProgressing is the Progressing condition type for WorkspaceSession.
@@ -731,7 +754,7 @@ func buildSessionPodObject(
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},
 			},
-			Volumes: sessionPodVolumes(ws, pvcName, tenantName, saTokenExpiry),
+			Volumes: sessionPodVolumes(sess, ws, pvcName, tenantName, saTokenExpiry),
 			Containers: []corev1.Container{
 				{
 					Name:            "agent",
@@ -749,7 +772,7 @@ func buildSessionPodObject(
 					// this with a real attach handshake.)
 					Command: []string{"/bin/sh", "-c"},
 					Args:    []string{"echo 'goose runtime ready; attach via kubectl exec'; exec sleep infinity"},
-					Env:          sessionPodEnv(ws, tenantName),
+					Env:          sessionPodEnv(sess, ws, tenantName),
 					VolumeMounts: sessionPodVolumeMounts(ws),
 					SecurityContext: &corev1.SecurityContext{
 						RunAsNonRoot:             ptr(true),
@@ -806,16 +829,65 @@ func ptrQuantity(s string) *resource.Quantity {
 const gatewayCAConfigMapName = "keese-aigateway-ca"
 
 // sessionPodVolumes builds the per-session pod's volume slice.
-// Always-on: session PVC, projected SA token, scratch /tmp.
-// Conditional: gateway-CA ConfigMap (mounted unconditionally —
-// keese-aigateway-ca should always exist where the AI Gateway is
-// deployed), recipe ConfigMap (only when Workspace.spec.recipeRef
-// is set; the goose runtime's `goose run --recipe` reads this).
+//
+// Always-on: session PVC, projected SA token (egress), scratch /tmp, gateway-CA ConfigMap.
+//
+// Projected SA token sources (design 04b iter-3):
+//   - egress (always): keese-egress-<tenant>       → Envoy AI Gateway
+//   - workflowRun (conditional): keese-wf-<uid>    → NATS bridge; only when
+//     the WorkspaceSession carries annotation keese.ai/workflowrun-uid.
+//   - supervisor (conditional): keese-supervisor-<ws-uid> → ACP supervisor bridge
+//     (design 23); only when the parent Workspace carries annotation
+//     keese.ai/supervisor-uid (set by the operator when supervisorRef is configured).
+//
+// Conditional volumes: recipe ConfigMap (only when Workspace.spec.recipeRef is set).
 func sessionPodVolumes(
+	sess *keesev1alpha1.WorkspaceSession,
 	ws *keesev1alpha1.Workspace,
 	pvcName, tenantName string,
 	saTokenExpiry int64,
 ) []corev1.Volume {
+	// Build the projected SA token sources. Egress is always present.
+	tokenSources := []corev1.VolumeProjection{
+		{
+			ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+				Audience:          fmt.Sprintf("keese-egress-%s", tenantName),
+				ExpirationSeconds: &saTokenExpiry,
+				Path:              "egress",
+			},
+		},
+	}
+
+	// workflowRun projection: conditional on annotation keese.ai/workflowrun-uid
+	// set by the Workflow controller when this session is inside a WorkflowRun.
+	if sess != nil {
+		if wfUID := sess.Annotations[AnnotationWorkflowRunUID]; wfUID != "" {
+			tokenSources = append(tokenSources, corev1.VolumeProjection{
+				ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+					Audience:          fmt.Sprintf("keese-wf-%s", wfUID),
+					ExpirationSeconds: &saTokenExpiry,
+					Path:              "workflowRun",
+				},
+			})
+		}
+	}
+
+	// supervisor projection: conditional on annotation keese.ai/supervisor-uid
+	// set on the Workspace when Workspace.spec.supervisorRef is configured.
+	// The annotation value is the workspace UID used to scope the audience
+	// (design 04b §supervisor; API field deferred to next API bump).
+	if ws != nil {
+		if supUID := ws.Annotations[AnnotationSupervisorUID]; supUID != "" {
+			tokenSources = append(tokenSources, corev1.VolumeProjection{
+				ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
+					Audience:          fmt.Sprintf("keese-supervisor-%s", supUID),
+					ExpirationSeconds: &saTokenExpiry,
+					Path:              "supervisor",
+				},
+			})
+		}
+	}
+
 	vols := []corev1.Volume{
 		{
 			Name: "session",
@@ -829,15 +901,7 @@ func sessionPodVolumes(
 			Name: "sa-token",
 			VolumeSource: corev1.VolumeSource{
 				Projected: &corev1.ProjectedVolumeSource{
-					Sources: []corev1.VolumeProjection{
-						{
-							ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
-								Audience:          fmt.Sprintf("keese-egress-%s", tenantName),
-								ExpirationSeconds: &saTokenExpiry,
-								Path:              "egress",
-							},
-						},
-					},
+					Sources: tokenSources,
 				},
 			},
 		},
@@ -890,7 +954,10 @@ func sessionPodVolumes(
 // at the mirrored gateway CA, KEESE_SESSION_ID/TENANT/WORKSPACE,
 // HOME on the writable session PVC subdir. Conditional:
 // KEESE_RECIPE_PATH when Workspace.spec.recipeRef is set.
-func sessionPodEnv(ws *keesev1alpha1.Workspace, tenantName string) []corev1.EnvVar {
+// sessionPodEnv builds the env vars for the goose runtime container.
+// The first arg (sess) is needed so the function can read TD-P2-15
+// annotations to conditionally publish token-path env vars.
+func sessionPodEnv(sess *keesev1alpha1.WorkspaceSession, ws *keesev1alpha1.Workspace, tenantName string) []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{Name: "GOOSE_PROVIDER", Value: "anthropic"},
 		{Name: "GOOSE_MODEL", Value: "claude-opus-4-7"},
@@ -908,11 +975,29 @@ func sessionPodEnv(ws *keesev1alpha1.Workspace, tenantName string) []corev1.EnvV
 		// HOME on the writable session PVC subdir so goose can
 		// write ~/.local/state/goose/... under readOnlyRootFilesystem.
 		{Name: "HOME", Value: "/var/run/keese/session/home"},
+		// Egress audience is unconditional (rule 05.3); the file is always projected.
+		{Name: "KEESE_EGRESS_TOKEN_PATH", Value: tokenPathEgress},
 	}
 	if ws.Spec.RecipeRef != nil && ws.Spec.RecipeRef.Name != "" {
 		env = append(env, corev1.EnvVar{
 			Name:  "KEESE_RECIPE_PATH",
 			Value: "/var/run/keese/recipes/recipe.yaml",
+		})
+	}
+	// TD-P2-15: token-path env vars are conditional on the projected-volume
+	// shape — only set when the corresponding token source is actually
+	// projected (matches the workflowRun + supervisor projection logic in
+	// sessionPodVolumes).
+	if sess != nil && sess.Annotations[AnnotationWorkflowRunUID] != "" {
+		env = append(env, corev1.EnvVar{
+			Name:  "KEESE_WORKFLOWRUN_TOKEN_PATH",
+			Value: tokenPathWorkflowRun,
+		})
+	}
+	if ws.Annotations[AnnotationSupervisorUID] != "" {
+		env = append(env, corev1.EnvVar{
+			Name:  "KEESE_SUPERVISOR_TOKEN_PATH",
+			Value: tokenPathSupervisor,
 		})
 	}
 	return env
