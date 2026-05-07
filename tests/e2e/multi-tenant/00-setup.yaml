@@ -1,0 +1,134 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 00 (apply): provision two Tenants (alpha, beta), each with a
+# Workspace + WorkspaceSession. Used by TD-P3-07 multi-tenant smoke.
+#
+# Cross-tenant isolation is asserted in 02-cross-tenant-deny.yaml by
+# exec-ing a curl from the alpha session pod toward beta namespace resources
+# and verifying NetworkPolicy blocks the egress.
+#
+# NOTE: requires an existing kind cluster bootstrapped with
+#   make kind-up && make bootstrap-infra
+# Do NOT run with make test-e2e without a live cluster.
+apiVersion: keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: alpha
+spec:
+  adminSubjects:
+    - kind: User
+      name: alice@example.com
+---
+apiVersion: keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: beta
+spec:
+  adminSubjects:
+    - kind: User
+      name: bob@example.com
+---
+# Namespace for alpha tenant. In production the Tenant controller (via
+# Capsule) projects this; in tests we pre-create it so the suite is
+# self-contained against a minimal bootstrap.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: alpha
+  labels:
+    keese.ai/tenant: alpha
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: beta
+  labels:
+    keese.ai/tenant: beta
+---
+# AgentRuntime shared by both workspaces.
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  name: goose-default
+spec:
+  implementation:
+    goose:
+      image: ghcr.io/block/goose:latest
+---
+# Alpha workspace.
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: alpha-ws
+  namespace: alpha
+spec:
+  runtimeRef:
+    name: goose-default
+  tenantRef:
+    name: alpha
+  interactive: true
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow
+  egress:
+    allowedTools:
+      - anthropic.messages
+---
+# Beta workspace.
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: beta-ws
+  namespace: beta
+spec:
+  runtimeRef:
+    name: goose-default
+  tenantRef:
+    name: beta
+  interactive: true
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow
+  egress:
+    allowedTools:
+      - anthropic.messages
+---
+# Memory CR in beta namespace — used in cross-tenant denial test.
+# The alpha session pod must NOT be able to reach this resource's
+# backing ClusterIP.
+apiVersion: keese.ai/v1alpha1
+kind: Memory
+metadata:
+  name: beta-memory
+  namespace: beta
+spec:
+  workspaceRef: beta-ws
+  provider:
+    type: sqlite
+    sqlite:
+      storageSize: "1Gi"
+      reclaimPolicy: Delete
+  embeddingDim: 768
+---
+# Alpha WorkspaceSession.
+apiVersion: keese.ai/v1alpha1
+kind: WorkspaceSession
+metadata:
+  name: alpha-session
+  namespace: alpha
+spec:
+  workspaceRef: alpha-ws
+  attachSubject: "user:alice@example.com"
+  sessionName: default
+  mode: per-user
+---
+# Beta WorkspaceSession.
+apiVersion: keese.ai/v1alpha1
+kind: WorkspaceSession
+metadata:
+  name: beta-session
+  namespace: beta
+spec:
+  workspaceRef: beta-ws
+  attachSubject: "user:bob@example.com"
+  sessionName: default
+  mode: per-user

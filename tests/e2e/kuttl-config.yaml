@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl test suite — keese end-to-end smoke. Runs against an existing
+# kind-keese-* cluster (does NOT spin up its own; that's
+# `--start-kind` territory and adds 5+ min per CI run; the make
+# bootstrap targets are the right precondition).
+#
+# Usage:   make test-e2e                       (the canonical entry point)
+#          kubectl-kuttl test --config tests/e2e/kuttl-config.yaml
+#
+# Prerequisites: a bootstrapped cluster with the AI Gateway stack up.
+#   make kind-up
+#   make bootstrap-infra              # also runs bootstrap-aigw-defense
+#   kubectl apply -f dev/demo/hello-keese.yaml
+#
+# Test cases (one directory per case under testDirs):
+#   tests/e2e/aigw-defense/         — gateway Lua strips client-
+#                                      supplied auth headers. See
+#                                      test-aigw-defense.sh.
+#   tests/e2e/workspace-progression — Tenant → Workspace →
+#                                      WorkspaceSession reaches Ready.
+#                                      Native kuttl assertions on
+#                                      status conditions.
+#
+# Tracked: TD-P1-07 (e2e harness; first case lands here).
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+  - tests/e2e/
+# 5-minute per-test budget — covers gateway warm-up + 4 LLM round-trips.
+timeout: 300
+# Serial execution: one test at a time. Cluster state is shared and
+# tests aren't yet hermetic enough to interleave.
+parallel: 1
+# Don't fail-fast — collect every failure for one CI report.
+suppress:
+  - events

@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl wrapper around scripts/dev/test-aigw-defense.sh — exits the
+# step non-zero (and the kuttl test red) if any of the four assertion
+# cases fails OR if the defense Lua's auth-strip directives are absent.
+#
+# Why a Bash-script wrapper here vs native kuttl assert YAML: the
+# defense Lua is enforced by Envoy at request time, not by a CRD's
+# status field, so we can't observe it via `kubectl get`. The script
+# fires real `curl` requests through the gateway from inside a
+# workspace pod (which has the mounted CA + projected SA token, same
+# as a real agent), and asserts the gateway returns 200 with all
+# four hostile-auth-header shapes.
+#
+# Owner: TD-P1-07 (e2e harness).
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # `namespaced: false` — the script targets keese-system / alpha
+  # namespaces by name, not via kuttl's per-test namespace.
+  # kuttl's `command:` runs from the TEST STEP's directory (not the
+  # kuttl invocation CWD), hence the ../../ to reach repo root.
+  - command: ../../../scripts/dev/test-aigw-defense.sh
+    namespaced: false
+    skipLogOutput: false

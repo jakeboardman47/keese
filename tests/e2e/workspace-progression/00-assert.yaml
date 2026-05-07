@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Progression assertions for the Tenant → Workspace → WorkspaceSession
+# chain landed by 00-apply.yaml. All three commands use `kubectl wait`
+# (or jsonpath wait) so each has its own --timeout and prints a
+# clear error on failure. Keeping the suite-level timeout at 240s
+# gives enough headroom for cold image pulls + PVC binding.
+#
+# Owner: TD-P1-07.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 240
+commands:
+  # Tenant alpha (cluster-scoped) reaches phase=Active.
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active tenant.keese.ai/alpha --timeout=120s
+  # Workspace my-ws reaches Ready=True.
+  - command: kubectl wait --for=condition=Ready workspace/my-ws -n alpha --timeout=120s
+  # WorkspaceSession my-session reaches phase=Active.
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active workspacesession/my-session -n alpha --timeout=120s

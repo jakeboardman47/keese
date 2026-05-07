@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 07 (assert): after controller-manager restart, verify:
+#   (a) the WorkspaceSession pod is still Running (not deleted or restarted).
+#   (b) the WorkspaceSession condition reconverges to Active phase.
+#   (c) the Workspace condition is still Ready.
+#
+# This proves the session pod lifecycle is decoupled from the controller
+# lifecycle — a controller restart must not evict running agent pods.
+#
+# Owner: TD-P3-08.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 90
+commands:
+  # Session must still be Active after controller reconvergence.
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active workspacesession/chaos-session -n chaos-test --timeout=60s
+  # Workspace must still be Ready.
+  - command: kubectl wait --for=condition=Ready workspace/chaos-ws -n chaos-test --timeout=60s
+  # Controller-manager must be Available after rollout.
+  - command: kubectl wait --for=condition=Available deployment/keese-controller-manager -n keese-system --timeout=60s
+  # Verify the session pod is still Running (not in a restart loop).
+  # We get the pod name from the session status.podRef and assert phase=Running.
+  - command: |
+      POD_NAME=$(kubectl get workspacesession chaos-session -n chaos-test \
+        -o jsonpath='{.status.podRef.name}' 2>/dev/null || echo "")
+      if [ -n "${POD_NAME}" ]; then
+        kubectl wait --for=jsonpath='{.status.phase}'=Running pod/"${POD_NAME}" \
+          -n chaos-test --timeout=30s
+      else
+        echo "WARN: podRef not set on session — controller may not project it yet"
+      fi

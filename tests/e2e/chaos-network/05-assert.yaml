@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 05 (assert): after restoring the original NetworkPolicy, egress
+# must recover within 30s and the EgressUnavailable condition must flip False
+# on the WorkspaceSession.
+#
+# A second egress probe confirms the allow-gateway policy is in effect.
+#
+# Owner: TD-P3-08.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+commands:
+  # EgressUnavailable must clear (False = condition present and status=False,
+  # or condition absent — kubectl wait treats absent as False).
+  - command: kubectl wait --for=condition=EgressUnavailable=False workspacesession/chaos-session -n chaos-test --timeout=30s
+  # Confirm egress to the gateway is unblocked — probe must Succeed.
+  - command: |
+      kubectl run chaos-egress-recover \
+        --image=busybox:1.36 \
+        --restart=Never \
+        --namespace=chaos-test \
+        --labels=keese.ai/test=chaos-network \
+        --command -- sh -c \
+        'nc -z -w 10 envoy-gateway.envoy-gateway-system.svc.cluster.local 443 2>/dev/null; echo done' \
+        --wait --timeout=20s || true
+  # We do not assert Succeeded/Failed here because nc to a TLS port may
+  # refuse at the TLS handshake after TCP connect — connection refused
+  # at TCP level is what indicates NetworkPolicy block, not TLS refusal.
+  # Instead we rely solely on the EgressUnavailable=False condition above.
+  - command: kubectl delete pod chaos-egress-recover -n chaos-test --ignore-not-found

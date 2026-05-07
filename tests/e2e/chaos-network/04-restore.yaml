@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 04 (apply): restore normal egress by deleting the chaos deny-all
+# NetworkPolicy injected in step 02. Once deleted, the Workspace controller's
+# allow-gateway NetworkPolicy resumes as the sole policy in the namespace.
+#
+# This tests the recovery path: the WorkspaceSession controller must detect
+# that egress is restored and clear the EgressUnavailable condition.
+#
+# Owner: TD-P3-08.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Delete the chaos deny-all policy by label to restore egress.
+  - command: kubectl delete networkpolicy -n chaos-test -l keese.ai/chaos-fault=egress-deny --ignore-not-found
+  # Also clean up the probe pod from step 03.
+  - command: kubectl delete pod chaos-egress-probe -n chaos-test --ignore-not-found

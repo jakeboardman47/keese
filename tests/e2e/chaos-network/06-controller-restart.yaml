@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 06 (apply): bonus chaos — restart the keese-controller-manager
+# mid-session via rollout restart. The WorkspaceSession pod must NOT be
+# killed (it is owned by the controller but its deletion is not triggered by
+# a controller restart). Reconvergence must happen within 60s of the new
+# manager pod becoming Ready.
+#
+# Owner: TD-P3-08.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Trigger a rolling restart of the controller-manager deployment.
+  # This is equivalent to what an OLM upgrade does at the operator level.
+  - command: kubectl rollout restart deployment/keese-controller-manager -n keese-system
+  # Wait for the rollout to complete (new pod Ready) before asserting
+  # reconvergence in step 07.
+  - command: kubectl rollout status deployment/keese-controller-manager -n keese-system --timeout=90s

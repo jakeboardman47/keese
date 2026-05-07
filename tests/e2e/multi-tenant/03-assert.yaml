@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 03 (assert): verify the cross-tenant denial probe pod
+# exited with a failure (phase=Failed), which proves the NetworkPolicy
+# blocked egress from alpha to beta as required by rule 05 §4-5.
+#
+# A phase=Succeeded here would mean the probe connected — NetworkPolicy
+# did NOT block — which is a test failure.
+#
+# Owner: TD-P3-07.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+commands:
+  # Wait for the probe pod to finish (either phase is terminal).
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Failed pod/cross-tenant-deny-probe -n alpha --timeout=20s

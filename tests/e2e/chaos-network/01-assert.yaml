@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 01 (assert): Workspace + WorkspaceSession reach healthy
+# state before we inject the network partition fault.
+#
+# All waits use kubectl wait (not native kuttl resource matching) per the
+# established project pattern. Timeout 180s covers cold image pulls.
+#
+# Owner: TD-P3-08.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 180
+commands:
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active tenant.keese.ai/chaos --timeout=120s
+  - command: kubectl wait --for=condition=Ready workspace/chaos-ws -n chaos-test --timeout=120s
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active workspacesession/chaos-session -n chaos-test --timeout=120s

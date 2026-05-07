@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl progression case: Tenant → Workspace → WorkspaceSession.
+# Applies the demo manifest then asserts each stage reaches Ready
+# in the next file (00-assert.yaml).
+#
+# Owner: TD-P1-07.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+apply:
+  - ../../../dev/demo/hello-keese.yaml

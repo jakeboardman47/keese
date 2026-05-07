@@ -109,6 +109,24 @@ test-e2e:  ## kuttl against kind-$(KIND_CLUSTER)
 	@$(GUARD_CONTEXT)
 	@if command -v kuttl >/dev/null; then kubectl-kuttl test --config tests/e2e/kuttl-config.yaml; else echo "kuttl missing"; exit 1; fi
 
+.PHONY: test-e2e-extended
+test-e2e-extended:  ## kuttl extended suites: workspace-progression + agentruntime-drain + multi-tenant + chaos-network (requires live kind cluster)
+	@$(GUARD_CONTEXT)
+	@if ! command -v kubectl-kuttl >/dev/null 2>&1 && ! command -v kuttl >/dev/null 2>&1; then \
+		echo "ERROR: kuttl (kubectl-kuttl) not found — install via Nix flake or brew install kuttl"; \
+		exit 1; \
+	fi
+	@if ! kind get clusters 2>/dev/null | grep -q "$(KIND_CLUSTER)"; then \
+		echo "ERROR: kind cluster '$(KIND_CLUSTER)' not found — run 'make kind-up && make bootstrap-infra' first"; \
+		exit 1; \
+	fi
+	@KUTTL=$$(command -v kubectl-kuttl || command -v kuttl); \
+	echo "Running extended e2e suites (workspace-progression, agentruntime-drain, multi-tenant, chaos-network)..."; \
+	$${KUTTL} test tests/e2e/workspace-progression --config tests/e2e/kuttl-config.yaml && \
+	$${KUTTL} test tests/e2e/agentruntime-drain --config tests/e2e/kuttl-config.yaml && \
+	$${KUTTL} test tests/e2e/multi-tenant --config tests/e2e/kuttl-config.yaml && \
+	$${KUTTL} test tests/e2e/chaos-network --config tests/e2e/kuttl-config.yaml
+
 .PHONY: test
 test: test-unit test-integration  ## Composed: unit + integration
 

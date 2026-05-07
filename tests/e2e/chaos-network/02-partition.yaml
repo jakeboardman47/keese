@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 02 (apply): inject a deny-all egress NetworkPolicy in the
+# chaos-test namespace, overriding the allow-gateway policy set by the
+# Workspace controller.
+#
+# The WorkspaceSession pod's goose process will fail to reach the Envoy AI
+# Gateway on port 443. Step 03 asserts the EgressUnavailable condition flips
+# True and the agent exits non-zero within 30s rather than hanging.
+#
+# NOTE: the chaos-deny policy is a second NetworkPolicy object. Both objects
+# coexist; Kubernetes NetworkPolicy semantics are additive for ingress but
+# a deny-all egress policy blocks ALL egress — superseding the allow-gateway
+# policy for any pod not explicitly excluded. We label the deny policy so
+# step 04 can delete it by label selector cleanly.
+#
+# Owner: TD-P3-08.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chaos-deny-all-egress
+  namespace: chaos-test
+  labels:
+    keese.ai/test: chaos-network
+    keese.ai/chaos-fault: egress-deny
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  # Empty egress rules = deny all egress.
+  egress: []

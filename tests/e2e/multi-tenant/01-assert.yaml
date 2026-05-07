@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 01 (assert): both Tenants reach Active, both Workspaces reach
+# Ready, and both WorkspaceSessions reach Active phase.
+#
+# Uses kubectl wait (not native kuttl resource matching) per the established
+# project pattern — native kuttl slice-length matching is too strict for
+# dynamic status condition arrays. Timeout 180s covers cold image pulls.
+#
+# Owner: TD-P3-07.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 180
+commands:
+  # Both Tenants reach Active phase (cluster-scoped).
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active tenant.keese.ai/alpha --timeout=120s
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active tenant.keese.ai/beta --timeout=120s
+  # Both Workspaces reach Ready condition.
+  - command: kubectl wait --for=condition=Ready workspace/alpha-ws -n alpha --timeout=120s
+  - command: kubectl wait --for=condition=Ready workspace/beta-ws -n beta --timeout=120s
+  # Both WorkspaceSessions reach Active phase.
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active workspacesession/alpha-session -n alpha --timeout=120s
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active workspacesession/beta-session -n beta --timeout=120s

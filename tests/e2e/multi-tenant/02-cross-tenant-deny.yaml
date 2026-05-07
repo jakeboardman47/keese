@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 02 (apply): cross-tenant NetworkPolicy denial probe.
+#
+# Launches a one-shot probe pod in the alpha namespace that tries to
+# connect to the beta-memory Service ClusterIP on port 6379 (the Memory
+# CR's projected redis-sentinel stub port used for reachability probing).
+# The default-deny NetworkPolicy applied by the Workspace controller
+# must block the egress; the pod must exit non-zero.
+#
+# We use a separate netcat probe pod (busybox) rather than exec-ing into
+# the alpha session pod because the session pod may not have networking
+# tools installed in the goose image. The probe pod runs in the alpha
+# namespace so it is subject to alpha's NetworkPolicy.
+#
+# Owner: TD-P3-07.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cross-tenant-deny-probe
+  namespace: alpha
+  labels:
+    keese.ai/test: multi-tenant
+    app.kubernetes.io/component: network-probe
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: probe
+      image: busybox:1.36
+      imagePullPolicy: IfNotPresent
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -e
+          # Resolve the beta-memory backing Service FQDN.
+          # The Memory controller projects a headless Service named
+          # "memory-<name>" in the same namespace.
+          BETA_SVC="memory-beta-memory.beta.svc.cluster.local"
+          BETA_PORT="6379"
+
+          echo "Probing ${BETA_SVC}:${BETA_PORT} from alpha namespace..."
+          # nc with a 5s connect timeout. NetworkPolicy block causes immediate
+          # connection refused or a SYN-drop that times out. Either exit code
+          # is non-zero — the probe pod exits 1, which is what step 03 asserts.
+          if nc -z -w 5 "${BETA_SVC}" "${BETA_PORT}" 2>/dev/null; then
+            echo "FAIL: connected to beta namespace resource — NetworkPolicy did NOT block"
+            exit 0
+          else
+            echo "OK: connection refused/timed out — NetworkPolicy blocked cross-tenant egress"
+            # Exit 1 so kuttl's assert-on-failure triggers.
+            # Step 03 asserts phase=Failed which means the probe correctly
+            # recorded the denial (exit 0 from the container would leave
+            # the pod Succeeded and step 03's assert would fail).
+            # We invert: a SUCCESSFUL network block means the probe should
+            # fail fast with exit 1 so we can assert phase=Failed in 03.
+            exit 1
+          fi
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

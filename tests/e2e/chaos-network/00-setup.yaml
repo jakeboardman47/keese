@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 00 (apply): provision a Workspace + WorkspaceSession for the
+# chaos/network-partition test (TD-P3-08).
+#
+# We reuse the workspace-progression fixture shape (single Tenant + Workspace
+# + WorkspaceSession) so the test exercises the same reconciler path as the
+# existing smoke suite.
+#
+# Subsequent steps will:
+#   02 — apply a deny-all NetworkPolicy override blocking egress to the AI Gateway
+#   03 — assert EgressUnavailable condition + goose exits non-zero within 30s
+#   04 — restore the original NetworkPolicy
+#   05 — assert egress recovers + EgressUnavailable clears
+#   06 — restart the keese-controller-manager
+#   07 — assert controller reconverges, session pod survives
+#
+# NOTE: requires an existing kind cluster bootstrapped with
+#   make kind-up && make bootstrap-infra
+# Do NOT run with make test-e2e without a live cluster.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chaos-test
+  labels:
+    keese.ai/tenant: chaos
+---
+apiVersion: keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: chaos
+spec:
+  adminSubjects:
+    - kind: User
+      name: chaos-user@example.com
+---
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  name: goose-chaos
+spec:
+  implementation:
+    goose:
+      image: ghcr.io/block/goose:latest
+---
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: chaos-ws
+  namespace: chaos-test
+spec:
+  runtimeRef:
+    name: goose-chaos
+  tenantRef:
+    name: chaos
+  interactive: true
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow
+  egress:
+    allowedTools:
+      - anthropic.messages
+---
+apiVersion: keese.ai/v1alpha1
+kind: WorkspaceSession
+metadata:
+  name: chaos-session
+  namespace: chaos-test
+spec:
+  workspaceRef: chaos-ws
+  attachSubject: "user:chaos-user@example.com"
+  sessionName: chaos
+  mode: per-user
