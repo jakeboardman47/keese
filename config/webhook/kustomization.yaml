@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Webhook manifests — Service + MutatingWebhookConfiguration +
+# ValidatingWebhookConfiguration for the keese Recipe webhook.
+# Enable by uncommenting the ../webhook and ../certmanager lines in
+# config/default/kustomization.yaml.
+resources:
+  - service.yaml
+  - manifests.yaml

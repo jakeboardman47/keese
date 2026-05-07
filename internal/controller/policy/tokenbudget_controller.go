@@ -25,8 +25,8 @@ import (
 const (
 	tokenBudgetFieldOwner = "keese-tokenbudget-controller"
 
-	// Finalizer ID — format: finalizers.<kind>.operator.keese.ai/<purpose> (rule 04.10).
-	tokenBudgetFinalizer = "finalizers.tokenbudget.operator.keese.ai/envoy-ratelimit-cleanup"
+	// Finalizer ID — format: finalizers.<kind>.keese.ai/<purpose> (rule 04.10).
+	tokenBudgetFinalizer = "finalizers.tokenbudget.keese.ai/envoy-ratelimit-cleanup"
 
 	// reconcileInterval is the polling interval between reconcile cycles.
 	// 10s matches the design spec (10b §"controller read-interval").
@@ -40,7 +40,7 @@ const (
 // SSA fieldOwner: keese-tokenbudget-controller (rule 04.7).
 //
 // Finalizers managed:
-//   - finalizers.tokenbudget.operator.keese.ai/envoy-ratelimit-cleanup
+//   - finalizers.tokenbudget.keese.ai/envoy-ratelimit-cleanup
 type TokenBudgetReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
@@ -50,9 +50,9 @@ type TokenBudgetReconciler struct {
 	RateLimitProj RateLimitProjector
 }
 
-// +kubebuilder:rbac:groups=observability.operator.keese.ai,resources=tokenbudgets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=observability.operator.keese.ai,resources=tokenbudgets/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=observability.operator.keese.ai,resources=tokenbudgets/finalizers,verbs=update
+// +kubebuilder:rbac:groups=policy.keese.ai,resources=tokenbudgets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=policy.keese.ai,resources=tokenbudgets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=policy.keese.ai,resources=tokenbudgets/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile is the main reconciliation loop for TokenBudget.

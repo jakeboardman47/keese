@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# cert-manager Certificate for the webhook server TLS. The operator cert
+# (keese-operator-cert) is the issuer — reusing the existing operator CA
+# rather than creating a second root. Kustomize namePrefix adds "keese-"
+# to "serving-cert" so the final name is "keese-serving-cert"; the
+# cert-manager.io/inject-ca-from annotation in manifests.yaml must match.
+#
+# If cert-manager is absent (local dev), this file is not loaded. Use
+# --disable-webhooks on the manager instead.
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: serving-cert
+  namespace: system
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  dnsNames:
+    - webhook-service.system.svc
+    - webhook-service.system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: webhook-server-cert

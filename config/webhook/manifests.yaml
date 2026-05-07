@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Recipe webhook configurations.
+#
+# MutatingWebhookConfiguration: defaults empty spec fields before validation.
+# ValidatingWebhookConfiguration: runs the three-gate check (tool / model /
+# extension) at admission; see internal/controller/keese/recipe_admission.go.
+#
+# TLS: cert-manager-issued certificate; caBundle is injected automatically
+# via the cert-manager.io/inject-ca-from annotation (see certificate.yaml).
+# When cert-manager is absent (e.g. local dev without TLS), comment out this
+# file from config/webhook/kustomization.yaml and use --disable-webhooks.
+#
+# Rule 04.12: webhooks do only validation/defaulting — no business logic.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutating-webhook-configuration
+  annotations:
+    # cert-manager injects the CA bundle; keep this annotation even if
+    # cert-manager is not yet installed — it is a no-op when absent.
+    cert-manager.io/inject-ca-from: keese-system/serving-cert
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+webhooks:
+  - name: mrecipe.kb.io
+    admissionReviewVersions: ["v1"]
+    clientConfig:
+      service:
+        name: webhook-service
+        namespace: system
+        path: /mutate-keese-ai-v1alpha1-recipe
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["keese.ai"]
+        apiVersions: ["v1alpha1"]
+        resources: ["recipes"]
+        operations: ["CREATE", "UPDATE"]
+        scope: Namespaced
+    sideEffects: None
+    timeoutSeconds: 10
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: keese-system/serving-cert
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+webhooks:
+  - name: vrecipe.kb.io
+    admissionReviewVersions: ["v1"]
+    clientConfig:
+      service:
+        name: webhook-service
+        namespace: system
+        path: /validate-keese-ai-v1alpha1-recipe
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["keese.ai"]
+        apiVersions: ["v1alpha1"]
+        resources: ["recipes"]
+        operations: ["CREATE", "UPDATE"]
+        scope: Namespaced
+    sideEffects: None
+    timeoutSeconds: 10

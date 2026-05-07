@@ -42,7 +42,7 @@ const (
 	// oidcProviderFinalizer is placed on every OIDCProvider CR that has been
 	// reconciled, ensuring the cache-flush signal is sent to gateway pods before
 	// Kubernetes removes the object. Format per rule 04.10.
-	oidcProviderFinalizer = "finalizers.oidcprovider.operator.keese.ai/cache-flush"
+	oidcProviderFinalizer = "finalizers.oidcprovider.keese.ai/cache-flush"
 
 	// oidcFieldOwner is the SSA field manager identifier (rule 04.7).
 	oidcFieldOwner = "keese-oidcprovider-controller"
@@ -102,11 +102,11 @@ var (
 // SSA fieldOwner: keese-oidcprovider-controller (rule 04.7)
 //
 // Finalizers managed:
-//   - finalizers.oidcprovider.operator.keese.ai/cache-flush
+//   - finalizers.oidcprovider.keese.ai/cache-flush
 //     Sends gRPC cache-flush to all gateway pods (max 60s drain) before deletion.
 //
 // Design: docs/designs/04b-projected-sa-identity.md + docs/designs/04b-ii-oidc-trust.md
-// Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md
+// Spec: docs/specs/authz.keese.ai-v1alpha1.md
 type OIDCProviderReconciler struct {
 	client.Client
 	Scheme       *runtime.Scheme
@@ -116,9 +116,9 @@ type OIDCProviderReconciler struct {
 	HTTPClient   *http.Client // optional — used for OIDC discovery
 }
 
-// +kubebuilder:rbac:groups=authz.operator.keese.ai,resources=oidcproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=authz.operator.keese.ai,resources=oidcproviders/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=authz.operator.keese.ai,resources=oidcproviders/finalizers,verbs=update
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=oidcproviders,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=oidcproviders/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=oidcproviders/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile implements the main reconciliation loop for OIDCProvider.

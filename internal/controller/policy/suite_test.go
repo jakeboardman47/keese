@@ -61,7 +61,7 @@ var _ = BeforeSuite(func() {
 
 	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
 	observabilityCRDs := []string{
-		"observability.operator.keese.ai_tokenbudgets.yaml",
+		"policy.keese.ai_tokenbudgets.yaml",
 	}
 	crdPaths := make([]string, 0, len(observabilityCRDs))
 	for _, f := range observabilityCRDs {

@@ -361,6 +361,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Recipe")
 		os.Exit(1)
 	}
+	if err := keesecontroller.SetupRecipeWebhookWithManager(mgr, nil); err != nil {
+		setupLog.Error(err, "unable to register webhook", "webhook", "Recipe")
+		os.Exit(1)
+	}
 	if err := (&keesecontroller.RecipeSourceReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
