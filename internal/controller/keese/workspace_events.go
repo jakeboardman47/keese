@@ -47,4 +47,7 @@ const (
 	// WorkspaceSession drain and resume events (TD-P1-02).
 	ReasonSessionDrained = "SessionDrained"
 	ReasonSessionResumed = "SessionResumed"
+
+	// TokenBudget gating events (TD-P2-14).
+	ReasonTokenBudgetExceeded = "TokenBudgetExceeded"
 )

@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
+	policyv1alpha1 "github.com/keese-ai/keese/api/policy/v1alpha1"
 )
 
 const (
@@ -38,6 +39,14 @@ const (
 	sessionConditionProgressing = "Progressing"
 	// sessionConditionAttached is the Attached condition type for WorkspaceSession.
 	sessionConditionAttached = "Attached"
+
+	// sessionConditionTokenBudgetWithinLimit is set True when the tenant's TokenBudget
+	// is present and consumed < limit, or absent (unlimited default — see checkTokenBudget).
+	sessionConditionTokenBudgetWithinLimit = "TokenBudgetWithinLimit"
+
+	// sessionConditionTokenBudgetExceeded is set True when the tenant's TokenBudget
+	// is present and consumed >= limit, causing pod provisioning to be refused.
+	sessionConditionTokenBudgetExceeded = "TokenBudgetExceeded"
 )
 
 // WorkspaceSessionReconciler reconciles a WorkspaceSession object.
@@ -59,6 +68,7 @@ type WorkspaceSessionReconciler struct {
 // +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=policy.keese.ai,resources=tokenbudgets,verbs=get;list;watch
 
 // Reconcile is the main reconciliation loop for WorkspaceSession.
 // Idiom: fetch → DeepCopy for status patch → handle deletion → ensure desired state → update status.
@@ -132,6 +142,75 @@ func (r *WorkspaceSessionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		r.setSessionProgressing(&sess, "AgentRuntimeNotFound", err.Error())
 		return ctrl.Result{RequeueAfter: sessionRequeueBackoff}, r.patchSessionStatus(ctx, &sess, orig)
 	}
+
+	// --- TokenBudget gate (TD-P2-14) ---
+	// Reads TokenBudget.status (written by the policy/tokenbudget controller) to decide
+	// whether pod provisioning is permitted. Rule 04.4: reading a different controller's
+	// status is fine — only the TokenBudget controller writes TokenBudget.status.
+	budgetExceeded, budgetMsg, budgetErr := r.checkTokenBudget(ctx, &sess, &ws)
+	if budgetErr != nil {
+		log.Error(budgetErr, "TokenBudget lookup error; requeuing")
+		r.setSessionProgressing(&sess, "TokenBudgetLookupFailed", budgetErr.Error())
+		return ctrl.Result{RequeueAfter: sessionRequeueBackoff}, r.patchSessionStatus(ctx, &sess, orig)
+	}
+	if budgetExceeded {
+		r.Recorder.Eventf(&sess, corev1.EventTypeWarning, ReasonTokenBudgetExceeded, "%s", budgetMsg)
+		setSessionCondition(&sess.Status.Conditions, metav1.Condition{
+			Type:               sessionConditionTokenBudgetExceeded,
+			Status:             metav1.ConditionTrue,
+			Reason:             "BudgetExhausted",
+			Message:            budgetMsg,
+			ObservedGeneration: sess.Generation,
+		})
+		setSessionCondition(&sess.Status.Conditions, metav1.Condition{
+			Type:               sessionConditionTokenBudgetWithinLimit,
+			Status:             metav1.ConditionFalse,
+			Reason:             "BudgetExhausted",
+			Message:            budgetMsg,
+			ObservedGeneration: sess.Generation,
+		})
+		setSessionCondition(&sess.Status.Conditions, metav1.Condition{
+			Type:               sessionConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "TokenBudgetExceeded",
+			Message:            budgetMsg,
+			ObservedGeneration: sess.Generation,
+		})
+		// Evict an existing pod if one is running — the budget has been crossed.
+		if sess.Status.PodRef != nil && sess.Spec.Mode != keesev1alpha1.SessionModeShared {
+			evictPod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      sess.Status.PodRef.Name,
+					Namespace: sess.Namespace,
+				},
+			}
+			if delErr := r.Delete(ctx, evictPod); delErr != nil && !errors.IsNotFound(delErr) {
+				log.Error(delErr, "failed to evict session pod on budget exceed", "pod", sess.Status.PodRef.Name)
+			} else {
+				r.Recorder.Eventf(&sess, corev1.EventTypeWarning, ReasonSessionEvicted,
+					"Session pod %s evicted due to TokenBudget exceeded", sess.Status.PodRef.Name)
+				sess.Status.Phase = keesev1alpha1.WorkspaceSessionPhaseEvicted
+			}
+		}
+		sess.Status.ObservedGeneration = sess.Generation
+		sess.Status.LastReconcileTime = metav1.Now()
+		return ctrl.Result{}, r.patchSessionStatus(ctx, &sess, orig)
+	}
+	// Budget within limit (or no budget — unlimited).
+	setSessionCondition(&sess.Status.Conditions, metav1.Condition{
+		Type:               sessionConditionTokenBudgetWithinLimit,
+		Status:             metav1.ConditionTrue,
+		Reason:             "WithinLimit",
+		Message:            budgetMsg,
+		ObservedGeneration: sess.Generation,
+	})
+	setSessionCondition(&sess.Status.Conditions, metav1.Condition{
+		Type:               sessionConditionTokenBudgetExceeded,
+		Status:             metav1.ConditionFalse,
+		Reason:             "WithinLimit",
+		Message:            budgetMsg,
+		ObservedGeneration: sess.Generation,
+	})
 
 	// --- Ensure pod based on Mode ---
 	podName, result, err := r.ensurePod(ctx, &sess, &ws, ar)
@@ -479,6 +558,90 @@ func pokeAnnotationDelta(oldA, newA map[string]string) bool {
 		}
 	}
 	return false
+}
+
+// checkTokenBudget fetches the TokenBudget scoped to the session's tenant and
+// determines whether the budget is exceeded.
+//
+// Lookup strategy: list all TokenBudgets in the session's namespace and find the
+// first one whose spec.scope.tenant.name matches ws.spec.tenantRef.name. A
+// workspace-scoped TokenBudget matching ws.Name is also considered (tenant-scoped
+// takes precedence if both exist).
+//
+// Default (no TokenBudget found): UNLIMITED — returns (false, "no TokenBudget for
+// tenant <name>; defaulting to unlimited", nil). This is intentional: operators
+// who have not configured a budget should not have sessions silently blocked.
+// Document this default with a warning log so it is visible in controller logs.
+//
+// Returns (exceeded bool, humanReadableMessage string, lookupError error).
+// lookupError is non-nil only on API errors — budget-exceeded is a normal
+// false-positive-safe result, never an error.
+func (r *WorkspaceSessionReconciler) checkTokenBudget(
+	ctx context.Context,
+	sess *keesev1alpha1.WorkspaceSession,
+	ws *keesev1alpha1.Workspace,
+) (bool, string, error) {
+	log := logf.FromContext(ctx)
+
+	tenantName := ws.Spec.TenantRef.Name
+
+	var tbList policyv1alpha1.TokenBudgetList
+	if err := r.List(ctx, &tbList, client.InNamespace(sess.Namespace)); err != nil {
+		return false, "", fmt.Errorf("listing TokenBudgets: %w", err)
+	}
+
+	var matched *policyv1alpha1.TokenBudget
+	for i := range tbList.Items {
+		tb := &tbList.Items[i]
+		if tb.Spec.Scope.Tenant != nil && tb.Spec.Scope.Tenant.Name == tenantName {
+			matched = tb
+			break // tenant-scoped takes precedence over workspace-scoped
+		}
+		if matched == nil && tb.Spec.Scope.Workspace != nil && tb.Spec.Scope.Workspace.Name == ws.Name {
+			matched = tb
+		}
+	}
+
+	if matched == nil {
+		// No TokenBudget configured for this tenant — default to unlimited.
+		// This is the intentional safe default: operators who have not
+		// configured a budget should not have sessions blocked silently.
+		msg := fmt.Sprintf("no TokenBudget for tenant %q; defaulting to unlimited", tenantName)
+		log.Info("TokenBudget not found; applying unlimited default", "tenant", tenantName)
+		return false, msg, nil
+	}
+
+	// Phase Exhausted or SoftExhausted with ExhaustionMode=hard → gate.
+	// SoftExhausted with mode=soft or mode=disabled → warn only (no gate).
+	// Disabled mode → never gate regardless of phase.
+	switch matched.Spec.ExhaustionMode {
+	case policyv1alpha1.ExhaustionModeDisabled:
+		return false,
+			fmt.Sprintf("TokenBudget %q exhaustion mode is disabled; unlimited", matched.Name),
+			nil
+	case policyv1alpha1.ExhaustionModeSoft:
+		if matched.Status.Phase == policyv1alpha1.TokenBudgetPhaseExhausted ||
+			matched.Status.Phase == policyv1alpha1.TokenBudgetPhaseSoftExhausted {
+			// Soft mode: log and emit event but do not block.
+			log.Info("TokenBudget soft-exhausted; session allowed to proceed",
+				"budget", matched.Name, "phase", matched.Status.Phase)
+			return false,
+				fmt.Sprintf("TokenBudget %q soft-exhausted (phase=%s); session allowed (soft mode)",
+					matched.Name, matched.Status.Phase),
+				nil
+		}
+	case policyv1alpha1.ExhaustionModeHard:
+		if matched.Status.Phase == policyv1alpha1.TokenBudgetPhaseExhausted {
+			return true,
+				fmt.Sprintf("TokenBudget %q exhausted (phase=%s, mode=hard); pod provisioning refused",
+					matched.Name, matched.Status.Phase),
+				nil
+		}
+	}
+
+	return false,
+		fmt.Sprintf("TokenBudget %q within limit (phase=%s)", matched.Name, matched.Status.Phase),
+		nil
 }
 
 // --- Resource builders ---
