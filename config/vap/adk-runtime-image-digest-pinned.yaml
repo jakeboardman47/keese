@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# adk-runtime-image-digest-pinned — rejects AgentRuntime resources whose
+# adkPython.image or adkGo.image does not contain '@sha256:' unless the
+# resource namespace carries the label keese.ai/environment=dev (dev-overlay
+# exemption per rule 05.12). CEL only; no cross-resource lookup needed, so
+# VAP is preferred over an admission webhook per rule 04.12.
+#
+# Design reference: docs/designs/07-agent-runtime-spi.md
+# Plan reference:   docs/plans/expansion/E0-runtime-spi-expansion.md §T6
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: adk-runtime-image-digest-pinned
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/policy-tier: static
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["keese.ai"]
+        apiVersions: ["v1alpha1"]
+        resources: ["agentruntimes"]
+        operations: ["CREATE", "UPDATE"]
+  matchConditions:
+    - name: has-adk-provider
+      expression: >
+        has(object.spec.implementation.adkPython) ||
+        has(object.spec.implementation.adkGo)
+  variables:
+    - name: isDevNamespace
+      expression: >
+        has(namespaceObject.metadata.labels) &&
+        ('keese.ai/environment' in namespaceObject.metadata.labels) &&
+        namespaceObject.metadata.labels['keese.ai/environment'] == 'dev'
+    - name: adkPythonImageOk
+      expression: >
+        !has(object.spec.implementation.adkPython) ||
+        object.spec.implementation.adkPython.image.contains('@sha256:')
+    - name: adkGoImageOk
+      expression: >
+        !has(object.spec.implementation.adkGo) ||
+        object.spec.implementation.adkGo.image.contains('@sha256:')
+  validations:
+    - expression: >
+        variables.isDevNamespace ||
+        (variables.adkPythonImageOk && variables.adkGoImageOk)
+      message: >
+        ADK runtime images must be digest-pinned (contain '@sha256:') in
+        non-dev namespaces. Add '@sha256:<digest>' to the image field, or
+        label the namespace with keese.ai/environment=dev for dev overlays.
+      reason: Invalid
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: adk-runtime-image-digest-pinned-binding
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  policyName: adk-runtime-image-digest-pinned
+  validationActions: [Deny]
+  matchResources: {}

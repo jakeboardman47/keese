@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+---
+# Minimal variant — only required fields.
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: agentruntime-adk-python-minimal
+spec:
+  implementation:
+    adkPython:
+      image: ghcr.io/keese-ai/adk-python@sha256:0000000000000000000000000000000000000000000000000000000000000001
+---
+# Fully populated variant — all optional fields set.
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: agentruntime-adk-python-full
+spec:
+  implementation:
+    adkPython:
+      image: ghcr.io/keese-ai/adk-python@sha256:0000000000000000000000000000000000000000000000000000000000000001
+      pythonVersion: "3.12"
+      adkVersion: "0.4.0"
+      sessionStoreRef:
+        name: adk-python-session-store
+      compactionInterval: 1h

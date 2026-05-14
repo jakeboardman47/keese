@@ -50,4 +50,6 @@ func init() {
 	RegisterImpl("goose")
 	RegisterImpl("claudeCode")
 	RegisterImpl("aider")
+	RegisterImpl("adkPython")
+	RegisterImpl("adkGo")
 }

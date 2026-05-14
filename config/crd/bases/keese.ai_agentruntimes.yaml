@@ -59,6 +59,87 @@ spec:
                   Implementation selects and configures the runtime provider.
                   Exactly one sub-field must be set (enforced by CEL XValidation).
                 properties:
+                  adkGo:
+                    description: AdkGo configures the Google ADK Go runtime provider.
+                    properties:
+                      adkVersion:
+                        description: ADKVersion pins the google-adk-go module version
+                          (e.g. "0.1.0").
+                        type: string
+                      compactionInterval:
+                        description: CompactionInterval controls how often the session
+                          store is compacted.
+                        type: string
+                      goVersion:
+                        description: GoVersion is the Go toolchain version to use
+                          (e.g. "1.24").
+                        type: string
+                      image:
+                        description: |-
+                          Image is the OCI reference for the ADK Go runtime image.
+                          In production this must be digest-pinned (enforced by VAP adk-runtime-image-digest-pinned).
+                        minLength: 1
+                        type: string
+                      sessionStoreRef:
+                        description: |-
+                          SessionStoreRef references a namespace-scoped Secret or ConfigMap that
+                          holds the session-store connection parameters for this provider.
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    required:
+                    - image
+                    type: object
+                  adkPython:
+                    description: AdkPython configures the Google ADK Python runtime
+                      provider.
+                    properties:
+                      adkVersion:
+                        description: ADKVersion pins the google-adk package version
+                          (e.g. "0.4.0").
+                        type: string
+                      compactionInterval:
+                        description: CompactionInterval controls how often the session
+                          store is compacted.
+                        type: string
+                      image:
+                        description: |-
+                          Image is the OCI reference for the ADK Python runtime image.
+                          In production this must be digest-pinned (enforced by VAP adk-runtime-image-digest-pinned).
+                        minLength: 1
+                        type: string
+                      pythonVersion:
+                        description: PythonVersion is the Python interpreter version
+                          to use (e.g. "3.12").
+                        type: string
+                      sessionStoreRef:
+                        description: |-
+                          SessionStoreRef references a namespace-scoped Secret or ConfigMap that
+                          holds the session-store connection parameters for this provider.
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    required:
+                    - image
+                    type: object
                   aider:
                     description: Aider configures the aider runtime provider (stub
                       at v1alpha1).
@@ -119,9 +200,11 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-validations:
-                - message: exactly one of goose, claudeCode, or aider must be set
+                - message: exactly one of goose, claudeCode, aider, adkPython, or
+                    adkGo must be set
                   rule: '(has(self.goose) ? 1 : 0) + (has(self.claudeCode) ? 1 : 0)
-                    + (has(self.aider) ? 1 : 0) == 1'
+                    + (has(self.aider) ? 1 : 0) + (has(self.adkPython) ? 1 : 0) +
+                    (has(self.adkGo) ? 1 : 0) == 1'
             required:
             - implementation
             type: object

@@ -60,6 +60,8 @@ import (
 
 	// AgentRuntime SPI providers — blank import drives Register() in
 	// each provider's init(). Spec §Static registration.
+	_ "github.com/keese-ai/keese/internal/runtime/providers/adkgo"
+	_ "github.com/keese-ai/keese/internal/runtime/providers/adkpython"
 	_ "github.com/keese-ai/keese/internal/runtime/providers/goose"
 	// +kubebuilder:scaffold:imports
 )

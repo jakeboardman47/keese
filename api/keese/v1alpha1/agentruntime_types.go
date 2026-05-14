@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -60,10 +61,60 @@ type ClaudeCodeSpec struct{}
 // AiderSpec is a stub; no sub-fields at v1alpha1.
 type AiderSpec struct{}
 
+// ADKPythonSpec holds configuration for the Google ADK Python runtime provider.
+type ADKPythonSpec struct {
+	// Image is the OCI reference for the ADK Python runtime image.
+	// In production this must be digest-pinned (enforced by VAP adk-runtime-image-digest-pinned).
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image"`
+
+	// PythonVersion is the Python interpreter version to use (e.g. "3.12").
+	// +optional
+	PythonVersion string `json:"pythonVersion,omitempty"`
+
+	// ADKVersion pins the google-adk package version (e.g. "0.4.0").
+	// +optional
+	ADKVersion string `json:"adkVersion,omitempty"`
+
+	// SessionStoreRef references a namespace-scoped Secret or ConfigMap that
+	// holds the session-store connection parameters for this provider.
+	// +optional
+	SessionStoreRef *corev1.LocalObjectReference `json:"sessionStoreRef,omitempty"`
+
+	// CompactionInterval controls how often the session store is compacted.
+	// +optional
+	CompactionInterval *metav1.Duration `json:"compactionInterval,omitempty"`
+}
+
+// ADKGoSpec holds configuration for the Google ADK Go runtime provider.
+type ADKGoSpec struct {
+	// Image is the OCI reference for the ADK Go runtime image.
+	// In production this must be digest-pinned (enforced by VAP adk-runtime-image-digest-pinned).
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image"`
+
+	// GoVersion is the Go toolchain version to use (e.g. "1.24").
+	// +optional
+	GoVersion string `json:"goVersion,omitempty"`
+
+	// ADKVersion pins the google-adk-go module version (e.g. "0.1.0").
+	// +optional
+	ADKVersion string `json:"adkVersion,omitempty"`
+
+	// SessionStoreRef references a namespace-scoped Secret or ConfigMap that
+	// holds the session-store connection parameters for this provider.
+	// +optional
+	SessionStoreRef *corev1.LocalObjectReference `json:"sessionStoreRef,omitempty"`
+
+	// CompactionInterval controls how often the session store is compacted.
+	// +optional
+	CompactionInterval *metav1.Duration `json:"compactionInterval,omitempty"`
+}
+
 // AgentRuntimeImplementation is the discriminated one-of for the runtime provider.
 // CEL XValidation enforces exactly one field is set.
 //
-// +kubebuilder:validation:XValidation:rule="(has(self.goose) ? 1 : 0) + (has(self.claudeCode) ? 1 : 0) + (has(self.aider) ? 1 : 0) == 1",message="exactly one of goose, claudeCode, or aider must be set"
+// +kubebuilder:validation:XValidation:rule="(has(self.goose) ? 1 : 0) + (has(self.claudeCode) ? 1 : 0) + (has(self.aider) ? 1 : 0) + (has(self.adkPython) ? 1 : 0) + (has(self.adkGo) ? 1 : 0) == 1",message="exactly one of goose, claudeCode, aider, adkPython, or adkGo must be set"
 type AgentRuntimeImplementation struct {
 	// Goose configures the goose headless runtime provider.
 	// +optional
@@ -76,6 +127,14 @@ type AgentRuntimeImplementation struct {
 	// Aider configures the aider runtime provider (stub at v1alpha1).
 	// +optional
 	Aider *AiderSpec `json:"aider,omitempty"`
+
+	// AdkPython configures the Google ADK Python runtime provider.
+	// +optional
+	AdkPython *ADKPythonSpec `json:"adkPython,omitempty"`
+
+	// AdkGo configures the Google ADK Go runtime provider.
+	// +optional
+	AdkGo *ADKGoSpec `json:"adkGo,omitempty"`
 }
 
 // AgentRuntimeSpec defines the desired state of AgentRuntime.
