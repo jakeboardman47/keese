@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Asserts the in-cluster Memory backends provisioned by 00-apply.yaml come up
+# AUTHENTICATED. readyReplicas=1 means the auth entrypoint started cleanly — a
+# wrong per-image entrypoint path would crashloop and time out here. We also
+# assert the credential is a projected Secret file (rule 05.7) and that no
+# container uses env-var secrets.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+commands:
+  # --- Redis: requirepass read from the projected file ---
+  - command: kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 statefulset/mem-redis-auth-redis -n mem-auth-dev --timeout=180s
+  - script: |
+      kubectl get statefulset mem-redis-auth-redis -n mem-auth-dev \
+        -o jsonpath='{.spec.template.spec.volumes[*].projected.sources[*].secret.name}' | grep -qw redis-creds
+  - script: |
+      # rule 05.7: no env.valueFrom.secretKeyRef / envFrom on the pod.
+      ! kubectl get statefulset mem-redis-auth-redis -n mem-auth-dev -o yaml | grep -qE 'secretKeyRef|envFrom'
+  # --- Neo4j: NEO4J_AUTH derived from the projected file (the flagged entrypoint) ---
+  - command: kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 statefulset/mem-neo4j-auth-neo4j -n mem-auth-dev --timeout=240s
+  - script: |
+      kubectl get statefulset mem-neo4j-auth-neo4j -n mem-auth-dev \
+        -o jsonpath='{.spec.template.spec.volumes[*].projected.sources[*].secret.name}' | grep -qw neo4j-creds
+  - script: |
+      # Authenticated Neo4j must NOT carry the NEO4J_AUTH=none env var.
+      ! kubectl get statefulset mem-neo4j-auth-neo4j -n mem-auth-dev \
+        -o jsonpath='{.spec.template.spec.containers[*].env[*].name}' | grep -qw NEO4J_AUTH

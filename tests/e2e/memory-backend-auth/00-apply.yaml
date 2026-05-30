@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Verifies the in-cluster Memory backend AUTH path: when credentialSecretRef
+# is set, the controller provisions a StatefulSet that mounts the Secret as a
+# projected file (rule 05.7) and starts the backend authenticated. If the
+# per-image auth entrypoint were wrong the pod would crashloop and never reach
+# readyReplicas=1 — see 00-assert.yaml.
+#
+# Namespace is labelled keese.ai/env=dev so the HA gate (redis/qdrant
+# replicas >= 2 outside dev) is satisfied with a single replica.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mem-auth-dev
+  labels:
+    keese.ai/env: dev
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-creds
+  namespace: mem-auth-dev
+type: Opaque
+stringData:
+  password: "s3cr3t-redis-pass"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: neo4j-creds
+  namespace: mem-auth-dev
+type: Opaque
+stringData:
+  password: "s3cr3t-neo4j-pass"
+---
+# Redis in-cluster (address omitted) with projected-file auth.
+apiVersion: keese.ai/v1alpha1
+kind: Memory
+metadata:
+  name: mem-redis-auth
+  namespace: mem-auth-dev
+  labels:
+    keese.ai/managed: "true"
+spec:
+  workspaceRef: mem-auth-ws
+  embeddingDim: 768
+  provider:
+    type: redis
+    redis:
+      credentialSecretRef: redis-creds
+---
+# Neo4j in-cluster (uri omitted) — the riskiest auth entrypoint
+# (/startup/docker-entrypoint.sh); this is the case worth confirming in CI.
+apiVersion: keese.ai/v1alpha1
+kind: Memory
+metadata:
+  name: mem-neo4j-auth
+  namespace: mem-auth-dev
+  labels:
+    keese.ai/managed: "true"
+spec:
+  workspaceRef: mem-auth-ws
+  embeddingDim: 768
+  provider:
+    type: neo4j
+    neo4j:
+      credentialSecretRef: neo4j-creds

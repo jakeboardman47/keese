@@ -123,7 +123,7 @@ test-e2e:  ## kuttl against kind-$(KIND_CLUSTER)
 	@if command -v kuttl >/dev/null; then kubectl-kuttl test --config tests/e2e/kuttl-config.yaml; else echo "kuttl missing"; exit 1; fi
 
 .PHONY: test-e2e-extended
-test-e2e-extended:  ## kuttl extended suites: workspace-progression + agentruntime-drain + multi-tenant + chaos-network + cross-workspace + non-interactive-launcher (requires live kind cluster + seeded OpenFGA + OpenBao)
+test-e2e-extended:  ## kuttl extended suites: workspace-progression + agentruntime-drain + multi-tenant + chaos-network + cross-workspace + non-interactive-launcher + memory-backend-auth (requires live kind cluster + seeded OpenFGA + OpenBao)
 	@$(GUARD_CONTEXT)
 	@if ! command -v kubectl-kuttl >/dev/null 2>&1 && ! command -v kuttl >/dev/null 2>&1; then \
 		echo "ERROR: kuttl (kubectl-kuttl) not found — install via Nix flake or brew install kuttl"; \
@@ -135,13 +135,14 @@ test-e2e-extended:  ## kuttl extended suites: workspace-progression + agentrunti
 	fi
 	@bash tests/e2e/lib/check-prereqs.sh || { echo "ERROR: e2e prereqs not satisfied — see message above"; exit 1; }
 	@KUTTL=$$(command -v kubectl-kuttl || command -v kuttl); \
-	echo "Running extended e2e suites (workspace-progression, agentruntime-drain, multi-tenant, chaos-network, cross-workspace, non-interactive-launcher)..."; \
+	echo "Running extended e2e suites (workspace-progression, agentruntime-drain, multi-tenant, chaos-network, cross-workspace, non-interactive-launcher, memory-backend-auth)..."; \
 	$${KUTTL} test tests/e2e/workspace-progression --config tests/e2e/kuttl-config.yaml && \
 	$${KUTTL} test tests/e2e/agentruntime-drain --config tests/e2e/kuttl-config.yaml && \
 	$${KUTTL} test tests/e2e/multi-tenant --config tests/e2e/kuttl-config.yaml && \
 	$${KUTTL} test tests/e2e/chaos-network --config tests/e2e/kuttl-config.yaml && \
 	$${KUTTL} test tests/e2e/cross-workspace --config tests/e2e/kuttl-config.yaml && \
-	$${KUTTL} test tests/e2e/non-interactive-launcher --config tests/e2e/kuttl-config.yaml
+	$${KUTTL} test tests/e2e/non-interactive-launcher --config tests/e2e/kuttl-config.yaml && \
+	$${KUTTL} test tests/e2e/memory-backend-auth --config tests/e2e/kuttl-config.yaml
 
 .PHONY: test-e2e-olm-upgrade
 test-e2e-olm-upgrade:  ## kuttl OLM upgrade suite: install v1, upgrade to v2, assert cross-version stability (requires kind cluster + pre-loaded bundle images)
