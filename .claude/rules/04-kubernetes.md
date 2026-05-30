@@ -9,10 +9,20 @@ here blocks merge; exceptions require an ADR in `docs/designs/`.
 
 ## API surface
 
-1. **Group domain.** Every API group is `<domain>.operator.keese.ai`. Current
-   domains: `workspace`, `workflow`, `runtime`, `memory`, `recipe`,
-   `guardrail`, `observability`, `transport`. No new top-level group without
-   an ADR referenced in `docs/designs/20-api-group-layout.md`.
+1. **Group domain.** Every API group is one of three:
+   - `keese.ai` — core: workload primitives (workspace, runtime,
+     memory, recipe, transport, workflow, tenant, …). Cluster scope
+     and namespace scope mix freely, mirroring k8s `core/v1`.
+   - `authz.keese.ai` — access control: identity, cross-tenant
+     trust, guardrails, tool naming. Mirrors k8s
+     `rbac.authorization.k8s.io/v1`.
+   - `policy.keese.ai` — quantitative constraints: token budgets,
+     future cost / rate kinds. Mirrors k8s `policy/v1`.
+
+   No new top-level group without an ADR rewriting
+   [`docs/designs/20a-api-group-layout.md`](../../docs/designs/20a-api-group-layout.md).
+   The `.operator.` segment used pre-2026-05-06 is gone — no upstream
+   uses it.
 2. **Versioning.** All new kinds land as `v1alpha1`. Promotion to `v1beta1`
    requires a conversion webhook and a `docs/plans/migration-<kind>.md`
    migration plan scored ≥ 90.
@@ -46,7 +56,7 @@ here blocks merge; exceptions require an ADR in `docs/designs/`.
    the marker comment.
 10. **Finalizers** required on any reconciler that allocates external
     resources. ID format:
-    `finalizers.<kind>.operator.keese.ai/<purpose>`.
+    `finalizers.<kind>.keese.ai/<purpose>`.
 11. **Events** use `recorder.Eventf` with `reason` from a finite const
     table in `internal/controller/<group>/<kind>/events.go`. No free-text
     reasons.
