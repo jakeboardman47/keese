@@ -76,7 +76,7 @@ func (r *SharedMemoryReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// HA validation.
-	if err := validateHA(sm.Spec.Provider, sm.Namespace); err != nil {
+	if err := validateHA(sm.Spec.Provider, sm.Namespace, namespaceLabels(ctx, r.Client, sm.Namespace)); err != nil {
 		log.Info("HA violation detected on SharedMemory", "reason", err.Error())
 		r.Recorder.Eventf(sm, corev1.EventTypeWarning, ReasonHAViolation, "%s", err.Error())
 		return r.setSharedStatus(ctx, sm, orig, keesev1alpha1.MemoryPhaseDegraded,

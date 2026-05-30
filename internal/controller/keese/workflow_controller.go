@@ -292,8 +292,10 @@ func (r *WorkflowReconciler) reconcileCronTrigger(ctx context.Context, wf *keese
 									Image:   launcherImage,
 									Command: []string{"keese-wf-launcher"},
 									Args: []string{
-										"--workflow", wf.Name,
+										"--workspace", wf.Spec.WorkspaceRef.Name,
 										"--namespace", wf.Namespace,
+										"--session-name", "wf-" + wf.Name,
+										"--cleanup",
 									},
 									SecurityContext: &corev1.SecurityContext{
 										ReadOnlyRootFilesystem:   ptr[bool](true),

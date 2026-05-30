@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# goose custom_providers JSON — installs as a ConfigMap, mounted into
+# the goose runtime pod at $HOME/.config/goose/custom_providers/. The
+# `engine: openai` + `supports_streaming: false` combination forces
+# goose to use its OpenAI engine code path (which has a non-streaming
+# response parser) and routes through the keese AI Gateway's OpenAI
+# schema processor. This sidesteps envoyproxy/ai-gateway#1894 (the
+# Anthropic-translator's streaming/Buffered EOF bug).
+#
+# Requires goose >= v1.33.1 (the JSON-file loader for
+# ~/.config/goose/custom_providers/*.json was wired post-1.30.0; not
+# present in ghcr.io/block/goose:latest, hence the keese-goose:1.33.1
+# image we build from source in dev/runtimes/goose-from-source/).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: goose-custom-providers
+  namespace: alpha
+  labels:
+    keese.ai/runtime-config: "true"
+data:
+  keese-gateway.json: |
+    {
+      "name": "keese-gateway",
+      "engine": "openai",
+      "display_name": "keese AI Gateway (Anthropic via OpenAI-compat, non-streaming)",
+      "description": "Non-streaming OpenAI-compat path through the keese in-cluster Envoy AI Gateway. BSP injects the upstream Anthropic key.",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://envoy-ai-gateway.keese-system.svc:443/v1",
+      "models": [
+        { "name": "claude-opus-4-7",   "context_limit": 200000 },
+        { "name": "claude-sonnet-4-6", "context_limit": 200000 },
+        { "name": "claude-haiku-4-5",  "context_limit": 200000 }
+      ],
+      "supports_streaming": false,
+      "requires_auth": true,
+      "fast_model": "claude-haiku-4-5",
+      "skip_canonical_filtering": true
+    }

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 # Minimal SharedMemory sample — SQLite backend, no sharedWith entries.
-apiVersion: memory.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: SharedMemory
 metadata:
   labels:
@@ -22,7 +22,7 @@ spec:
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 # Fully-populated SharedMemory sample — Qdrant HA backend with two workspace grants.
-apiVersion: memory.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: SharedMemory
 metadata:
   labels:

@@ -3,7 +3,7 @@
 #
 # Fully-populated WorkspaceShare sample — satisfies rule 04.15.
 # Must pass: kubectl apply --dry-run=server
-apiVersion: workspace.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: WorkspaceShare
 metadata:
   labels:

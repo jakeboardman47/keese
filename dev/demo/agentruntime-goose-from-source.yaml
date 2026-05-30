@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Alternative AgentRuntime that points at our locally-built goose
+# v1.33.1 image. Runs in parallel with the default `goose-default`
+# AgentRuntime (which still uses ghcr.io/block/goose:latest = 1.30.0)
+# so both runtimes are demo-able side by side.
+#
+# Apply with: kubectl apply -f dev/demo/agentruntime-goose-from-source.yaml
+# Then point a Workspace at it via spec.runtimeRef:
+#   spec.runtimeRef.name: goose-from-source
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  name: goose-from-source
+spec:
+  implementation:
+    goose:
+      image: keese-goose:1.33.1

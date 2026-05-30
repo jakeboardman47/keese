@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kyverno ClusterPolicy enforcing the rule from design 27 §6:
+# only the keese-controller-manager ServiceAccount may write the
+# `keese-system/keese-features` ConfigMap. Anyone else trying to
+# update the projection (a compromised cluster operator, a sloppy
+# `kubectl edit`) is rejected at admission.
+#
+# The trust root is the cosign-signed operator image (rule 05.12 +
+# TD-P1-04). Unsigned images can't reach a cluster; the signed
+# controller's SA is the only one this policy lets near the CM.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: keese-features-cm-writer-only-controller
+  labels:
+    app.kubernetes.io/part-of: keese
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: only-controller-may-write
+      match:
+        any:
+          - resources:
+              kinds: [ConfigMap]
+              names: [keese-features]
+              namespaces: [keese-system]
+              operations: [CREATE, UPDATE, DELETE]
+      exclude:
+        any:
+          - subjects:
+              - kind: ServiceAccount
+                name: keese-controller-manager
+                namespace: keese-system
+          # System bootstrap path — the kustomize/OLM-bundle apply runs
+          # as the cluster admin during install. Once the operator is
+          # up, the controller's SA owns the CM going forward.
+          - clusterRoles:
+              - cluster-admin
+      validate:
+        message: |
+          ConfigMap keese-system/keese-features may only be modified by
+          the keese-controller-manager ServiceAccount. See design 27 §6.
+        deny: {}

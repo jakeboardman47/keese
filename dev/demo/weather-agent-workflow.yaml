@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Workflow + WorkflowRun manifests for the weather agent.
+#
+# WHAT WORKS TODAY: the Workflow + WorkflowRun reach `Pending` /
+# `Ready` after admission — the API surface and ReBAC tuples are in
+# place. The trigger projection (CronJob / NATSSubscription / KEDA /
+# Knative / HTTPRoute) and the WorkflowRun → Pod spawner are tracked
+# as TD-P2-02 in docs/plans/demo/tech-debt.md and not yet wired.
+#
+# Until those land, dev/demo/weather-agent-job.yaml is the actual
+# spawning surface — it's the exact Pod the WorkflowRun controller
+# will project for a `Manual` (or `NATSSubscription`) trigger once
+# TD-P2-02 ships.
+#
+# Apply with:
+#   kubectl apply -f dev/demo/weather-agent-workflow.yaml
+#   kubectl get workflow,workflowrun -n alpha
+---
+# Transport CR — declares the NATS JetStream stream + consumer that
+# the Workflow's NATSSubscription trigger binds to. The Transport
+# controller projects this into a real NATS stream + consumer (today
+# the projection is typed-SSA, see internal/controller/transport/);
+# the Workflow controller will read the resulting stream/subject and
+# subscribe a Pod once TD-P2-02 ships.
+apiVersion: keese.ai/v1alpha1
+kind: Transport
+metadata:
+  name: weather-agent-trigger
+  namespace: alpha
+spec:
+  type: nats
+  nats:
+    clusterRef:
+      name: nats
+      namespace: nats
+    streamName: keese-tenant-alpha-wf-weather-agent
+    consumerName: weather-agent-consumer
+---
+apiVersion: keese.ai/v1alpha1
+kind: Workflow
+metadata:
+  name: weather-agent
+  namespace: alpha
+spec:
+  workspaceRef:
+    name: my-ws
+  entrypoint: ask-weather
+  templates:
+    - name: ask-weather
+      image: ghcr.io/keese-ai/goose-runtime:dev
+      command: ["/usr/local/bin/goose"]
+      args: ["run", "--recipe", "/var/run/keese/recipes/recipe.yaml"]
+      retryLimit: 0
+  triggers:
+    # NATSSubscription trigger — the Transport CR (separate manifest)
+    # provisions the JetStream stream/consumer; the Workflow controller
+    # binds them once TD-P2-02 ships. Until then, this is the canonical
+    # way to declare the trigger; users can manually publish a message
+    # to `keese.tenant.alpha.wf.weather-agent.in` to validate the
+    # transport path.
+    - type: NATSSubscription
+      natsSubscription:
+        # Stream + subject must match the Transport CR (peer manifest)
+        # — the Workflow controller correlates by streamName.
+        streamName: keese-tenant-alpha-wf-weather-agent
+        subject: "keese.tenant.alpha.wf.weather-agent.in"
+        durable: weather-agent-consumer
+  outputs:
+    - name: result
+      type: NATSPublish
+      natsPublish:
+        subject: "keese.tenant.alpha.wf.weather-agent.out"
+  defaultRetryBudget:
+    limit: 3
+    backoffSeconds: 10
+---
+# Manual trigger of the workflow: applying this WorkflowRun is the
+# imperative form of "publish a NATS message on the workflow's input
+# subject". Today it just records a `Pending` row; once TD-P2-02 lands
+# the controller will project a Pod (mirroring weather-agent-job.yaml)
+# and capture stdout into status.result.
+apiVersion: keese.ai/v1alpha1
+kind: WorkflowRun
+metadata:
+  name: weather-agent-run-1
+  namespace: alpha
+spec:
+  workspaceRef:
+    name: my-ws
+  workflowRef:
+    name: weather-agent
+  parameters:
+    # Demo override of the recipe's prompt. The Pod-projection step
+    # will templatize the recipe ConfigMap with these parameters
+    # before mounting (TD-P2-02).
+    - name: question
+      value: "What is the weather typically like in San Francisco in May?"

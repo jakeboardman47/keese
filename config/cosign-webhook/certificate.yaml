@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# cert-manager issues the webhook serving cert against a self-signed
+# Issuer scoped to the keese-system namespace. The CA bundle is
+# injected into the ValidatingWebhookConfiguration via the
+# cert-manager.io/inject-ca-from annotation.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: keese-cosign-webhook-selfsigned
+  namespace: keese-system
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: keese-cosign-webhook-tls
+  namespace: keese-system
+spec:
+  secretName: keese-cosign-webhook-tls
+  duration: 8760h    # 1y
+  renewBefore: 720h  # 30d
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  subject:
+    organizations: [keese-ai]
+  commonName: keese-cosign-webhook.keese-system.svc
+  dnsNames:
+    - keese-cosign-webhook.keese-system.svc
+    - keese-cosign-webhook.keese-system.svc.cluster.local
+  issuerRef:
+    name: keese-cosign-webhook-selfsigned
+    kind: Issuer

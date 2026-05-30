@@ -52,7 +52,7 @@ type AudienceTemplate struct {
 // OIDCProviderSpec defines the desired state of OIDCProvider.
 //
 // Finalizer:
-//   - finalizers.oidcprovider.operator.keese.ai/cache-flush
+//   - finalizers.oidcprovider.keese.ai/cache-flush
 //     Sends cache-flush signal to all gateway pods before allowing CR deletion.
 //
 // SSA fieldOwner: keese-oidcprovider-controller
@@ -122,6 +122,14 @@ type OIDCProviderStatus struct {
 	// +optional
 	LastReconcileTime metav1.Time `json:"lastReconcileTime,omitempty"`
 
+	// ResolvedJWKSUri is the JWKS endpoint the controller most recently used,
+	// either copied from spec.jwksUri or derived via OIDC discovery against
+	// spec.issuer. Caching it avoids a discovery round-trip on every reconcile.
+	// Cleared when the spec changes in a way that invalidates the cache
+	// (issuer or jwksUri mutation).
+	// +optional
+	ResolvedJWKSUri string `json:"resolvedJwksUri,omitempty"`
+
 	// Conditions reports Ready and JWKSReachable conditions.
 	// +optional
 	// +listType=map
@@ -145,7 +153,7 @@ type OIDCProviderStatus struct {
 // created by the keese-oidcprovider-bootstrap Job at install time.
 //
 // Design: docs/designs/04b-projected-sa-identity.md + docs/designs/04b-ii-oidc-trust.md
-// Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md
+// Spec: docs/specs/authz.keese.ai-v1alpha1.md
 //
 // tenant.uses_oidc_provider OpenFGA relation: the Tenant controller writes tuples
 // (tenant:<name>#uses_oidc_provider@oidc_provider:<spec.oidc.allowedProviders[]>) per

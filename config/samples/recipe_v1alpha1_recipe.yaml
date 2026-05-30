@@ -2,7 +2,7 @@
 # Copyright (c) 2026 keese-ai
 #
 # Minimal sample — Recipe referencing an OCI RecipeSource.
-apiVersion: recipe.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Recipe
 metadata:
   labels:
@@ -19,7 +19,7 @@ spec:
     name: recipesource-sample
 ---
 # Fully populated sample — tools, extensions, parameters, hooks.
-apiVersion: recipe.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Recipe
 metadata:
   labels:

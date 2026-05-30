@@ -13,7 +13,17 @@ import "context"
 //   - tenant scope:    "tenant/<tenantName>/aggregate"
 //   - workspace scope: "workspace/<workspaceUID>/<model>"
 //
-// TODO(spec-followup): wire real NATS JetStream KV client once nats-io/nack is in go.mod.
+// Feature status: deferred — paired with the consumer-side enforcer that
+// reads the KV before each LLM call. Today the gateway path (Envoy
+// ext_proc + keese-authz) doesn't consult this KV; writing without a
+// reader is a no-op end-to-end. When the enforcer lands, three pieces
+// ship together:
+//
+//  1. nats-io/nats.go in go.mod (KV producer + consumer)
+//  2. A real implementation of this interface (NatsJSSignaler) wired in
+//     cmd/main.go behind a NATS_URL env var
+//  3. The gateway-side reader (keese-authz ext_proc step) blocking
+//     requests when the KV key is "true"
 type NatsSignaler interface {
 	// SetExceeded writes `true` to the KV key, signaling budget exhaustion.
 	// Idempotent: calling it twice for the same key is safe.

@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Minimal weather agent recipe — installable in any keese workspace.
+# Used by docs/plans/demo/D-kind-* smoke and by the live demo runbook.
+# Run with:
+#   goose run --recipe /var/run/keese/recipes/weather-agent.yaml \
+#     -t "What is the weather typically like in San Francisco in May?"
+#
+# Extensions are deliberately empty: the AI Gateway extProc rejects
+# very large request bodies (>~10KB) on the Anthropic schema route
+# (gateway returns 500 cannot_process_request_body:_failed_to_parse).
+# The default goose run carries 7 extensions + 16 tools and trips that
+# limit; this recipe keeps the body small so the LLM round-trip
+# completes cleanly through the in-cluster gateway.
+
+version: "1.0.0"
+title: "Weather agent"
+description: |
+  A focused agent that answers questions about weather in a given
+  location. Replies in 1-2 sentences using only model knowledge —
+  no tools, no extensions. Demonstrates an installable keese agent
+  with a minimal request shape.
+
+instructions: |
+  You are a friendly weather agent. When the user asks about the
+  weather in a location, reply concisely in 1-2 natural-language
+  sentences. Cite typical seasonal patterns when appropriate. Do
+  not call tools or extensions.
+
+# No extensions — keeps the request body well under the AI Gateway
+# extProc body-parser limit. Extensions can be added once the
+# upstream limit is raised or the keese controller batches them.
+extensions: []
+
+# Default prompt (overridden by an external orchestrator that
+# rewrites this field before applying the recipe). The default
+# question gives a working zero-arg `goose run --recipe` smoke.
+prompt: |
+  What is the weather typically like in San Francisco in May? Reply concisely in one sentence.
+
+settings:
+  goose_provider: anthropic
+  goose_model: claude-opus-4-7
+  # NB: do not set `temperature` — Opus 4.7 removed sampling
+  # parameters (rule 05.security/migration; see shared/model-migration.md).

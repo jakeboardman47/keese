@@ -3,26 +3,28 @@
 
 package authz
 
+import "context"
+
 // CosignVerifier verifies a Sigstore cosign keyless OIDC signature.
 // The real implementation calls the cosign SDK; the fake is used in tests.
 //
-// TODO(spec-followup): implement real cosign verification once sigstore/cosign
-// is added to go.mod. The expected subject is the OIDC email of the approver.
+// Deferred — needs the sigstore/cosign SDK in go.mod. Until that lands, the
+// CrossTenantAgreement controller falls back to the FakeCosignVerifier which
+// FailNext-gates test scenarios. Production cluster operators must not enable
+// OIDC-keyless approvals until a real verifier is wired (rule 05.16).
 type CosignVerifier interface {
 	// Verify checks that token is a valid cosign keyless OIDC signature whose
 	// subject matches expectedSubject. Returns nil on success, error on failure.
-	Verify(token, expectedSubject string) error
+	Verify(ctx context.Context, token, expectedSubject string) error
 }
 
 // SATokenHmacVerifier verifies an SA-token HMAC signature (used by CI pipelines).
-// The HMAC key is fetched from OpenBao at verification time.
-//
-// TODO(spec-followup): implement real SA-token HMAC verification using the
-// shared-secret stored in OpenBao once the credential broker is wired.
+// HMACSATokenVerifier is the production wiring; FakeSATokenHmacVerifier is the
+// test double.
 type SATokenHmacVerifier interface {
-	// Verify checks that token is a valid HMAC over the approval payload for the
-	// given audience. Returns nil on success, error on failure.
-	Verify(token, audience string) error
+	// Verify checks that token is a valid HMAC over the audience string.
+	// Implementations return errSignatureVerificationFailed on mismatch.
+	Verify(ctx context.Context, token, audience string) error
 }
 
 // FakeCosignVerifier is a test-double that always succeeds (or fails if FailNext is true).
@@ -31,7 +33,7 @@ type FakeCosignVerifier struct {
 	FailNext bool
 }
 
-func (f *FakeCosignVerifier) Verify(_, _ string) error {
+func (f *FakeCosignVerifier) Verify(_ context.Context, _, _ string) error {
 	if f.FailNext {
 		f.FailNext = false
 		return errSignatureVerificationFailed
@@ -47,7 +49,7 @@ type FakeSATokenHmacVerifier struct {
 	FailNext bool
 }
 
-func (f *FakeSATokenHmacVerifier) Verify(_, _ string) error {
+func (f *FakeSATokenHmacVerifier) Verify(_ context.Context, _, _ string) error {
 	if f.FailNext {
 		f.FailNext = false
 		return errSignatureVerificationFailed
@@ -63,4 +65,4 @@ type sigVerifyError struct{ msg string }
 
 func (e sigVerifyError) Error() string { return e.msg }
 
-var errSignatureVerificationFailed = sigVerifyError{"signature verification failed (fake)"}
+var errSignatureVerificationFailed = sigVerifyError{msg: "signature verification failed"}

@@ -13,7 +13,7 @@
 # keese.ai/bootstrap: "true" marks this CR as operator-owned; the
 # guardrailbinding controller preserves user-managed fields via the
 # keese-guardrailbinding-bootstrap SSA field manager.
-apiVersion: guardrail.operator.keese.ai/v1alpha1
+apiVersion: authz.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
   name: keese-default

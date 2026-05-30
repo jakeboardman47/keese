@@ -71,7 +71,7 @@ func clusterPolicyName(bindingNamespace, bindingName, policyRef string) string {
 // The resulting ClusterPolicy has an empty Spec (no rules); it acts as a keese-owned
 // placeholder that records the owning GuardrailBinding via annotations. When the
 // GuardrailBinding design matures to include inline rule content
-// (see docs/specs/guardrail.operator.keese.ai-v1alpha1.md), the Spec.Rules field will
+// (see docs/specs/authz.keese.ai-v1alpha1.md), the Spec.Rules field will
 // be populated by the merge layer.
 func buildClusterPolicy(bindingNamespace, bindingName, policyRef string) *kyvernov1.ClusterPolicy {
 	name := clusterPolicyName(bindingNamespace, bindingName, policyRef)
@@ -88,7 +88,7 @@ func buildClusterPolicy(bindingNamespace, bindingName, policyRef string) *kyvern
 			},
 			Labels: map[string]string{
 				"keese.ai/managed":    "true",
-				"keese.ai/group":      "guardrail.operator.keese.ai",
+				"keese.ai/group":      "authz.keese.ai",
 				"keese.ai/policy-ref": sanitizeLabel(policyRef),
 			},
 		},

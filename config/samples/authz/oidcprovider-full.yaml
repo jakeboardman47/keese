@@ -3,8 +3,8 @@
 #
 # Fully-populated OIDCProvider sample — Google OIDC with three-token projection
 # (egress + supervisor + workflowRun audiences) and normalization.
-# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.7
-apiVersion: authz.operator.keese.ai/v1alpha1
+# Spec: docs/specs/authz.keese.ai-v1alpha1.md §1.7
+apiVersion: authz.keese.ai/v1alpha1
 kind: OIDCProvider
 metadata:
   name: google

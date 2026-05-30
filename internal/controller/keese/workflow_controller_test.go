@@ -34,7 +34,8 @@ func minimalWorkflow(name string) *keesev1alpha1.Workflow {
 			Namespace: testWorkflowNamespace,
 		},
 		Spec: keesev1alpha1.WorkflowSpec{
-			Entrypoint: "step-one",
+			WorkspaceRef: keesev1alpha1.LocalObjectReference{Name: "ws-test"},
+			Entrypoint:   "step-one",
 			Templates: []keesev1alpha1.WorkflowTemplateStep{
 				{
 					Name:  "step-one",

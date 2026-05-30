@@ -48,6 +48,13 @@ const (
 	ReasonSessionDrained = "SessionDrained"
 	ReasonSessionResumed = "SessionResumed"
 
+	// ReasonSessionCompleted fires when a non-interactive recipe-driven
+	// session pod terminates with PodSucceeded (Phase=Completed).
+	ReasonSessionCompleted = "SessionCompleted"
+	// ReasonRecipeMounted fires when the controller selects the
+	// non-interactive recipe path for a session pod.
+	ReasonRecipeMounted = "SessionRecipeMounted"
+
 	// TokenBudget gating events (TD-P2-14).
 	ReasonTokenBudgetExceeded = "TokenBudgetExceeded"
 )

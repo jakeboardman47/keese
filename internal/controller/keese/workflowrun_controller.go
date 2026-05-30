@@ -286,7 +286,12 @@ func (r *WorkflowRunReconciler) ensureNATSStream(ctx context.Context, wfr *keese
 		maxAge = wfr.Spec.Timeout.Duration
 	}
 
-	tenantUID := string(wfr.UID) // TODO(spec-followup): derive from workspace.status.tenantUID
+	tenantUID, err := r.resolveTenantUID(ctx, wfr)
+	if err != nil {
+		// Falls back to the run UID so the stream name is still unique;
+		// log + continue so a missing tenant doesn't block the run.
+		tenantUID = string(wfr.UID)
+	}
 	runUID := string(wfr.UID)
 	streamName := fmt.Sprintf("keese-tenant-%s-wf-%s", tenantUID, runUID)
 	subject := fmt.Sprintf("keese.tenant.%s.wf.%s.>", tenantUID, runUID)
@@ -300,6 +305,31 @@ func (r *WorkflowRunReconciler) ensureNATSStream(ctx context.Context, wfr *keese
 	}
 
 	return r.Nats.Provision(ctx, spec)
+}
+
+// resolveTenantUID looks up the WorkflowRun's parent Workspace, then its
+// Tenant, and returns the Tenant CR's UID. This is the canonical key for
+// per-tenant NATS subject namespacing (design 03c). Falls back to the
+// Workspace UID when no Tenant CR is reachable so the stream still gets
+// a stable, scoped name.
+func (r *WorkflowRunReconciler) resolveTenantUID(ctx context.Context, wfr *keesev1alpha1.WorkflowRun) (string, error) {
+	if wfr.Spec.WorkspaceRef.Name == "" {
+		return "", fmt.Errorf("workflowrun %s/%s has no workspaceRef", wfr.Namespace, wfr.Name)
+	}
+	var ws keesev1alpha1.Workspace
+	if err := r.Get(ctx, types.NamespacedName{Namespace: wfr.Namespace, Name: wfr.Spec.WorkspaceRef.Name}, &ws); err != nil {
+		return "", fmt.Errorf("get workspace: %w", err)
+	}
+	if ws.Spec.TenantRef.Name == "" {
+		return string(ws.UID), nil
+	}
+	var tenant keesev1alpha1.Tenant
+	if err := r.Get(ctx, types.NamespacedName{Name: ws.Spec.TenantRef.Name}, &tenant); err != nil {
+		// Tenant is cluster-scoped; if it's not reachable fall back to
+		// the workspace UID — still uniquely scopes the NATS subject.
+		return string(ws.UID), nil
+	}
+	return string(tenant.UID), nil
 }
 
 // projectArgoWorkflow projects (or idempotently updates) the Argo Workflow for a WorkflowRun.

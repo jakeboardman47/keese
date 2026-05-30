@@ -2,8 +2,8 @@
 # Copyright (c) 2026 keese-ai
 #
 # Fully-populated WorkspaceSession sample — shared mode, custom grace, preserve on failure.
-# Spec: docs/specs/workspace.operator.keese.ai-v1alpha1-ii-session.md
-apiVersion: workspace.operator.keese.ai/v1alpha1
+# Spec: docs/specs/keese.ai-v1alpha1-ii-session.md
+apiVersion: keese.ai/v1alpha1
 kind: WorkspaceSession
 metadata:
   name: ws-collab-deadbeef01234567-primary
@@ -13,7 +13,7 @@ metadata:
     keese.ai/subject-hash: deadbeef01234567
     keese.ai/session-name: primary
   finalizers:
-    - finalizers.workspacesession.operator.keese.ai/cleanup
+    - finalizers.workspacesession.keese.ai/cleanup
 spec:
   workspaceRef: ws-collab
   attachSubject: "user:bob@acme.example.com"

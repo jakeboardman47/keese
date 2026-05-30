@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Weather agent recipe — keese-gateway provider variant. Pairs with
+# the keese-built goose v1.33.1 image (declarative_providers loader)
+# + dev/demo/goose-custom-providers-configmap.yaml. The recipe's
+# settings.goose_provider must match the `name` field in the JSON
+# loaded from $HOME/.config/goose/custom_providers/keese-gateway.json
+# — otherwise goose's recipe-vs-env precedence picks the wrong one.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: weather-agent-keese-gateway
+  namespace: alpha
+  labels:
+    keese.ai/recipe: "true"
+data:
+  recipe.yaml: |
+    version: "1.0.0"
+    title: "Weather agent (keese-gateway)"
+    description: |
+      Weather agent routed through the keese in-cluster Envoy AI
+      Gateway via goose's declarative-provider loader (engine: openai,
+      non-streaming). Sidesteps envoyproxy/ai-gateway#1894.
+    instructions: |
+      You are a friendly weather agent. When the user asks about the
+      weather in a location, reply concisely in 1-2 natural-language
+      sentences. Cite typical seasonal patterns when appropriate. Do
+      not call tools or extensions.
+    extensions: []
+    prompt: |
+      What is the weather typically like in San Francisco in May? Reply concisely in one sentence.
+    settings:
+      goose_provider: keese-gateway
+      goose_model: claude-opus-4-7

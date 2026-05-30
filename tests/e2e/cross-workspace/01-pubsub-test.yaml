@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# NATS round-trip across the team-bus Transport. Producer pod publishes;
+# consumer pod subscribes and asserts the message arrived. Uses the
+# `nats` CLI which is part of the goose-runtime image's PATH (or, if
+# missing, the test installs it via apk).
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      set -euo pipefail
+      PRODUCER_POD=$(kubectl get pod -n alpha -l keese.ai/workspace=producer,keese.ai/session-mode=per-attach \
+        -o jsonpath='{.items[0].metadata.name}')
+      CONSUMER_POD=$(kubectl get pod -n alpha -l keese.ai/workspace=consumer,keese.ai/session-mode=per-attach \
+        -o jsonpath='{.items[0].metadata.name}')
+      if [[ -z "$PRODUCER_POD" || -z "$CONSUMER_POD" ]]; then
+        echo "producer/consumer session pods not found — apply a WorkspaceSession for each first" >&2
+        exit 1
+      fi
+
+      # Subscribe in the background, capture first message; producer publishes.
+      kubectl exec -n alpha "$CONSUMER_POD" -c agent -- sh -c '
+        timeout 15 nats sub -s nats://nats.keese-system.svc:4222 \
+          --count=1 "keese.transport.team-bus.>" > /tmp/recv.txt 2>&1 &
+        sleep 1
+      ' &
+
+      sleep 2
+
+      kubectl exec -n alpha "$PRODUCER_POD" -c agent -- \
+        nats pub -s nats://nats.keese-system.svc:4222 \
+        keese.transport.team-bus.hello "from-producer-$(date +%s)"
+
+      sleep 5
+
+      # Assert the consumer received it.
+      kubectl exec -n alpha "$CONSUMER_POD" -c agent -- sh -c '
+        grep -q "from-producer" /tmp/recv.txt
+      '

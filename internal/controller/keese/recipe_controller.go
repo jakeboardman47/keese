@@ -213,7 +213,14 @@ func (r *RecipeReconciler) cleanup(ctx context.Context, recipe *keesev1alpha1.Re
 		return ctrl.Result{RequeueAfter: requeueOnRecipeError}, nil
 	}
 
-	// TODO(controller-author): remove cached artifact from workspace PVC here.
+	// Recipes have no per-recipe cached state on workspace PVCs — the recipe
+	// is materialised as a ConfigMap and mounted into session pods via the
+	// recipe volume. The ConfigMap is owned by the Recipe via an owner-ref,
+	// so K8s garbage collection removes it when the Recipe is deleted.
+	// Any per-session derived artifact (e.g. agent transcripts) lives in
+	// goose's sessions dir on the workspace PVC and is owned by the
+	// WorkspaceSession lifecycle, not the Recipe.
+	_ = log
 
 	controllerutil.RemoveFinalizer(recipe, recipeFinalizer)
 	return ctrl.Result{}, r.Patch(ctx, recipe, client.MergeFrom(orig))

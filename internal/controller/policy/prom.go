@@ -12,12 +12,8 @@ type QueryResult struct {
 }
 
 // PrometheusQuerier executes a PromQL instant query and returns the scalar result.
-// The real implementation issues an HTTP request to the Prometheus Query API;
-// FakePrometheusQuerier is used in tests.
-//
-// TODO(spec-followup): wire real HTTP client once prometheus/client_golang query
-// API is confirmed as a direct (non-indirect) dependency. Current go.mod lists
-// prometheus/client_golang as indirect; promote it when implementing the real client.
+// Production wiring is HTTPPrometheusQuerier (prom_http.go); FakePrometheusQuerier
+// is used in tests.
 type PrometheusQuerier interface {
 	// Query executes a PromQL expression and returns the scalar result.
 	// Returns an error if the Prometheus endpoint is unreachable or the query fails.

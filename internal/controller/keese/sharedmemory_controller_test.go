@@ -139,12 +139,12 @@ var _ = Describe("SharedMemory Controller", func() {
 					Replicas:       1,
 				},
 			}
-			err := validateHA(provider, "prod-cluster")
+			err := validateHA(provider, "prod-cluster", nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("MemoryHARequired"))
 
 			// dev namespace exemption.
-			Expect(validateHA(provider, "team-dev")).NotTo(HaveOccurred())
+			Expect(validateHA(provider, "team-dev", nil)).NotTo(HaveOccurred())
 		})
 	})
 

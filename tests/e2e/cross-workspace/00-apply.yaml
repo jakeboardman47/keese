@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Cross-workspace coordination e2e (Phase 6). Applies the producer +
+# consumer + bus + shared memory + share manifest under tenant alpha
+# (which 00-apply.yaml in workspace-progression already provisioned).
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+apply:
+  - ../../../dev/demo/cross-workspace.yaml

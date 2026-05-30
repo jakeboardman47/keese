@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+
+# Build the keese-cosign-webhook binary — the pre-install
+# ValidatingWebhook that fails-closed on unsigned keese images
+# referenced by OLM InstallPlans (design 14a §4 + rule 05.12).
+FROM golang:1.25 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+
+# Cache deps before copying source.
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+COPY cmd/keese-cosign-webhook/ cmd/keese-cosign-webhook/
+COPY api/ api/
+COPY internal/ internal/
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -a -o keese-cosign-webhook \
+    ./cmd/keese-cosign-webhook
+
+# Pull the cosign binary. The webhook shells out to cosign for
+# keyless OIDC verification; the binary is statically compiled so
+# it runs in distroless/static.
+#
+# CI pins the cosign image by digest at release time
+# (scripts/pin-cosign-digest.sh in TD-P2-11). For now we track the
+# upstream tag matching the version in go.mod.
+FROM ghcr.io/sigstore/cosign/cosign:v2.4.1 AS cosign
+
+# Distroless static — no shell, no libc, just the binaries.
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /workspace/keese-cosign-webhook /keese-cosign-webhook
+COPY --from=cosign /ko-app/cosign /cosign
+USER 65532:65532
+EXPOSE 9443 8081 8082
+ENTRYPOINT ["/keese-cosign-webhook"]

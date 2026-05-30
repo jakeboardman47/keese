@@ -37,10 +37,11 @@ const (
 	// natsEgressPort is the NATS JetStream port.
 	natsEgressPort = 4222
 
-	// gatewayServiceNamespace is where the Envoy AI Gateway service lives.
-	// TODO(spec-followup): make this configurable via manager flags once topology is settled.
-	gatewayServiceNamespace = "keese-system"
-	gatewayServiceName      = "envoy-ai-gateway"
+	// gatewayServiceNamespaceDefault is the default namespace where the Envoy AI
+	// Gateway service lives. Override via WorkspaceReconciler.GatewayNamespace
+	// (typically wired from the KEESE_GATEWAY_NS env var in cmd/main.go).
+	gatewayServiceNamespaceDefault = "keese-system"
+	gatewayServiceName             = "envoy-ai-gateway"
 
 	// saTokenExpirationSeconds is the projected SA token TTL (rule 05.3, ≤10m = 600s).
 	saTokenExpirationSeconds = 600
@@ -52,6 +53,19 @@ type WorkspaceReconciler struct {
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 	Rebac    WorkspaceRebacWriter
+
+	// GatewayNamespace overrides the namespace where the Envoy AI Gateway +
+	// NATS services live. Empty → gatewayServiceNamespaceDefault. Wired from
+	// the KEESE_GATEWAY_NS env var in cmd/main.go.
+	GatewayNamespace string
+}
+
+// gatewayNamespace returns the configured gateway namespace, or the default.
+func (r *WorkspaceReconciler) gatewayNamespace() string {
+	if r.GatewayNamespace != "" {
+		return r.GatewayNamespace
+	}
+	return gatewayServiceNamespaceDefault
 }
 
 // +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch;create;update;patch;delete
@@ -118,7 +132,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	npEgressName := egressNPName(&ws)
-	npEgress := buildEgressNetworkPolicy(&ws, npEgressName)
+	npEgress := buildEgressNetworkPolicy(&ws, npEgressName, r.gatewayNamespace())
 	if err := r.Apply(ctx, npEgress); err != nil {
 		log.Error(err, "failed to apply egress NetworkPolicy", "name", npEgressName)
 		r.setProgressing(&ws, "NetworkPolicyFailed", err.Error())
@@ -170,11 +184,15 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		})
 	}
 
-	// --- Runtime Bootstrap (stub) ---
-	// TODO(spec-followup): call runtime.Bootstrap(ctx, &ws) once the AgentRuntime
-	// SPI package is implemented by the runtime controller author. Stubbed here
-	// as a no-op; the controller will receive a patch from the runtime controller
-	// that updates podRef when the pod is ready.
+	// --- Runtime Bootstrap ---
+	// Session-pod-driven: each WorkspaceSession pod runs a `keese-resume`
+	// init container that restores any prior SQLite checkpoint from
+	// /var/run/keese/session/keese-checkpoints/<uid>/sessions.db* into
+	// goose's expected sessions dir before the agent container starts.
+	// See sessionInitContainers in workspacesession_controller.go.
+	// The provider's SPI Bootstrap method (goose.go) is invoked by tests
+	// directly when an executor is wired; in production the init-container
+	// path is the canonical wire-up.
 
 	// --- ReBAC tuples ---
 	tuples := rebacTuplesFor(&ws)
@@ -402,7 +420,9 @@ func buildDefaultDenyNetworkPolicy(ws *keesev1alpha1.Workspace, name string) *ne
 
 // buildEgressNetworkPolicy creates an allowlist for egress to the Envoy AI Gateway (:443)
 // and NATS (:4222) in the workspace namespace (rule 04.17, rule 05.4, 05.5).
-func buildEgressNetworkPolicy(ws *keesev1alpha1.Workspace, name string) *networkingv1.NetworkPolicy {
+// gatewayNS is the namespace where the in-cluster NATS service runs (also where
+// the AI Gateway is deployed in the default topology).
+func buildEgressNetworkPolicy(ws *keesev1alpha1.Workspace, name, gatewayNS string) *networkingv1.NetworkPolicy {
 	_ = gatewayEgressPort // documented for production use; see comment in egress rule below
 	natsPort := intstr.FromInt(natsEgressPort)
 	dnsPort := intstr.FromInt(53)
@@ -496,7 +516,7 @@ func buildEgressNetworkPolicy(ws *keesev1alpha1.Workspace, name string) *network
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"kubernetes.io/metadata.name": gatewayServiceNamespace,
+									"kubernetes.io/metadata.name": gatewayNS,
 								},
 							},
 							PodSelector: &metav1.LabelSelector{

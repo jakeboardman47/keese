@@ -8,7 +8,7 @@ import (
 )
 
 // WorkspaceSessionPhase represents the lifecycle phase of a WorkspaceSession.
-// +kubebuilder:validation:Enum=Pending;Attaching;Active;Draining;Evicted;Terminating
+// +kubebuilder:validation:Enum=Pending;Attaching;Active;Draining;Completed;Evicted;Terminating
 type WorkspaceSessionPhase string
 
 const (
@@ -16,6 +16,10 @@ const (
 	WorkspaceSessionPhaseAttaching   WorkspaceSessionPhase = "Attaching"
 	WorkspaceSessionPhaseActive      WorkspaceSessionPhase = "Active"
 	WorkspaceSessionPhaseDraining    WorkspaceSessionPhase = "Draining"
+	// WorkspaceSessionPhaseCompleted indicates a non-interactive recipe-driven
+	// session whose pod terminated with PodSucceeded. Distinct from Evicted —
+	// the user/launcher should treat Completed as success.
+	WorkspaceSessionPhaseCompleted   WorkspaceSessionPhase = "Completed"
 	WorkspaceSessionPhaseEvicted     WorkspaceSessionPhase = "Evicted"
 	WorkspaceSessionPhaseTerminating WorkspaceSessionPhase = "Terminating"
 )
@@ -51,7 +55,7 @@ type TokenBudgetRef struct {
 // Name pattern: <workspace>-<subject-hash-16>-<session-name>.
 //
 // Finalizer:
-//   - finalizers.workspacesession.operator.keese.ai/cleanup
+//   - finalizers.workspacesession.keese.ai/cleanup
 //     Steps: Draining → AgentRuntime.Drain (90s) → delete Pod → remove OpenFGA tuples → remove finalizer.
 //
 // SSA fieldOwner: keese-workspacesession-controller
@@ -169,7 +173,7 @@ type WorkspaceSessionStatus struct {
 // WorkspaceSession is namespace-scoped (same namespace as parent Workspace).
 // Name pattern: <workspace>-<subject-hash-16>-<session-name>.
 // Design: docs/designs/08b-goose-acp-stdio-k8s.md + docs/designs/08b-ii-session-crd-spec.md
-// Spec: docs/specs/workspace.operator.keese.ai-v1alpha1-ii-session.md
+// Spec: docs/specs/keese.ai-v1alpha1-ii-session.md
 type WorkspaceSession struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

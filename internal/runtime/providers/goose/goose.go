@@ -47,22 +47,22 @@ type Runtime struct {
 }
 
 // Capabilities is the static CapabilityMatrix declared at registration.
-// Streaming + MCP + Recipes + ACP + SubAgents are all supported as of
-// goose v1.33.1; InjectPrompt is implemented in TD-P3-04 via the
-// inject-fifo mechanism. CredentialRotation remains pending TD-P2-13.
+// SupportsACP/Recipes are wired here (Run + Attach + Health implemented).
+// Sub-agents are gated off until InvokeSubAgent / CleanupSubAgents land
+// (TD-P3-05 epic).
 var capabilities = spi.CapabilityMatrix{
 	ProviderName:               ProviderName,
 	SPIVersion:                 "1.0.0",
 	SupportsACP:                true,
-	SupportsSubAgents:          true,
-	MaxSubAgents:               10,
+	SupportsSubAgents:          false,
+	MaxSubAgents:               0,
 	SupportsResume:             true,
-	SupportsSubAgentCleanup:    true,
+	SupportsSubAgentCleanup:    false,
 	SupportsInjectPrompt:       true, // TD-P3-04: fifo inject via podexec
-	SupportsStreaming:          true,
+	SupportsStreaming:          false,
 	SupportsMCP:                true,
 	SupportsRecipes:            true,
-	SupportsCredentialRotation: false, // TODO: TD-P2-13 cred broker rotation
+	SupportsCredentialRotation: false,
 }
 
 // Factory satisfies spi.Factory. config currently accepts the keys:
@@ -316,26 +316,102 @@ func shellescape(s string) string {
 	return "'" + escaped + "'"
 }
 
-// --- Stubs for follow-on SPI methods ---------------------------------
+// --- Run, Attach, Health (demo-critical) -----------------------------
 
-func (r *Runtime) Run(_ context.Context, _ string, _ map[string]string) (*spi.RunResult, error) {
-	return nil, spi.ErrUnsupported
+// Run is the bounded-recipe execution path. Phase 3 of the demo plan: when
+// a non-interactive WorkspaceSession is started, the controller sets the
+// pod's Command to `goose run --recipe …` directly (the recipe path is
+// mounted via the recipe ConfigMap), so the pod terminates with
+// PodSucceeded on completion. This SPI method covers the alternate path
+// where the controller wants to fire a recipe inside an *already-running*
+// session pod (e.g. an interactive attach pod that picks up a recipe on
+// demand).
+//
+// Pod identity is passed through the params map under reserved keys
+// `keese.pod_name` and `keese.namespace`; remaining params are forwarded
+// to goose as `--param key=value` flags. When pod identity is absent the
+// method returns spi.ErrUnsupported so callers can detect the contract
+// mismatch.
+//
+// Sentinel errors: ErrUnsupported when no pod identity provided; the
+// raw exec error otherwise (wrapped with stderr context).
+const (
+	runParamPodName   = "keese.pod_name"
+	runParamNamespace = "keese.namespace"
+)
+
+func (r *Runtime) Run(ctx context.Context, recipe string, params map[string]string) (*spi.RunResult, error) {
+	if r.executor == nil {
+		return nil, fmt.Errorf("goose Run: no PodExecutor wired")
+	}
+	if recipe == "" {
+		return nil, fmt.Errorf("goose Run: empty recipe path")
+	}
+	pod := params[runParamPodName]
+	ns := params[runParamNamespace]
+	if pod == "" || ns == "" {
+		return nil, spi.ErrUnsupported
+	}
+
+	argv := []string{"/usr/local/bin/goose", "run", "--recipe", recipe}
+	for k, v := range params {
+		if k == runParamPodName || k == runParamNamespace {
+			continue
+		}
+		argv = append(argv, "--params", fmt.Sprintf("%s=%s", k, v))
+	}
+
+	stdout, stderr, err := r.executor.Exec(ctx, ns, pod, agentContainerName, argv)
+	if err != nil {
+		return &spi.RunResult{ExitCode: 1}, fmt.Errorf("goose Run: %w (stderr=%s)", err, string(stderr))
+	}
+	_ = stdout
+	return &spi.RunResult{ExitCode: 0}, nil
 }
 
-func (r *Runtime) Attach(_ context.Context, _ spi.WorkspaceSession) (*spi.AttachHandle, error) {
-	return nil, spi.ErrUnsupported
+// Attach returns a descriptor pointing at the session's serve-mode pod.
+// The Endpoint format is `pod://<namespace>/<pod>/<container>` — callers
+// (the keese controller, an IDE bridge) translate this into a
+// `kubectl exec` or a port-forward + ACP dial. SocketFD is unused today.
+//
+// Returns ErrAttachUnsupported when the session has no pod (e.g. recipe-
+// mode session that has already completed).
+func (r *Runtime) Attach(_ context.Context, sess spi.WorkspaceSession) (*spi.AttachHandle, error) {
+	if sess.PodName == "" || sess.Namespace == "" {
+		return nil, spi.ErrAttachUnsupported
+	}
+	return &spi.AttachHandle{
+		Endpoint: fmt.Sprintf("pod://%s/%s/%s", sess.Namespace, sess.PodName, agentContainerName),
+	}, nil
 }
+
+// Health probes the agent container by sending signal 0 to PID 1 (a
+// no-op signal that succeeds iff the process exists and is reachable).
+// The exec exits 0 when goose is alive, non-zero (or returns an error)
+// when the process is gone.
+func (r *Runtime) Health(ctx context.Context, sess spi.WorkspaceSession) (*spi.HealthReport, error) {
+	if r.executor == nil {
+		return nil, fmt.Errorf("goose Health: no PodExecutor wired")
+	}
+	if sess.PodName == "" {
+		return &spi.HealthReport{Phase: "Down"}, nil
+	}
+	_, _, err := r.executor.Exec(ctx, sess.Namespace, sess.PodName, agentContainerName,
+		[]string{"/bin/sh", "-c", "kill -0 1"})
+	if err != nil {
+		return &spi.HealthReport{Phase: "Down"}, nil
+	}
+	return &spi.HealthReport{Phase: "Running"}, nil
+}
+
+// --- Deferred (capability-gated) SPI methods -------------------------
 
 func (r *Runtime) CleanupSubAgents(_ context.Context, _ spi.Workspace) error {
 	return spi.ErrUnsupported
 }
 
 func (r *Runtime) InvokeSubAgent(_ context.Context, _ spi.Workspace, _ spi.SubAgentSpec) (*spi.SubAgentHandle, error) {
-	return nil, spi.ErrUnsupported
-}
-
-func (r *Runtime) Health(_ context.Context, _ spi.WorkspaceSession) (*spi.HealthReport, error) {
-	return nil, spi.ErrUnsupported
+	return nil, spi.ErrSubAgentLimitExceeded
 }
 
 func (r *Runtime) StreamEvents(_ context.Context) (<-chan spi.RuntimeEvent, error) {

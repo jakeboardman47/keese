@@ -13,7 +13,7 @@ type OCIArtifact struct {
 	LocalPath string
 }
 
-// OCIFetcher abstracts pulling and cosign-verifying an OCI artifact.
+// OCIFetcher abstracts pulling, cosign-verifying, and evicting an OCI artifact.
 // The real implementation calls oras + cosign; FakeOCIFetcher is used in tests.
 type OCIFetcher interface {
 	// Pull fetches the OCI artifact identified by (registry, repository, tagOrDigest)
@@ -25,10 +25,15 @@ type OCIFetcher interface {
 	// OIDC issuer:     https://token.actions.githubusercontent.com
 	// Fail-closed: returns an error (triggering RecipeImageUnverified) on any verification failure.
 	Verify(ctx context.Context, registry, repository, digest string) error
+
+	// Delete evicts the cached artifact for (registry, repository, digest) from
+	// the local cache. Idempotent — returns nil if the entry is already absent.
+	// Called by the RecipeSource cleanup finalizer.
+	Delete(ctx context.Context, registry, repository, digest string) error
 }
 
 // FakeOCIFetcher is a test double for OCIFetcher.
-// PullErr and VerifyErr allow tests to inject failures.
+// PullErr / VerifyErr / DeleteErr allow tests to inject failures.
 type FakeOCIFetcher struct {
 	// PulledDigest is returned on a successful Pull.
 	PulledDigest string
@@ -38,10 +43,13 @@ type FakeOCIFetcher struct {
 	PullErr error
 	// VerifyErr is returned from Verify when non-nil.
 	VerifyErr error
+	// DeleteErr is returned from Delete when non-nil.
+	DeleteErr error
 
 	// Recorded calls for assertions.
 	PullCalls   []OCIPullCall
 	VerifyCalls []OCIVerifyCall
+	DeleteCalls []OCIDeleteCall
 }
 
 // OCIPullCall records a Pull invocation.
@@ -51,6 +59,11 @@ type OCIPullCall struct {
 
 // OCIVerifyCall records a Verify invocation.
 type OCIVerifyCall struct {
+	Registry, Repository, Digest string
+}
+
+// OCIDeleteCall records a Delete invocation.
+type OCIDeleteCall struct {
 	Registry, Repository, Digest string
 }
 
@@ -73,6 +86,11 @@ func (f *FakeOCIFetcher) Pull(_ context.Context, registry, repository, tagOrDige
 func (f *FakeOCIFetcher) Verify(_ context.Context, registry, repository, digest string) error {
 	f.VerifyCalls = append(f.VerifyCalls, OCIVerifyCall{registry, repository, digest})
 	return f.VerifyErr
+}
+
+func (f *FakeOCIFetcher) Delete(_ context.Context, registry, repository, digest string) error {
+	f.DeleteCalls = append(f.DeleteCalls, OCIDeleteCall{registry, repository, digest})
+	return f.DeleteErr
 }
 
 var _ OCIFetcher = &FakeOCIFetcher{}

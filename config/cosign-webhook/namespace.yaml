@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# The cosign webhook runs in the keese-system namespace alongside the
+# operator. The break-glass label is intentionally absent here —
+# rule 05.13 requires explicit per-namespace opt-in, never default.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keese-system
+  labels:
+    app.kubernetes.io/managed-by: keese
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

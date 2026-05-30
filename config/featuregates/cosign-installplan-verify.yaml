@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Seed FeatureGate for the cosign InstallPlan verification path
+# (TD-P1-04). Stage alpha defaults the gate off — production overlays
+# patch `spec.override: true` to flip it on. Air-gapped clusters
+# without a Sigstore mirror leave it off.
+apiVersion: policy.keese.ai/v1alpha1
+kind: FeatureGate
+metadata:
+  name: cosign-installplan-verify
+  labels:
+    app.kubernetes.io/part-of: keese
+    keese.ai/owner: keese-cosign-webhook
+spec:
+  description: |
+    Pre-install ValidatingWebhook on OLM InstallPlans verifies cosign
+    keyless OIDC signatures on every keese-published image. Off →
+    handler short-circuits with admission.Allowed.
+  stage: alpha
+  owners:
+    - keese-cosign-webhook
+  restartRequired: false

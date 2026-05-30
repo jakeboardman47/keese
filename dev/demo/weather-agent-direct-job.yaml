@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# One-shot trigger of the weather agent — runs the keese
+# `anthropic-direct` runtime (Python SDK, non-streaming) instead of
+# goose, so it sidesteps envoyproxy/ai-gateway#1894 (streaming +
+# Buffered EOF) and goose's hardcoded streaming-only response parser.
+#
+# Same recipe ConfigMap, same gateway path, same BSP credential
+# injection — only the runtime container changes. Demonstrates that
+# the keese plumbing (Workspace, Recipe ConfigMap mount, gateway-CA
+# auto-mount, projected SA token, BSP) is provider-agnostic.
+#
+# Apply with:
+#   kubectl apply -f dev/demo/weather-agent-direct-job.yaml
+#   kubectl wait -n alpha --for=condition=complete job/weather-agent-direct --timeout=120s
+#   kubectl logs -n alpha job/weather-agent-direct
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: weather-agent-direct
+  namespace: alpha
+  labels:
+    keese.ai/workflow: weather-agent
+    keese.ai/runtime: anthropic-direct
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        keese.ai/workflow: weather-agent
+        keese.ai/runtime: anthropic-direct
+    spec:
+      restartPolicy: Never
+      # Same SA the WorkspaceSession pod uses (audience keese-egress-alpha).
+      serviceAccountName: ksa-abcba018-3e10-48bf-9544-6223ced286b6
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      volumes:
+        - name: sa-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: keese-egress-alpha
+                  expirationSeconds: 600
+                  path: egress
+        - name: gateway-ca
+          configMap:
+            name: keese-aigateway-ca
+            optional: true
+        - name: recipe
+          configMap:
+            name: weather-agent
+        - name: home
+          emptyDir: { sizeLimit: 64Mi }
+      containers:
+        - name: agent
+          image: keese-anthropic-direct:demo
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OPENAI_BASE_URL
+              # Non-streaming /v1/chat/completions through the keese
+              # AI Gateway's OpenAI shim. The defense Lua strips client
+              # auth headers; the BSP injects the real x-api-key on
+              # the upstream call to api.anthropic.com (which accepts
+              # the OpenAI-compat schema at /v1/chat/completions).
+              value: https://envoy-ai-gateway.keese-system.svc:443/v1
+            - name: OPENAI_API_KEY
+              # The OpenAI SDK requires a non-empty value to construct
+              # the client. Real credential is injected by the BSP.
+              value: placeholder-bsp-injects-real-one
+            - name: SSL_CERT_FILE
+              value: /var/run/keese/ca/ca.crt
+            - name: KEESE_RECIPE_PATH
+              value: /var/run/keese/recipes/recipe.yaml
+            - name: HOME
+              value: /home/agent
+          volumeMounts:
+            - { name: sa-token,    mountPath: /var/run/keese/tokens,  readOnly: true }
+            - { name: gateway-ca,  mountPath: /var/run/keese/ca,       readOnly: true }
+            - { name: recipe,      mountPath: /var/run/keese/recipes,  readOnly: true }
+            - { name: home,        mountPath: /home/agent }
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m,  memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }

@@ -245,6 +245,14 @@ type RetryBudget struct {
 // WorkflowSpec defines the desired state of Workflow.
 // +kubebuilder:validation:XValidation:rule="size(self.templates) >= 1",message="spec.templates must have at least one entry"
 type WorkflowSpec struct {
+	// WorkspaceRef is the Workspace whose session pod runs this workflow's
+	// recipe when a trigger fires. The Workflow controller projects each
+	// trigger into a CronJob/HTTPRoute/Knative Trigger that invokes
+	// keese-wf-launcher --workspace <name>; the launcher creates a non-
+	// interactive WorkspaceSession against this workspace.
+	// +kubebuilder:validation:Required
+	WorkspaceRef LocalObjectReference `json:"workspaceRef"`
+
 	// Entrypoint names the template to run first.
 	// +kubebuilder:validation:MinLength=1
 	Entrypoint string `json:"entrypoint"`

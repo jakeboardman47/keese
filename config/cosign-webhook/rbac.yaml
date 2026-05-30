@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# The webhook reads InstallPlan + ClusterServiceVersion from any
+# namespace (OLM scopes them under the operators namespace, but
+# `operator-sdk run bundle` may install elsewhere) and reads
+# Namespaces (for break-glass label lookups). No mutations — the
+# webhook is validation-only per rule 04.12.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: keese-cosign-webhook
+  labels:
+    app.kubernetes.io/name: keese-cosign-webhook
+rules:
+  - apiGroups: [operators.coreos.com]
+    resources: [installplans, clusterserviceversions]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch]
+---
+# Read-only access to the keese-features ConfigMap (D27). Mounted as
+# a projected volume; this Role is enough to seed the in-process map
+# at startup and refresh on fsnotify events.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: keese-cosign-webhook-features
+  namespace: keese-system
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [keese-features]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: keese-cosign-webhook-features
+  namespace: keese-system
+subjects:
+  - kind: ServiceAccount
+    name: keese-cosign-webhook
+    namespace: keese-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: keese-cosign-webhook-features
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: keese-cosign-webhook
+subjects:
+  - kind: ServiceAccount
+    name: keese-cosign-webhook
+    namespace: keese-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: keese-cosign-webhook

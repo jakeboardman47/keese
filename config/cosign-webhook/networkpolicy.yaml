@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Two NetworkPolicies:
+#
+#   1. webhook-ingress-allow: kube-apiserver → :9443; metrics scraper
+#      → :8082; (any pod) → :8081 health.
+#
+#   2. webhook-egress-allow: kube DNS (53/udp+tcp), kube-apiserver
+#      (443/tcp), Sigstore public-good infra (Fulcio + Rekor +
+#      TUF, all 443/tcp). The egress list is wildcard-free per rule
+#      05.5; the explicit hostnames are resolved at apply time
+#      against the cluster DNS.
+#
+# Air-gapped clusters override this with a kustomize patch that
+# points at an internal Sigstore mirror (see TD-P3-09 runbook).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keese-cosign-webhook-ingress
+  namespace: keese-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: keese-cosign-webhook
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: 9443
+          protocol: TCP
+        - port: 8081
+          protocol: TCP
+        - port: 8082
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keese-cosign-webhook-egress
+  namespace: keese-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: keese-cosign-webhook
+  policyTypes: [Egress]
+  egress:
+    # DNS — resolved against the cluster CoreDNS service.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # API server (CIDR set per-cluster via kustomize patch — defaults
+    # here cover the typical kind / GKE Autopilot ranges).
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+        - ipBlock:
+            cidr: 172.16.0.0/12
+        - ipBlock:
+            cidr: 192.168.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+    # Sigstore public-good infra. Reached over public internet —
+    # locked to 443/tcp; no other ports needed.
+    #   fulcio.sigstore.dev    — keyless certificate authority
+    #   rekor.sigstore.dev     — transparency log
+    #   tuf-repo-cdn.sigstore.dev — TUF root + targets
+    #   ghcr.io                — bundle/operator image registry
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP

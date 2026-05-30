@@ -229,9 +229,9 @@ func (r *CrossTenantAgreementReconciler) validateApprovalAnnotation(ctx context.
 	st := authzv1alpha1.SignatureTypeSAToken
 	if sigType == string(authzv1alpha1.SignatureTypeOIDCKeyless) {
 		st = authzv1alpha1.SignatureTypeOIDCKeyless
-		verifyErr = r.CosignVerifier.Verify(signature, approver)
+		verifyErr = r.CosignVerifier.Verify(ctx, signature, approver)
 	} else {
-		verifyErr = r.SATokenVerifier.Verify(signature, "keese-egress-"+approvingTenant)
+		verifyErr = r.SATokenVerifier.Verify(ctx, signature, "keese-egress-"+approvingTenant)
 	}
 
 	if verifyErr != nil {

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+
+# Build the keese-authz binary — Envoy ext_authz gRPC server +
+# controller-runtime ToolBinding/WorkspaceTool watcher.
+FROM golang:1.25 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+
+# Cache deps before copying source.
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+COPY cmd/keese-authz/ cmd/keese-authz/
+COPY api/ api/
+COPY internal/ internal/
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -a -o keese-authz ./cmd/keese-authz
+
+# Distroless static — no shell, no libc, just the binary.
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /workspace/keese-authz /keese-authz
+USER 65532:65532
+EXPOSE 9001 8081
+ENTRYPOINT ["/keese-authz"]

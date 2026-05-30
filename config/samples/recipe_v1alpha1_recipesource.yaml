@@ -2,7 +2,7 @@
 # Copyright (c) 2026 keese-ai
 #
 # Minimal sample — OCI source with digest pin (prod-safe).
-apiVersion: recipe.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: RecipeSource
 metadata:
   labels:
@@ -17,7 +17,7 @@ spec:
     digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
 ---
 # Fully populated sample — Git source with pinned SHA.
-apiVersion: recipe.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: RecipeSource
 metadata:
   labels:

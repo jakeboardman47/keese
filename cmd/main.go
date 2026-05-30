@@ -267,9 +267,10 @@ func main() {
 	}
 
 	if err := (&keesecontroller.WorkspaceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Rebac:  workspaceRebac,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Rebac:            workspaceRebac,
+		GatewayNamespace: os.Getenv("KEESE_GATEWAY_NS"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Workspace")
 		os.Exit(1)
@@ -384,10 +385,24 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "GuardrailBinding")
 		os.Exit(1)
 	}
+	var promQuerier policycontroller.PrometheusQuerier
+	if addr := os.Getenv("PROMETHEUS_URL"); addr != "" {
+		if pq, err := policycontroller.NewHTTPPrometheusQuerier(addr); err == nil {
+			promQuerier = pq
+			setupLog.Info("token budget: real Prometheus querier wired", "address", addr)
+		} else {
+			setupLog.Error(err, "token budget: PROMETHEUS_URL set but client build failed; falling back to FakePrometheusQuerier")
+		}
+	}
+	if promQuerier == nil {
+		promQuerier = &policycontroller.FakePrometheusQuerier{}
+		setupLog.Info("token budget: PROMETHEUS_URL unset — using FakePrometheusQuerier (consumed=0)")
+	}
 	if err := (&policycontroller.TokenBudgetReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
 		RateLimitProj: policycontroller.NewClientRateLimitProjector(mgr.GetClient()),
+		PromQuerier:   promQuerier,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TokenBudget")
 		os.Exit(1)
@@ -416,9 +431,15 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&authzcontroller.CrossTenantAgreementReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Rebac:  ctaRebac,
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		Rebac:           ctaRebac,
+		SATokenVerifier: authzcontroller.NewHMACSATokenVerifier(mgr.GetClient()),
+		NatsDeleter:     authzcontroller.NewNACKStreamDeleter(mgr.GetClient(), os.Getenv("KEESE_GATEWAY_NS")),
+		// CosignVerifier is left as zero (the reconciler nil-guards to
+		// FakeCosignVerifier) until sigstore/cosign lands in go.mod.
+		// Operators must not enable SignatureType=OIDCKeyless approvals
+		// against this build (rule 05.16).
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "CrossTenantAgreement")
 		os.Exit(1)

@@ -8,9 +8,12 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -524,15 +527,32 @@ func (r *TransportReconciler) buildRebacTuples(tr *keesev1alpha1.Transport) []Tr
 }
 
 // mcpRouteExists checks whether an MCPRoute by name/namespace is present.
-// Uses an unstructured Get to avoid importing the mcp package at this stage.
+// MCPRoute is the Envoy AI Gateway CRD (aigateway.envoyproxy.io/v1alpha1)
+// installed by the Envoy AI Gateway chart. We use unstructured.Get so the
+// keese operator doesn't take a hard import on the gateway Go module just
+// for an existence probe.
+//
+// Returns (false, nil) when:
+//   - the named MCPRoute is not found (controller surfaces MCPRouteNotFound)
+//   - the MCPRoute CRD is not installed (NoKindMatch — same UX)
+//
+// Returns (false, err) on any other API error so the reconciler can backoff.
 func (r *TransportReconciler) mcpRouteExists(ctx context.Context, namespace, name string) (bool, error) {
-	// TODO(spec-followup): use unstructured Get against mcp.keese.ai/v1alpha1 MCPRoute
-	// once the MCPRoute CRD package is available. For now, the injected fake is used in
-	// tests; return true in the real reconciler to avoid blocking provisioning.
-	_ = ctx
-	_ = namespace
-	_ = name
-	return true, nil
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "aigateway.envoyproxy.io",
+		Version: "v1alpha1",
+		Kind:    "MCPRoute",
+	})
+	err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, obj)
+	switch {
+	case err == nil:
+		return true, nil
+	case apierrors.IsNotFound(err), meta.IsNoMatchError(err):
+		return false, nil
+	default:
+		return false, err
+	}
 }
 
 // setDegradedCondition sets Ready=False and Progressing=False on the status.

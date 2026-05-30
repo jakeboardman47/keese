@@ -57,8 +57,11 @@ func TestCapabilities(t *testing.T) {
 	if caps.ProviderName != "goose" {
 		t.Fatalf("ProviderName: got %q", caps.ProviderName)
 	}
-	if !caps.SupportsACP || !caps.SupportsRecipes || !caps.SupportsStreaming {
-		t.Fatalf("expected ACP+Recipes+Streaming, got %+v", caps)
+	if !caps.SupportsACP || !caps.SupportsRecipes || !caps.SupportsMCP {
+		t.Fatalf("expected ACP+Recipes+MCP, got %+v", caps)
+	}
+	if caps.SupportsSubAgents {
+		t.Fatalf("SupportsSubAgents must be false until TD-P3-05 lands, got %+v", caps)
 	}
 }
 
@@ -186,30 +189,121 @@ func TestResumeRestoresCheckpoint(t *testing.T) {
 	}
 }
 
-func TestUnsupportedMethodsReturnSentinel(t *testing.T) {
+// Sub-agent + StreamEvents methods stay deferred (capability-gated off).
+func TestDeferredMethodsReturnSentinel(t *testing.T) {
 	t.Parallel()
 	r := FactoryWithExecutor("keese-goose:1.33.1", &fakeExecutor{})
 	ctx := context.Background()
 	ws := spi.Workspace{}
-	sess := spi.WorkspaceSession{}
 
-	if _, err := r.Run(ctx, "", nil); !errors.Is(err, spi.ErrUnsupported) {
-		t.Errorf("Run: got %v, want ErrUnsupported", err)
-	}
-	if _, err := r.Attach(ctx, sess); !errors.Is(err, spi.ErrUnsupported) {
-		t.Errorf("Attach: got %v", err)
-	}
 	if err := r.CleanupSubAgents(ctx, ws); !errors.Is(err, spi.ErrUnsupported) {
 		t.Errorf("CleanupSubAgents: got %v", err)
 	}
-	if _, err := r.InvokeSubAgent(ctx, ws, spi.SubAgentSpec{}); !errors.Is(err, spi.ErrUnsupported) {
+	if _, err := r.InvokeSubAgent(ctx, ws, spi.SubAgentSpec{}); !errors.Is(err, spi.ErrSubAgentLimitExceeded) {
 		t.Errorf("InvokeSubAgent: got %v", err)
-	}
-	if _, err := r.Health(ctx, sess); !errors.Is(err, spi.ErrUnsupported) {
-		t.Errorf("Health: got %v", err)
 	}
 	if _, err := r.StreamEvents(ctx); !errors.Is(err, spi.ErrUnsupported) {
 		t.Errorf("StreamEvents: got %v", err)
+	}
+}
+
+// Run with no pod identity returns ErrUnsupported per the SPI contract.
+func TestRunRequiresPodIdentity(t *testing.T) {
+	t.Parallel()
+	r := FactoryWithExecutor("keese-goose:1.33.1", &fakeExecutor{})
+	if _, err := r.Run(context.Background(), "/some/recipe.yaml", nil); !errors.Is(err, spi.ErrUnsupported) {
+		t.Errorf("Run with no pod identity: got %v, want ErrUnsupported", err)
+	}
+}
+
+// Run with pod identity execs `goose run --recipe …` and forwards extra params.
+func TestRunInvokesGooseRunInPod(t *testing.T) {
+	t.Parallel()
+	exec := &fakeExecutor{}
+	r := FactoryWithExecutor("keese-goose:1.33.1", exec)
+	res, err := r.Run(context.Background(), "/var/run/keese/recipes/recipe.yaml", map[string]string{
+		runParamPodName:   "ws-abcd-sess-bob",
+		runParamNamespace: "alpha",
+		"topic":           "weather",
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res == nil || res.ExitCode != 0 {
+		t.Fatalf("Run: got %+v, want ExitCode=0", res)
+	}
+	calls := exec.callsCopy()
+	if len(calls) != 1 {
+		t.Fatalf("Run: got %d exec calls, want 1", len(calls))
+	}
+	if calls[0][0] != "/usr/local/bin/goose" || calls[0][1] != "run" {
+		t.Fatalf("Run argv: got %v, want goose run …", calls[0])
+	}
+	joined := strings.Join(calls[0], " ")
+	if !strings.Contains(joined, "--recipe /var/run/keese/recipes/recipe.yaml") {
+		t.Fatalf("Run argv missing --recipe flag: %v", calls[0])
+	}
+	if !strings.Contains(joined, "topic=weather") {
+		t.Fatalf("Run argv missing forwarded param: %v", calls[0])
+	}
+}
+
+func TestAttachReturnsPodEndpoint(t *testing.T) {
+	t.Parallel()
+	r := FactoryWithExecutor("keese-goose:1.33.1", &fakeExecutor{})
+	h, err := r.Attach(context.Background(), spi.WorkspaceSession{
+		Namespace: "alpha", PodName: "ws-abcd-sess-bob",
+	})
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	want := "pod://alpha/ws-abcd-sess-bob/agent"
+	if h == nil || h.Endpoint != want {
+		t.Fatalf("Attach.Endpoint: got %+v, want %q", h, want)
+	}
+}
+
+func TestAttachUnsupportedWithoutPod(t *testing.T) {
+	t.Parallel()
+	r := FactoryWithExecutor("keese-goose:1.33.1", &fakeExecutor{})
+	if _, err := r.Attach(context.Background(), spi.WorkspaceSession{Namespace: "alpha"}); !errors.Is(err, spi.ErrAttachUnsupported) {
+		t.Errorf("Attach without pod: got %v, want ErrAttachUnsupported", err)
+	}
+}
+
+func TestHealthAlive(t *testing.T) {
+	t.Parallel()
+	exec := &fakeExecutor{}
+	r := FactoryWithExecutor("keese-goose:1.33.1", exec)
+	rep, err := r.Health(context.Background(), spi.WorkspaceSession{
+		Namespace: "alpha", PodName: "ws-abcd-sess-bob",
+	})
+	if err != nil {
+		t.Fatalf("Health: %v", err)
+	}
+	if rep == nil || rep.Phase != "Running" {
+		t.Fatalf("Health: got %+v, want Phase=Running", rep)
+	}
+	calls := exec.callsCopy()
+	if len(calls) != 1 || !strings.Contains(strings.Join(calls[0], " "), "kill -0 1") {
+		t.Fatalf("Health: expected `kill -0 1` exec, got %v", calls)
+	}
+}
+
+func TestHealthDownOnExecError(t *testing.T) {
+	t.Parallel()
+	exec := &fakeExecutor{respond: func(_ []string) ([]byte, []byte, error) {
+		return nil, []byte("no such process"), errors.New("exit 1")
+	}}
+	r := FactoryWithExecutor("keese-goose:1.33.1", exec)
+	rep, err := r.Health(context.Background(), spi.WorkspaceSession{
+		Namespace: "alpha", PodName: "ws-abcd-sess-bob",
+	})
+	if err != nil {
+		t.Fatalf("Health: unexpected error %v (Health folds exec failure into Phase=Down)", err)
+	}
+	if rep == nil || rep.Phase != "Down" {
+		t.Fatalf("Health: got %+v, want Phase=Down", rep)
 	}
 }
 

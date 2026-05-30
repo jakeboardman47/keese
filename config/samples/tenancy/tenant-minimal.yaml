@@ -2,8 +2,8 @@
 # Copyright (c) 2026 keese-ai
 #
 # Minimal Tenant sample — Mode A (label-selector aggregation).
-# Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-tenant.md
-apiVersion: tenancy.operator.keese.ai/v1alpha1
+# Spec: docs/specs/keese.ai-v1alpha1-ii-tenant.md
+apiVersion: keese.ai/v1alpha1
 kind: Tenant
 metadata:
   name: alpha

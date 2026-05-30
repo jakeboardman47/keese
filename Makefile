@@ -25,6 +25,7 @@ DEPLOY_OPENTOFU  := $(REPO_ROOT)/deploy/opentofu
 
 # Images (override via .env.local)
 IMG             ?= ghcr.io/keese-ai/keese:dev
+GOOSE_RUNTIME_IMG ?= ghcr.io/keese-ai/goose-runtime:dev
 BUNDLE_IMG      ?= ghcr.io/keese-ai/keese-bundle:dev
 COSIGN_WEBHOOK_IMG ?= ghcr.io/keese-ai/keese-cosign-webhook:dev
 
@@ -38,8 +39,20 @@ GUARD_CONTEXT   := $(SCRIPTS_DIR)/guard-kube-context.sh
 # ==== Informational =====================================================
 
 .PHONY: help
-help:  ## Show this help — auto-discovered from doc comments
-	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST) | sort
+help:  ## Show this help — grouped by section, source order
+	@awk ' \
+		BEGIN { FS = ":.*## " } \
+		/^# ==== / { \
+			line = $$0; \
+			sub(/^# ==== /, "", line); \
+			sub(/[= ]+$$/, "", line); \
+			printf "\n\033[1m%s\033[0m\n", line; \
+			next; \
+		} \
+		/^[a-zA-Z0-9_-]+:.*## / { \
+			printf "  %-24s %s\n", $$1, $$2; \
+		} \
+	' $(MAKEFILE_LIST)
 
 .PHONY: version
 version:  ## Print tool versions
@@ -110,7 +123,7 @@ test-e2e:  ## kuttl against kind-$(KIND_CLUSTER)
 	@if command -v kuttl >/dev/null; then kubectl-kuttl test --config tests/e2e/kuttl-config.yaml; else echo "kuttl missing"; exit 1; fi
 
 .PHONY: test-e2e-extended
-test-e2e-extended:  ## kuttl extended suites: workspace-progression + agentruntime-drain + multi-tenant + chaos-network (requires live kind cluster)
+test-e2e-extended:  ## kuttl extended suites: workspace-progression + agentruntime-drain + multi-tenant + chaos-network + cross-workspace + non-interactive-launcher (requires live kind cluster + seeded OpenFGA + OpenBao)
 	@$(GUARD_CONTEXT)
 	@if ! command -v kubectl-kuttl >/dev/null 2>&1 && ! command -v kuttl >/dev/null 2>&1; then \
 		echo "ERROR: kuttl (kubectl-kuttl) not found — install via Nix flake or brew install kuttl"; \
@@ -120,12 +133,15 @@ test-e2e-extended:  ## kuttl extended suites: workspace-progression + agentrunti
 		echo "ERROR: kind cluster '$(KIND_CLUSTER)' not found — run 'make kind-up && make bootstrap-infra' first"; \
 		exit 1; \
 	fi
+	@bash tests/e2e/lib/check-prereqs.sh || { echo "ERROR: e2e prereqs not satisfied — see message above"; exit 1; }
 	@KUTTL=$$(command -v kubectl-kuttl || command -v kuttl); \
-	echo "Running extended e2e suites (workspace-progression, agentruntime-drain, multi-tenant, chaos-network)..."; \
+	echo "Running extended e2e suites (workspace-progression, agentruntime-drain, multi-tenant, chaos-network, cross-workspace, non-interactive-launcher)..."; \
 	$${KUTTL} test tests/e2e/workspace-progression --config tests/e2e/kuttl-config.yaml && \
 	$${KUTTL} test tests/e2e/agentruntime-drain --config tests/e2e/kuttl-config.yaml && \
 	$${KUTTL} test tests/e2e/multi-tenant --config tests/e2e/kuttl-config.yaml && \
-	$${KUTTL} test tests/e2e/chaos-network --config tests/e2e/kuttl-config.yaml
+	$${KUTTL} test tests/e2e/chaos-network --config tests/e2e/kuttl-config.yaml && \
+	$${KUTTL} test tests/e2e/cross-workspace --config tests/e2e/kuttl-config.yaml && \
+	$${KUTTL} test tests/e2e/non-interactive-launcher --config tests/e2e/kuttl-config.yaml
 
 .PHONY: test-e2e-olm-upgrade
 test-e2e-olm-upgrade:  ## kuttl OLM upgrade suite: install v1, upgrade to v2, assert cross-version stability (requires kind cluster + pre-loaded bundle images)
@@ -218,6 +234,14 @@ cosign-webhook-build:  ## buildx multi-arch keese-cosign-webhook image (CI)
 cosign-webhook-push:  ## push keese-cosign-webhook image — CI only
 	@echo "WARN: local push is unsigned — production must use image.yaml on tag push"
 	@docker push $(COSIGN_WEBHOOK_IMG)
+
+.PHONY: goose-runtime-build
+goose-runtime-build:  ## build goose-runtime image (block/goose + keese-drain) for local kind
+	@docker build -t $(GOOSE_RUNTIME_IMG) -f Dockerfile.goose-runtime .
+
+.PHONY: goose-runtime-load
+goose-runtime-load: goose-runtime-build  ## kind load the goose-runtime image into the dev cluster
+	@kind load docker-image $(GOOSE_RUNTIME_IMG) --name=$(KIND_CLUSTER)
 
 # ==== Deploy / install (delegated) ======================================
 

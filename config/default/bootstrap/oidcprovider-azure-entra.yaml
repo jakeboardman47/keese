@@ -6,8 +6,8 @@
 # ADMIN ACTION REQUIRED: replace {tenant-id} in spec.issuer with the
 # organization's real Azure AD tenant GUID before enabling this provider.
 # The placeholder value will cause JWKS discovery to fail.
-# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.5
-apiVersion: authz.operator.keese.ai/v1alpha1
+# Spec: docs/specs/authz.keese.ai-v1alpha1.md §1.5
+apiVersion: authz.keese.ai/v1alpha1
 kind: OIDCProvider
 metadata:
   name: azure-entra

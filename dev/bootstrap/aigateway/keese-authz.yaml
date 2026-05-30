@@ -1,0 +1,183 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# keese-authz — Envoy ext_authz gRPC server fronting the AI Gateway.
+# Per request:
+#   1. Compiles ToolBinding + WorkspaceTool CRs into a routing trie.
+#   2. Resolves request → tool:<name>.
+#   3. Calls OpenFGA Check(user, can_call, tool:<name>).
+#   4. ALLOW + injects x-keese-tool / x-keese-workspace, or DENY.
+#
+# See docs/designs/22-egress-toolbinding.md.
+
+# ── ServiceAccount ───────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keese-authz
+  namespace: keese-system
+  labels:
+    app.kubernetes.io/name: keese-authz
+    app.kubernetes.io/component: ext-authz
+
+---
+# ── ClusterRole ──────────────────────────────────────────────────────
+# Read-only on the two CRDs the trie compiles. No mutations from this
+# binary; the keese operator owns reconcile.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: keese-authz
+  labels:
+    app.kubernetes.io/name: keese-authz
+rules:
+  - apiGroups: [authz.keese.ai]
+    resources: [toolbindings, workspacetools]
+    verbs: [get, list, watch]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: keese-authz
+subjects:
+  - kind: ServiceAccount
+    name: keese-authz
+    namespace: keese-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: keese-authz
+
+---
+# ── Service ─────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: keese-authz
+  namespace: keese-system
+  labels:
+    app.kubernetes.io/name: keese-authz
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: keese-authz
+  ports:
+    - name: grpc-extauth
+      port: 9001
+      targetPort: 9001
+      appProtocol: grpc
+    - name: http-health
+      port: 8081
+      targetPort: 8081
+
+---
+# ── Deployment ───────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keese-authz
+  namespace: keese-system
+  labels:
+    app.kubernetes.io/name: keese-authz
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keese-authz
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keese-authz
+    spec:
+      serviceAccountName: keese-authz
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: keese-authz
+          image: keese-authz:demo
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: grpc-extauth
+              containerPort: 9001
+            - name: http-health
+              containerPort: 8081
+          env:
+            # OpenFGA store config sourced from the openfga-config CM mirrored
+            # into keese-system by dev/bootstrap/openfga/seed.yaml. configMapKeyRef
+            # cannot cross namespaces, so the seed Job patches both CMs in lock-step.
+            - name: OPENFGA_API_URL
+              value: http://openfga.openfga.svc.cluster.local:8080
+            - name: OPENFGA_STORE_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: openfga-config
+                  key: store_id
+                  optional: false
+            - name: OPENFGA_AUTHORIZATION_MODEL_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: openfga-config
+                  key: authorization_model_id
+                  optional: false
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+---
+# ── ConfigMap mirror — openfga-config in keese-system ────────────────
+# Mirror is created + patched by the OpenFGA seed Job
+# (dev/bootstrap/openfga/seed.yaml). The seed SA holds a Role in
+# keese-system granting patch on configmap/openfga-config so it can
+# update both copies in lock-step.
+
+---
+# ── SecurityPolicy — wire ext_authz on the AI Gateway ────────────────
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: keese-authz-extauth
+  namespace: keese-system
+  labels:
+    keese.ai/bootstrap: "true"
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: keese-aigateway
+  extAuth:
+    failOpen: false
+    grpc:
+      backendRefs:
+        - name: keese-authz
+          namespace: keese-system
+          port: 9001

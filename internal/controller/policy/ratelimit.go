@@ -5,13 +5,12 @@ package policy
 
 import "context"
 
-// RateLimitPolicy is a minimal representation of an Envoy Gateway RateLimitPolicy
-// projection. Real Envoy Gateway types (gateway.envoyproxy.io/v1alpha1) are not
-// yet in go.mod; this stub allows the controller logic to compile and be tested
-// without that dependency.
-//
-// TODO(spec-followup): replace with real gateway.envoyproxy.io/v1alpha1 types once
-// added to go.mod. The SSA field owner is "keese-tokenbudget-controller" (rule 04.7).
+// RateLimitPolicy is the controller-internal value object passed to the
+// RateLimitProjector. ClientRateLimitProjector (ratelimit_client.go) is the
+// production wiring; it projects this into a real
+// gateway.envoyproxy.io/v1alpha1.BackendTrafficPolicy via SSA with field
+// owner "keese-tokenbudget-controller" (rule 04.7). FakeRateLimitProjector
+// is the test double.
 type RateLimitPolicy struct {
 	// Namespace is the target namespace for the projected policy.
 	Namespace string

@@ -2,8 +2,8 @@
 # Copyright (c) 2026 keese-ai
 #
 # Minimal OIDCProvider sample — Kubernetes in-cluster OIDC.
-# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md
-apiVersion: authz.operator.keese.ai/v1alpha1
+# Spec: docs/specs/authz.keese.ai-v1alpha1.md
+apiVersion: authz.keese.ai/v1alpha1
 kind: OIDCProvider
 metadata:
   name: kubernetes-default

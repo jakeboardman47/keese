@@ -116,7 +116,7 @@ type WorkspaceSnapshotEntry struct {
 // CrossTenantAgreementSpec defines the desired state of CrossTenantAgreement.
 //
 // Finalizer:
-//   - finalizers.crosstenanagreement.operator.keese.ai/nats — triggers NATS stream deletion
+//   - finalizers.crosstenanagreement.keese.ai/nats — triggers NATS stream deletion
 //
 // +kubebuilder:validation:XValidation:rule="self.from.tenantRef.name != self.to.tenantRef.name",message="from and to tenants must differ"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.expiresAt) || self.expiresAt == oldSelf.expiresAt",message="expiresAt is immutable after creation"
@@ -181,7 +181,7 @@ type CrossTenantAgreementStatus struct {
 // CrossTenantAgreement is the Schema for the crosstenanagreements API.
 // CrossTenantAgreement is cluster-scoped; it governs cross-tenant NATS messaging and A2A roles.
 // Design: docs/designs/25-cross-tenant-agreement.md + 25-ii-spec-schema.md + 25-iii-approval-flow.md
-// Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-cra.md
+// Spec: docs/specs/keese.ai-v1alpha1-ii-cra.md
 type CrossTenantAgreement struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

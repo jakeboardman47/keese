@@ -113,6 +113,28 @@ type WorkspaceSpec struct {
 	// TODO(spec-followup): spec does not define a default size; defaulting to "10Gi" per task brief.
 	// +optional
 	SessionStorage *resource.Quantity `json:"sessionStorage,omitempty"`
+
+	// Egress carries the per-workspace egress authorization config —
+	// today, the allowlist of OpenFGA tool names this workspace's
+	// session pods may call. The Workspace controller writes one
+	// `tool:<name>#allowed_in@workspace:<wsuid>` ReBAC tuple per
+	// element; the keese-authz ext_authz service then resolves
+	// `tool:<name>#can_call@<subject>` per request.
+	// +optional
+	Egress *WorkspaceEgressSpec `json:"egress,omitempty"`
+}
+
+// WorkspaceEgressSpec is the per-workspace egress authz config.
+type WorkspaceEgressSpec struct {
+	// AllowedTools is the OpenFGA tool-name allowlist for this
+	// workspace. Each entry must match the toolName field of an
+	// existing ToolBinding (cluster) or the namespaced name of a
+	// WorkspaceTool. The Workspace controller writes one ReBAC
+	// tuple per element on Sync and deletes them on cleanup.
+	//
+	// +optional
+	// +keese:rebac-tuple=tool.allowed_in
+	AllowedTools []string `json:"allowedTools,omitempty"`
 }
 
 // WorkspaceStatus defines the observed state of Workspace.

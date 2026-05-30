@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Pre-install gate per design 14a §4 + F7 + rule 05.12.
+#
+# Scope: validate operators.coreos.com/v1alpha1 InstallPlan on
+# CREATE + UPDATE. UPDATE matters because OLM flips
+# spec.approved=true on manual approval — that's the moment we want
+# to recheck signatures.
+#
+# failurePolicy: Fail — fail-closed; an outage of the webhook
+# *must* prevent install (rule 05.12). Operators can break-glass via
+# the namespace-label + InstallPlan-annotation pair.
+#
+# timeoutSeconds: 30 — matches the per-image cosign verify timeout
+# inside the handler.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: keese-cosign-installplan
+  annotations:
+    cert-manager.io/inject-ca-from: keese-system/keese-cosign-webhook-tls
+  labels:
+    app.kubernetes.io/name: keese-cosign-webhook
+webhooks:
+  - name: cosign.installplan.keese.ai
+    admissionReviewVersions: [v1]
+    sideEffects: None
+    failurePolicy: Fail
+    timeoutSeconds: 30
+    matchPolicy: Equivalent
+    rules:
+      - apiGroups: [operators.coreos.com]
+        apiVersions: [v1alpha1]
+        resources: [installplans]
+        operations: [CREATE, UPDATE]
+        scope: Namespaced
+    # Skip the kube-system namespace and the OpenShift-managed
+    # `openshift-*` namespaces — these may install non-keese
+    # operators that aren't subject to keese's supply chain.
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public]
+        - key: keese.ai/cosign-skip
+          operator: NotIn
+          values: ["true"]
+    clientConfig:
+      service:
+        namespace: keese-system
+        name: keese-cosign-webhook
+        path: /validate-installplan
+        port: 443

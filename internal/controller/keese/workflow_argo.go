@@ -12,9 +12,9 @@ import (
 )
 
 // ArgoWorkflowStatus mirrors the fields keese cares about from an Argo Workflow.
-// TODO(spec-followup): Argo Workflow types are not directly imported here — real
-// implementation will depend on argoproj.io/argo-workflows/pkg/apis/workflow/v1alpha1
-// being added to go.mod. The Fake implementation uses these structs as stand-ins.
+// The production projector (workflow_argo_client.go) maps from the upstream
+// argoproj.io/v1alpha1.WorkflowStatus into this narrower shape so callers
+// don't depend on the full upstream type.
 type ArgoWorkflowStatus struct {
 	// Phase is the Argo workflow phase string (e.g. "Running", "Succeeded").
 	Phase string
@@ -81,10 +81,11 @@ type ArgoWorkflowSpec struct {
 }
 
 // ArgoProjector creates and watches Argo Workflow / WorkflowTemplate resources.
-// Real Argo client wire-up is deferred to post-gate; tests use FakeArgoProjector.
-// TODO(spec-followup): Real projection requires the Argo Workflows CRD installed in
-// envtest and the argoproj.io client registered in the scheme. The Fake covers test
-// assertions without network dependencies.
+// ClientArgoProjector (workflow_argo_client.go) is the production wiring; it
+// uses controller-runtime against the real argoproj.io/v1alpha1 types
+// (argo-workflows is in go.mod). FakeArgoProjector is the test double.
+// cmd/main.go wires the real client; envtest suites that don't install the
+// Argo CRDs swap in the fake.
 type ArgoProjector interface {
 	// ProjectWorkflowTemplate creates or updates an Argo WorkflowTemplate
 	// that mirrors the keese Workflow templates. Returns the projected name.

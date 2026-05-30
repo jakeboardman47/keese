@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Cluster-scoped ToolBinding for the Anthropic /v1/messages endpoint.
+# Maps POST /anthropic/v1/messages with model=claude-opus-4-7 onto
+# the OpenFGA object `tool:anthropic.messages.opus-4`. The
+# bodyDiscriminator extracts the model from the JSON body so that
+# different Claude models check against different tool names —
+# operators can grant `claude-haiku-4-5` access without granting
+# `claude-opus-4-7`.
+
+apiVersion: authz.keese.ai/v1alpha1
+kind: ToolBinding
+metadata:
+  name: anthropic-messages
+spec:
+  match:
+    paths:
+      - type: Exact
+        value: /anthropic/v1/messages
+    methods: [POST]
+  toolName: anthropic.messages
+  bodyDiscriminator:
+    jsonPath: $.model
+    map:
+      claude-opus-4-7:   opus-4
+      claude-sonnet-4-6: sonnet-4
+      claude-haiku-4-5:  haiku-4
+    default: ""
+  subjectFrom: ServiceAccountSubject
+  workspaceFrom: ServiceAccountName

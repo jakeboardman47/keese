@@ -2,15 +2,14 @@
 # Copyright (c) 2026 keese-ai
 #
 # Sample keese Workflow CR — summarize-then-review pipeline.
-# Two-step workflow: step 1 summarizes input documents (NATS trigger),
-# step 2 reviews the summary (Argo delegation).
-# Fields marked FIXME(design-gate) depend on schema finalization.
+# Two templated steps with NATS + cron triggers; the WorkflowRun
+# reconciler projects each step into the configured back-end (Argo
+# delegation deferred per docs/plans/demo/tech-debt.md).
 #
 # Refs: docs/designs/03-workflow-argo-delegation.md
 #       docs/designs/09-transport-crd.md
-#       docs/designs/22-workflow-composition-examples.md
 
-apiVersion: workflow.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Workflow
 metadata:
   name: summarize-review
@@ -20,63 +19,42 @@ metadata:
     keese.ai/purpose: summarize-review
     keese.ai/env: dev
 spec:
-  # Workspace scope — agent identity + memory + guardrails from workspace.
-  # FIXME(design-gate): workspaceRef field from design 03 / workflow spec
   workspaceRef:
     name: research
-    kind: Workspace
-    apiGroup: workspace.operator.keese.ai
+  entrypoint: summarize
 
-  # Trigger: NATS subject + optional cron fallback.
-  # FIXME(design-gate): triggers[] schema from design 22 / workflow spec
-  triggers:
-    - type: nats
-      nats:
-        subject: "workspace.tenant-a.msg.summarize"
-        consumerRef:
-          name: workflow-runner
-          stream: AGENT_MSG
-    - type: cron
-      cron:
-        schedule: "0 9 * * 1-5"  # 09:00 weekdays
-
-  # Two-step pipeline projected to an Argo WorkflowTemplate.
-  # FIXME(design-gate): steps[] schema from design 03 / workflow spec
-  steps:
+  templates:
     - name: summarize
-      # FIXME(design-gate): recipeRef schema from design 16 / recipe spec
-      recipeRef:
-        name: document-summarizer
-        kind: Recipe
-        apiGroup: recipe.operator.keese.ai
-      transport:
-        type: nats
-        nats:
-          subject: "agent.tenant-a.summarize"
+      image: ghcr.io/keese-ai/goose-runtime:dev
+      command: ["/usr/local/bin/goose"]
+      args: ["run", "--recipe", "/var/run/keese/recipes/recipe.yaml"]
+      transportRef:
+        name: tenant-a-bus
+      retryLimit: 1
 
     - name: review
-      recipeRef:
-        name: summary-reviewer
-        kind: Recipe
-        apiGroup: recipe.operator.keese.ai
-      transport:
-        type: nats
-        nats:
-          subject: "agent.tenant-a.review"
-      # Step 2 depends on step 1 completing.
-      # FIXME(design-gate): dependsOn field from design 03
-      dependsOn: [summarize]
+      image: ghcr.io/keese-ai/goose-runtime:dev
+      command: ["/usr/local/bin/goose"]
+      args: ["run", "--recipe", "/var/run/keese/recipes/recipe.yaml"]
+      transportRef:
+        name: tenant-a-bus
+      retryLimit: 1
 
-  # Guardrail binding (inherits from workspace; may tighten here).
-  # FIXME(design-gate): guardrailBindingRef in workflow context from design 06
-  guardrailBindingRef:
-    name: tenant-alpha-strict
-    kind: GuardrailBinding
-    apiGroup: guardrail.operator.keese.ai
+  triggers:
+    - type: NATSSubscription
+      natsSubscription:
+        streamName: AGENT_MSG
+        subject: "workspace.tenant-a.msg.summarize"
+        durable: workflow-runner
+    - type: Cron
+      cron:
+        schedule: "0 9 * * 1-5"
+        timezone: UTC
 
-  # Outputs — post review result to a NATS subject.
-  # FIXME(design-gate): outputs[] schema from design 22 / workflow spec
   outputs:
-    - type: nats
-      nats:
+    - name: review-result
+      type: NATSPublish
+      natsPublish:
         subject: "workspace.tenant-a.results.review"
+
+  concurrencyPolicy: Allow

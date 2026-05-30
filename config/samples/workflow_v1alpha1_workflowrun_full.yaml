@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 # Full WorkflowRun sample — parameters, artifacts, supervision context, timeout.
-apiVersion: workflow.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: WorkflowRun
 metadata:
   labels:

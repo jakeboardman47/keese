@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 # Minimal Memory sample — SQLite backend.
-apiVersion: memory.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Memory
 metadata:
   labels:
@@ -22,7 +22,7 @@ spec:
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 # Fully-populated Memory sample — Redis backend with HA.
-apiVersion: memory.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Memory
 metadata:
   labels:

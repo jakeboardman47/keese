@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Weather agent recipe — OpenAI-provider variant.
+#
+# Routes through the keese gateway via the AI Gateway's OpenAI schema
+# processor (AIServiceBackend `anthropic-openai` in
+# dev/bootstrap/aigateway/anthropic-openai-shim.yaml). Anthropic
+# publishes an OpenAI-compatible endpoint at /v1/chat/completions, so
+# `GOOSE_PROVIDER=openai` + `GOOSE_MODEL=claude-opus-4-7` lets goose
+# reach the same Claude upstream while bypassing
+# envoyproxy/ai-gateway#1894 (which is specific to the
+# native-Anthropic-schema streaming path).
+#
+# Apply with: kubectl apply -f dev/demo/weather-agent-openai-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: weather-agent-openai
+  namespace: alpha
+  labels:
+    keese.ai/recipe: "true"
+    app.kubernetes.io/name: weather-agent-openai
+data:
+  recipe.yaml: |
+    version: "1.0.0"
+    title: "Weather agent (OpenAI-shim)"
+    description: |
+      Weather agent that goes through Anthropic's OpenAI-compatible
+      endpoint so the AI Gateway uses its OpenAI translator (not the
+      native-Anthropic one that has envoyproxy/ai-gateway#1894).
+    instructions: |
+      You are a friendly weather agent. When the user asks about the
+      weather in a location, reply concisely in 1-2 natural-language
+      sentences. Cite typical seasonal patterns when appropriate. Do
+      not call tools or extensions.
+    extensions: []
+    prompt: |
+      What is the weather typically like in San Francisco in May? Reply concisely in one sentence.
+    settings:
+      goose_provider: openai
+      goose_model: claude-opus-4-7

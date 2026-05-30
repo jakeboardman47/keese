@@ -78,7 +78,7 @@ func (r *MemoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// 5. HA validation — controller-side defence (VAP is primary).
-	if err := validateHA(mem.Spec.Provider, mem.Namespace); err != nil {
+	if err := validateHA(mem.Spec.Provider, mem.Namespace, namespaceLabels(ctx, r.Client, mem.Namespace)); err != nil {
 		log.Info("HA violation detected", "reason", err.Error())
 		r.Recorder.Eventf(mem, corev1.EventTypeWarning, ReasonHAViolation, "%s", err.Error())
 		return r.setStatus(ctx, mem, orig, keesev1alpha1.MemoryPhaseDegraded,

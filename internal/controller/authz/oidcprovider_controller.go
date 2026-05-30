@@ -255,25 +255,32 @@ func (r *OIDCProviderReconciler) validateTemplates(
 func (r *OIDCProviderReconciler) probeJWKS(ctx context.Context, provider *authzv1alpha1.OIDCProvider) {
 	jwksURI := provider.Spec.JWKSUri
 	if jwksURI == "" {
-		// Derive from issuer via OpenID Connect discovery.
-		// TODO(spec-followup): caching the derived JWKS URI in status would avoid
-		// a discovery round-trip on every reconcile; defer until status field is specified.
-		var err error
-		jwksURI, err = DeriveJWKSURI(ctx, r.HTTPClient, provider.Spec.Issuer)
-		if err != nil {
-			metricJWKSFetchFailures.WithLabelValues(provider.Name).Inc()
-			setOIDCCondition(&provider.Status.Conditions, metav1.Condition{
-				Type:               conditionJWKSReachable,
-				Status:             metav1.ConditionFalse,
-				Reason:             "DiscoveryFailed",
-				Message:            fmt.Sprintf("OIDC discovery failed: %v", err),
-				ObservedGeneration: provider.Generation,
-			})
-			r.Recorder.Eventf(provider, corev1.EventTypeWarning, ReasonJWKSUnreachable,
-				"OIDC discovery failed for issuer %s: %v", provider.Spec.Issuer, err)
-			return
+		// Use the cached value from status when present — discovery is a
+		// network round-trip and the JWKS URI for a given issuer is stable.
+		// If discovery later returns a different URI the cache is overwritten
+		// further down (issuer migration / config drift).
+		if provider.Status.ResolvedJWKSUri != "" {
+			jwksURI = provider.Status.ResolvedJWKSUri
+		} else {
+			derived, err := DeriveJWKSURI(ctx, r.HTTPClient, provider.Spec.Issuer)
+			if err != nil {
+				metricJWKSFetchFailures.WithLabelValues(provider.Name).Inc()
+				setOIDCCondition(&provider.Status.Conditions, metav1.Condition{
+					Type:               conditionJWKSReachable,
+					Status:             metav1.ConditionFalse,
+					Reason:             "DiscoveryFailed",
+					Message:            fmt.Sprintf("OIDC discovery failed: %v", err),
+					ObservedGeneration: provider.Generation,
+				})
+				r.Recorder.Eventf(provider, corev1.EventTypeWarning, ReasonJWKSUnreachable,
+					"OIDC discovery failed for issuer %s: %v", provider.Spec.Issuer, err)
+				return
+			}
+			jwksURI = derived
 		}
 	}
+	// Cache the resolved URI for next reconcile.
+	provider.Status.ResolvedJWKSUri = jwksURI
 
 	if err := r.JwksFetcher.Fetch(ctx, jwksURI); err != nil {
 		metricJWKSFetchFailures.WithLabelValues(provider.Name).Inc()

@@ -24,7 +24,8 @@ func TestBuildArgoWorkflowTemplate_FieldShape(t *testing.T) {
 			UID:       types.UID("aaa-bbb-ccc"),
 		},
 		Spec: keesev1alpha1.WorkflowSpec{
-			Entrypoint: "run",
+			WorkspaceRef: keesev1alpha1.LocalObjectReference{Name: "ws-test"},
+			Entrypoint:   "run",
 			Templates: []keesev1alpha1.WorkflowTemplateStep{
 				{Name: "step-a", Image: "alpine:3.18", RetryLimit: 2},
 				{Name: "step-b", Image: "busybox:1.36"},

@@ -25,6 +25,21 @@ data:
   authorization_model_id: ""
 
 ---
+# Mirror ConfigMap in keese-system. Cross-namespace configMapKeyRef is not
+# supported, so the operator + keese-authz Deployments read this in-namespace
+# copy. The seed Job patches both CMs in lock-step on every run.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openfga-config
+  namespace: keese-system
+  labels:
+    app.kubernetes.io/managed-by: keese-infra-bootstrap
+data:
+  store_id: ""
+  authorization_model_id: ""
+
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -58,6 +73,34 @@ subjects:
 roleRef:
   kind: Role
   name: openfga-seed
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Cross-namespace patch: same SA needs patch on the mirrored CM in keese-system.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openfga-seed-mirror
+  namespace: keese-system
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [openfga-config]
+    verbs: [get, patch, update]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openfga-seed-mirror
+  namespace: keese-system
+subjects:
+  - kind: ServiceAccount
+    name: openfga-seed
+    namespace: openfga
+roleRef:
+  kind: Role
+  name: openfga-seed-mirror
   apiGroup: rbac.authorization.k8s.io
 
 ---
@@ -98,15 +141,31 @@ spec:
               set -euo pipefail
 
               FGA_API_URL="${FGA_API_URL:-http://openfga.openfga.svc.cluster.local:8080}"
-              CM_NAMESPACE="openfga"
               CM_NAME="openfga-config"
 
-              # Check if store already seeded by inspecting the ConfigMap.
-              existing_store=$(kubectl get configmap "${CM_NAME}" -n "${CM_NAMESPACE}" \
+              # Patches both the canonical CM in `openfga` and the mirror in
+              # `keese-system`. The mirror is what the operator and keese-authz
+              # Deployments read via configMapKeyRef (cross-namespace not allowed).
+              patch_cms() {
+                local sid="$1" mid="$2"
+                for ns in openfga keese-system; do
+                  kubectl patch configmap "${CM_NAME}" -n "${ns}" \
+                    --type merge \
+                    -p "{\"data\":{\"store_id\":\"${sid}\",\"authorization_model_id\":\"${mid}\"}}"
+                done
+              }
+
+              # Check if store already seeded by inspecting the canonical CM.
+              existing_store=$(kubectl get configmap "${CM_NAME}" -n openfga \
                 -o jsonpath='{.data.store_id}' 2>/dev/null || echo "")
+              existing_model=$(kubectl get configmap "${CM_NAME}" -n openfga \
+                -o jsonpath='{.data.authorization_model_id}' 2>/dev/null || echo "")
 
               if [[ -n "${existing_store}" && "${existing_store}" != "\"\"" ]]; then
-                echo "OpenFGA already seeded (store_id=${existing_store}); skipping."
+                echo "OpenFGA already seeded (store_id=${existing_store}); ensuring mirror CM is in sync."
+                # Re-patch both CMs to recover from a partial failure where the
+                # mirror was missing or out of date. Idempotent.
+                patch_cms "${existing_store}" "${existing_model}"
                 exit 0
               fi
 
@@ -123,10 +182,8 @@ spec:
                 --file /model/model.fga | jq -r '.authorization_model_id')
               echo "Model written: ${model_id}"
 
-              # Step 3: Update ConfigMap with store + model IDs.
-              kubectl patch configmap "${CM_NAME}" -n "${CM_NAMESPACE}" \
-                --type merge \
-                -p "{\"data\":{\"store_id\":\"${store_id}\",\"authorization_model_id\":\"${model_id}\"}}"
+              # Step 3: Patch both ConfigMaps with store + model IDs.
+              patch_cms "${store_id}" "${model_id}"
 
               echo "OpenFGA seeding complete."
           env:

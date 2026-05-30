@@ -1,0 +1,146 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# HA per design 14a §4: 2 replicas, PodDisruptionBudget minAvailable: 1,
+# terminationGracePeriodSeconds: 30, failurePolicy: Fail (set on the
+# ValidatingWebhookConfiguration). Liveness probe budget per rule 06.8:
+# initialDelaySeconds + periodSeconds*failureThreshold = 5+10*3 = 35
+# >= terminationGracePeriodSeconds (30) so the kubelet won't SIGKILL
+# mid-drain.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keese-cosign-webhook
+  namespace: keese-system
+  labels:
+    app.kubernetes.io/name: keese-cosign-webhook
+    app.kubernetes.io/component: admission
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keese-cosign-webhook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keese-cosign-webhook
+    spec:
+      serviceAccountName: keese-cosign-webhook
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: keese-cosign-webhook
+      containers:
+        - name: webhook
+          # Image pinned by digest in config/overlays/prod via kustomize
+          # patch (TD-P2-09). Dev overlays use the floating tag.
+          image: ghcr.io/keese-ai/keese-cosign-webhook:dev
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: webhook
+              containerPort: 9443
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+            - name: metrics
+              containerPort: 8082
+              protocol: TCP
+          env:
+            - name: WEBHOOK_CERT_DIR
+              value: /etc/webhook/certs
+            - name: COSIGN_BINARY
+              value: /cosign
+            # Sigstore Rekor + Fulcio public-good endpoints. Override
+            # in air-gapped overlays via a kustomize patch.
+            - name: COSIGN_EXPERIMENTAL
+              value: "0"
+            - name: TUF_ROOT
+              value: /tmp/tuf
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/webhook/certs
+              readOnly: true
+            - name: features
+              mountPath: /etc/keese/features
+              readOnly: true
+            - name: tuf
+              mountPath: /tmp/tuf
+            - name: scratch
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: tls
+          secret:
+            secretName: keese-cosign-webhook-tls
+            defaultMode: 0400
+        - name: features
+          # ConfigMap projection from the FeatureGateController (D27).
+          # `optional: true` so the webhook can boot before the
+          # operator has reconciled the seed CRs — defaults take
+          # over until the file appears.
+          configMap:
+            name: keese-features
+            optional: true
+            defaultMode: 0440
+        - name: tuf
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+        - name: scratch
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: keese-cosign-webhook
+  namespace: keese-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keese-cosign-webhook

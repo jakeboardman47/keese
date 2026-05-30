@@ -10,10 +10,17 @@ import "context"
 // token verifications for the named provider, preventing stale-key attacks on CR
 // deletion or rotation.
 //
-// The real implementation will call gRPC to the keese-ext-authz admin endpoint.
-// Until the ext-authz service is implemented, use FakeCacheFlusher in tests.
+// Feature status: deferred — paired with the keese-authz token cache itself.
+// Today keese-authz performs no token caching (every request → OpenFGA Check),
+// so there is no cache to flush; FakeCacheFlusher's no-op is the correct
+// production behavior in this build. When the token cache lands, three changes
+// go together:
 //
-// TODO(spec-followup): wire up real gRPC call once keese-ext-authz admin API is specified.
+//  1. keese-authz adds a TTL-cached token verifier (internal/authz/extauth)
+//  2. keese-authz exposes POST /admin/cache/flush?provider=<name> on its
+//     management port (8081)
+//  3. This interface gains an HTTPCacheFlusher that discovers all keese-authz
+//     pods via the Endpoints API and POSTs in parallel with maxFlushTimeout
 type CacheFlusher interface {
 	// Flush sends a cache invalidation signal for the named provider.
 	// Returns nil if all reachable gateway pods ACKed; returns error on partial

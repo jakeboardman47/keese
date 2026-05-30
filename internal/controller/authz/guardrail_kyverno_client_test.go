@@ -100,8 +100,8 @@ func TestBuildClusterPolicy_Shape(t *testing.T) {
 	if got := cp.Labels["keese.ai/managed"]; got != "true" {
 		t.Errorf("label keese.ai/managed = %q, want %q", got, "true")
 	}
-	if got := cp.Labels["keese.ai/group"]; got != "guardrail.operator.keese.ai" {
-		t.Errorf("label keese.ai/group = %q, want %q", got, "guardrail.operator.keese.ai")
+	if got := cp.Labels["keese.ai/group"]; got != "authz.keese.ai" {
+		t.Errorf("label keese.ai/group = %q, want %q", got, "authz.keese.ai")
 	}
 	if len(cp.Spec.Rules) != 0 {
 		t.Errorf("Spec.Rules must be empty, got %d rules", len(cp.Spec.Rules))

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Phase 5 e2e: keese-wf-launcher in workspace-mode creates a non-
+# interactive WorkspaceSession that runs `goose run --recipe` and
+# terminates with Phase=Completed. We provision a small ConfigMap-
+# carried recipe + a workspace pointing at it, then run the launcher.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+apply:
+  - resources.yaml

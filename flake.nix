@@ -95,7 +95,8 @@
             k9s
             kubeconform
             pluto
-            # kuttl              # unverified nixpkgs naming
+            kuttl                # nixpkgs attr `kuttl` ships the
+                                 # `kubectl-kuttl` binary (TD-P1-07).
             # operator-sdk       # unverified; overlay fallback
             # setup-envtest      # unverified; go-install fallback
             # controller-gen     # unverified nixpkgs naming

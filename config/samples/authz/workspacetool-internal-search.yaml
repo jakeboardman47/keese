@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Namespaced WorkspaceTool registering an internal search API the
+# tenant runs in their own namespace. Resolves to
+# `tool:alpha.internal-search` (namespace-prefixed). The platform
+# admin can choose to deny this tool by removing the workspace's
+# `allowed_in` tuple; the tenant admin can rename or delete the
+# binding without the platform admin's involvement.
+
+apiVersion: authz.keese.ai/v1alpha1
+kind: WorkspaceTool
+metadata:
+  name: internal-search
+  namespace: alpha
+spec:
+  match:
+    paths:
+      - type: PathPrefix
+        value: /search
+    methods: [GET, POST]
+  toolName: internal-search
+  workspaceRef:
+    name: my-ws
+  subjectFrom: ServiceAccountSubject
+  workspaceFrom: ServiceAccountName

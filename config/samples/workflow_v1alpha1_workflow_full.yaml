@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 # Full Workflow sample — multiple templates, cron trigger, S3 output, retry budget.
-apiVersion: workflow.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Workflow
 metadata:
   labels:
@@ -10,6 +10,8 @@ metadata:
     keese.ai/managed: "true"
   name: workflow-full-sample
 spec:
+  workspaceRef:
+    name: workspace-sample-minimal
   entrypoint: fetch
   templates:
     - name: fetch

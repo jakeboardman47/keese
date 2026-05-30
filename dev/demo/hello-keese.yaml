@@ -18,7 +18,7 @@
 # in-memory FakeRebacWriter (TD-P1-01).
 
 # ── Tenant ───────────────────────────────────────────────────────────
-apiVersion: tenancy.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Tenant
 metadata:
   name: alpha
@@ -28,17 +28,20 @@ spec:
       name: alice@example.com
 ---
 # ── AgentRuntime (cluster-scoped) ────────────────────────────────────
-apiVersion: runtime.operator.keese.ai/v1alpha1
+# goose-runtime:dev = upstream ghcr.io/block/goose:latest with keese-drain
+# baked in at /usr/local/bin/keese-drain (see Dockerfile.goose-runtime).
+# Build + load with: make goose-runtime-load
+apiVersion: keese.ai/v1alpha1
 kind: AgentRuntime
 metadata:
   name: goose-default
 spec:
   implementation:
     goose:
-      image: ghcr.io/block/goose:latest
+      image: ghcr.io/keese-ai/goose-runtime:dev
 ---
 # ── Workspace ────────────────────────────────────────────────────────
-apiVersion: workspace.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Workspace
 metadata:
   name: my-ws
@@ -51,9 +54,26 @@ spec:
   interactive: true
   sessionMode: OnDemand
   concurrencyPolicy: Allow
+  # Egress authz allowlist — keese-authz ext_authz Check resolves
+  # `tool:<name>#can_call@<subject>` per request and grants only
+  # the tools listed here. The Workspace controller writes one
+  # `tool:<name>#allowed_in@workspace:<wsuid>` tuple per entry.
+  # See dev/bootstrap/aigateway/keese-toolbindings.yaml for the
+  # cluster-scoped ToolBinding catalogue that defines these names.
+  egress:
+    allowedTools:
+      # Bare tool name covers requests where Envoy isn't buffering
+      # the body for ext_authz, so the bodyDiscriminator can't fire.
+      # Sub-tools below cover the discriminator-fired case (when body
+      # buffering is wired via SecurityPolicy.spec.extAuth.grpc body
+      # forwarding — TD-P1-03 follow-on).
+      - anthropic.messages
+      - anthropic.messages.opus-4
+      - anthropic.messages.sonnet-4
+      - anthropic.messages.haiku-4
 ---
 # ── Memory (sqlite) ──────────────────────────────────────────────────
-apiVersion: memory.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Memory
 metadata:
   name: my-ws-memory
@@ -68,7 +88,7 @@ spec:
   embeddingDim: 768
 ---
 # ── WorkspaceSession (per-user) ──────────────────────────────────────
-apiVersion: workspace.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: WorkspaceSession
 metadata:
   name: my-session

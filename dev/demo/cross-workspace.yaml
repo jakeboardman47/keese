@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Same-tenant cross-workspace coordination demo.
+#
+# Two Workspaces under tenant `alpha` collaborate via:
+#   - Transport (NATS JetStream subject prefix `keese.transport.team-bus.>`)
+#   - SharedMemory (sqlite, both workspaces grant reader+writer)
+#   - WorkspaceShare (HTTP cross-namespace gateway-routed access)
+#
+# Apply order:
+#   kubectl apply -f dev/demo/hello-keese.yaml      # creates tenant alpha + my-ws
+#   kubectl apply -f dev/demo/cross-workspace.yaml  # adds producer + consumer + bus
+#
+# Demo:
+#   kubectl exec -n alpha <consumer-pod> -- nats sub -s nats://nats.keese-system 'keese.transport.team-bus.>' &
+#   kubectl exec -n alpha <producer-pod> -- nats pub -s nats://nats.keese-system keese.transport.team-bus.hello "from-producer"
+#
+# All resources land in namespace `alpha` (single tenant). For cross-tenant
+# coordination see CrossTenantAgreement (deferred per docs/plans/demo/tech-debt.md).
+
+# ── Producer Workspace ───────────────────────────────────────────────
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: producer
+  namespace: alpha
+  labels:
+    keese.ai/tenant: alpha
+spec:
+  tenantRef:
+    name: alpha
+  runtimeRef:
+    name: goose-default
+  interactive: true
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow
+  memoryRefs:
+    - name: team-notes
+  transportRefs:
+    - name: team-bus
+  egress:
+    allowedTools:
+      - anthropic.messages
+      - anthropic.messages.opus-4
+      - anthropic.messages.sonnet-4
+
+---
+# ── Consumer Workspace ───────────────────────────────────────────────
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: consumer
+  namespace: alpha
+  labels:
+    keese.ai/tenant: alpha
+spec:
+  tenantRef:
+    name: alpha
+  runtimeRef:
+    name: goose-default
+  interactive: true
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow
+  memoryRefs:
+    - name: team-notes
+  transportRefs:
+    - name: team-bus
+  egress:
+    allowedTools:
+      - anthropic.messages
+      - anthropic.messages.opus-4
+      - anthropic.messages.sonnet-4
+
+---
+# ── Shared NATS bus (Transport) ──────────────────────────────────────
+# Both workspaces publish + subscribe on subject prefix
+# `keese.transport.team-bus.>`. The Transport controller writes the
+# JetStream Stream + Consumer; ext_authz at the gateway gates access
+# via the workspace.tenant_member relation in OpenFGA.
+apiVersion: keese.ai/v1alpha1
+kind: Transport
+metadata:
+  name: team-bus
+  namespace: alpha
+  labels:
+    keese.ai/tenant: alpha
+spec:
+  type: nats
+  nats:
+    clusterRef:
+      name: nats
+      namespace: keese-system
+    streamName: keese-tenant-alpha-team-bus
+    consumerName: team-bus-consumer
+    maxDeliver: 3
+
+---
+# ── SharedMemory (sqlite) ────────────────────────────────────────────
+# Lower-friction cross-workspace state than Transport; both workspaces
+# get reader+writer grants via SharedMemory.spec.sharedWith.
+apiVersion: keese.ai/v1alpha1
+kind: SharedMemory
+metadata:
+  name: team-notes
+  namespace: alpha
+  labels:
+    keese.ai/tenant: alpha
+spec:
+  tenantRef: alpha
+  provider:
+    type: sqlite
+    sqlite:
+      storageSize: "2Gi"
+      reclaimPolicy: Retain
+  embeddingDim: 768
+  sharedWith:
+    - name: producer
+    - name: consumer
+
+---
+# ── WorkspaceShare (HTTP / Gateway API ReferenceGrant) ───────────────
+# Allows the consumer namespace to dial the producer's Memory backend
+# Service for direct HTTP reads. The WorkspaceShare controller
+# projects a v1beta1.ReferenceGrant in the producer's namespace per
+# Gateway API §5.1 and writes the matching ReBAC tuples.
+apiVersion: keese.ai/v1alpha1
+kind: WorkspaceShare
+metadata:
+  name: producer-to-consumer
+  namespace: alpha
+  labels:
+    keese.ai/tenant: alpha
+spec:
+  workspaceRef:
+    name: producer
+  targetNamespace: alpha
+  readOnly: true

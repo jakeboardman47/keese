@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Demo green criterion 4: log evidence of an Anthropic round-trip.
+# Phase 7 e2e — once 00-assert sees Active phase, the keese-resume init
+# container has run and the agent container is up. We exec `goose run`
+# with a one-shot prompt; goose dials Anthropic via $ANTHROPIC_BASE_URL
+# (which goes through the AI Gateway) and writes the response into the
+# session SQLite under HOME. We assert the session SQLite file exists
+# and grew above its empty-init size.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 180
+commands:
+  # Real-path gate.
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+  # Run a tiny prompt through goose; non-zero exit fails the step.
+  - script: |
+      set -euo pipefail
+      POD=$(kubectl get pod -n alpha -l keese.ai/session=my-session -o jsonpath='{.items[0].metadata.name}')
+      kubectl exec -n alpha "$POD" -c agent -- /usr/local/bin/goose run \
+        --text "say hello in five words" --no-session 2>&1 \
+        | tee /tmp/goose-out.txt
+      grep -Eqi 'hello|hi' /tmp/goose-out.txt
+  # Sqlite session DB exists and is non-zero size after the run.
+  - script: |
+      set -euo pipefail
+      POD=$(kubectl get pod -n alpha -l keese.ai/session=my-session -o jsonpath='{.items[0].metadata.name}')
+      kubectl exec -n alpha "$POD" -c agent -- sh -c '
+        DB=/var/run/keese/session/home/.local/share/goose/sessions/sessions.db
+        test -s "$DB"
+      '

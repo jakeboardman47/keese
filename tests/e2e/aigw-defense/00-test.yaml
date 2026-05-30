@@ -17,6 +17,12 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
+  # Real-path-or-fail prereqs gate (Phase 7): refuses to run when
+  # OpenFGA / OpenBao aren't seeded with real values, so the suite
+  # never silently passes against fake-fallback paths.
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+    skipLogOutput: false
   # `namespaced: false` — the script targets keese-system / alpha
   # namespaces by name, not via kuttl's per-test namespace.
   # kuttl's `command:` runs from the TEST STEP's directory (not the

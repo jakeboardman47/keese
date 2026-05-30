@@ -81,6 +81,28 @@ spec:
           capabilities:
             drop:
             - "ALL"
+        # OpenFGA wiring — mirrored CM populated by dev/bootstrap/openfga/seed.yaml.
+        # When unset (empty value from a missing CM), cmd/main.go falls back to
+        # NoopRebacWriter; when set, real OpenFGA writers activate. The CM is
+        # `optional: true` so the controller still runs in clusters where the
+        # OpenFGA bootstrap hasn't been applied (e.g. minimal CI smoke).
+        env:
+          - name: OPENFGA_API_URL
+            value: http://openfga.openfga.svc.cluster.local:8080
+          - name: OPENFGA_STORE_ID
+            valueFrom:
+              configMapKeyRef:
+                name: openfga-config
+                key: store_id
+                optional: true
+          - name: OPENFGA_AUTHORIZATION_MODEL_ID
+            valueFrom:
+              configMapKeyRef:
+                name: openfga-config
+                key: authorization_model_id
+                optional: true
+          - name: KEESE_GATEWAY_NS
+            value: keese-system
         # Probe schedule vs terminationGracePeriodSeconds (rule 06.8):
         #   initialDelaySeconds(30) + periodSeconds(10) * failureThreshold(3)
         #   = 30 + 30 = 60s headroom.

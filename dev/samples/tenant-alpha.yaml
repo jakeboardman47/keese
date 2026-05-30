@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 #
-# Sample Capsule Tenant for tenant-a.
-# Applied by scripts/dev/smoke.sh as part of the post-gate smoke test.
-# Capsule reconciles this into namespace(s), NetworkPolicy, ResourceQuota,
-# LimitRange, and RBAC per the tenant spec.
+# Sample Capsule Tenant for tenant-a (the upstream tenant primitive).
+# The keese.ai/v1alpha1 Tenant CR sits on top of this; see config/samples/
+# tenancy/tenant-minimal.yaml for the keese-side counterpart.
 #
 # Refs: docs/designs/01-tenancy-capsule.md
 
@@ -15,12 +14,10 @@ metadata:
   labels:
     keese.ai/tenant: tenant-a
     keese.ai/tier: standard
-    # FIXME(design-gate): align label schema with design 01-tenancy-capsule.md
 spec:
   owners:
-    - name: tenant-alpha-admin
+    - name: alice@example.com
       kind: User
-      # FIXME(design-gate): reference actual OIDC user once identity is wired
 
   namespaceOptions:
     quota: 10
@@ -38,7 +35,6 @@ spec:
           limits.cpu: "16"
           limits.memory: "16Gi"
           pods: "50"
-          # FIXME(design-gate): tune quotas once workspace sizing is designed (02)
 
   limitRanges:
     items:
@@ -51,11 +47,7 @@ spec:
               cpu: 100m
               memory: 128Mi
 
-  nodeSelector:
-    keese.ai/tenant: tenant-a
-
   ingressOptions:
     allowedClasses:
       matchNames:
-        - keese-gateway
-        # FIXME(design-gate): finalize GatewayClass name in design 05a
+        - keese-aigateway

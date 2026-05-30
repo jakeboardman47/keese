@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Kustomize base for the keese cosign ValidatingWebhook. Pulled into
+# the operator overlays via `resources: [../cosign-webhook]`.
+#
+# Order is alphabetical-by-filename; cert-manager Issuer + Certificate
+# must apply before the Deployment can mount the resulting Secret —
+# kustomize/Helm doesn't enforce ordering, but kubectl-apply tolerates
+# the eventual-consistency convergence.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: keese-system
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: keese-cosign-webhook
+      app.kubernetes.io/part-of: keese
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - rbac.yaml
+  - certificate.yaml
+  - service.yaml
+  - deployment.yaml
+  - networkpolicy.yaml
+  - validatingwebhookconfiguration.yaml
+
+images:
+  - name: ghcr.io/keese-ai/keese-cosign-webhook
+    newTag: dev

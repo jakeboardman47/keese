@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Standalone test Pod for the keese-built goose v1.33.1 runtime with
+# the declarative-provider JSON loader. Sidesteps the operator entirely
+# for the proof-of-concept (the operator's pod-template doesn't yet
+# mount the goose-custom-providers ConfigMap; that's a follow-on
+# operator change once we've proven the workaround works).
+#
+# Mounts:
+#   - sa-token              → /var/run/keese/tokens/         (projected SA, audience keese-egress-alpha)
+#   - gateway-ca            → /var/run/keese/ca/             (mirrored aigw-server-tls)
+#   - recipe                → /var/run/keese/recipes/        (the weather agent recipe)
+#   - goose-providers       → /home/goose/.config/goose/custom_providers/  (subPath JSON file)
+#   - home                  → /home/goose                    (writable, emptyDir for goose's session/logs)
+#
+# Apply with:
+#   kubectl apply -f dev/demo/goose-from-source-test-pod.yaml
+#   kubectl exec -n alpha -it goose-from-source-test -- bash
+#   # then inside:
+#   #   goose --version           → 1.33.1 expected
+#   #   ls /home/goose/.config/goose/custom_providers/
+#   #   goose run --recipe /var/run/keese/recipes/recipe.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: goose-from-source-test
+  namespace: alpha
+  labels:
+    keese.ai/runtime: goose-from-source
+spec:
+  restartPolicy: Never
+  serviceAccountName: ksa-abcba018-3e10-48bf-9544-6223ced286b6
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile: { type: RuntimeDefault }
+  volumes:
+    - name: sa-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: keese-egress-alpha
+              expirationSeconds: 600
+              path: egress
+    - name: gateway-ca
+      configMap:
+        name: keese-aigateway-ca
+        optional: true
+    - name: recipe
+      configMap:
+        name: weather-agent
+    - name: goose-providers
+      configMap:
+        name: goose-custom-providers
+    - name: home
+      emptyDir: { sizeLimit: 256Mi }
+  containers:
+    - name: agent
+      image: keese-goose:1.33.1
+      imagePullPolicy: IfNotPresent
+      # Long-lived `sleep infinity` so the test driver can exec in
+      # multiple times. Kill the pod when done.
+      command: ["/bin/sh", "-c"]
+      args: ["echo 'goose-from-source ready; kubectl exec to invoke'; exec sleep infinity"]
+      env:
+        # Goose declarative provider, OpenAI engine, non-streaming.
+        # Routes through the keese AI Gateway's OpenAI shim
+        # (AIServiceBackend `anthropic-openai` — must be applied).
+        - name: GOOSE_PROVIDER
+          value: keese-gateway
+        - name: GOOSE_MODEL
+          value: claude-opus-4-7
+        # Override the fast/router models too so no goose internal
+        # call falls back to the default api.openai.com URL.
+        - name: GOOSE_PLANNER_PROVIDER
+          value: keese-gateway
+        - name: GOOSE_PLANNER_MODEL
+          value: claude-haiku-4-5
+        - name: GOOSE_SUBAGENT_PROVIDER
+          value: keese-gateway
+        - name: GOOSE_SUBAGENT_MODEL
+          value: claude-haiku-4-5
+        # Goose validates this is non-empty before constructing the
+        # OpenAI client. The BSP injects the real key on the gateway.
+        - name: OPENAI_API_KEY
+          value: placeholder-bsp-injects-real-one
+        - name: SSL_CERT_FILE
+          value: /var/run/keese/ca/ca.crt
+        - name: HOME
+          value: /home/goose
+      volumeMounts:
+        - { name: sa-token,        mountPath: /var/run/keese/tokens,                              readOnly: true }
+        - { name: gateway-ca,      mountPath: /var/run/keese/ca,                                  readOnly: true }
+        - { name: recipe,          mountPath: /var/run/keese/recipes,                             readOnly: true }
+        - { name: goose-providers, mountPath: /home/goose/.config/goose/custom_providers,         readOnly: true }
+        - { name: home,            mountPath: /home/goose }
+      securityContext:
+        runAsNonRoot: true
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities: { drop: [ALL] }
+      resources:
+        requests: { cpu: 100m, memory: 256Mi }
+        limits:   { cpu: 1,    memory: 1Gi }

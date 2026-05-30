@@ -4,8 +4,8 @@
 # Bootstrap OIDCProvider: google
 # Trusts Google Workspace / Google Identity OIDC tokens.
 # Admins may add jwksUri override for air-gapped clusters.
-# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.5
-apiVersion: authz.operator.keese.ai/v1alpha1
+# Spec: docs/specs/authz.keese.ai-v1alpha1.md §1.5
+apiVersion: authz.keese.ai/v1alpha1
 kind: OIDCProvider
 metadata:
   name: google

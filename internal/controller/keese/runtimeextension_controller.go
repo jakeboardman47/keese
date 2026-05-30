@@ -26,8 +26,13 @@ const (
 	runtimeExtensionFinalizer  = "finalizers.runtimeextension.keese.ai/rebac-cleanup"
 	runtimeExtensionFieldOwner = "keese-runtimeextension-controller"
 
-	// defaultTenantName is the synthetic tenant used for owner tuples in the absence
-	// of a full tenancy CRD integration (TODO(spec-followup): drive from Workspace tenant label).
+	// tenantNamespaceLabel is the Capsule-managed label that maps a namespace
+	// back to its owning tenant (set via Tenant.spec.namespaceOptions.additionalMetadata.labels).
+	tenantNamespaceLabel = "keese.ai/tenant"
+
+	// defaultTenantName is the fallback tenant used for owner tuples when the
+	// namespace carries no keese.ai/tenant label (test fixtures, dev clusters
+	// without Capsule).
 	defaultTenantName = "default"
 )
 
@@ -43,6 +48,7 @@ type RuntimeExtensionReconciler struct {
 // +kubebuilder:rbac:groups=keese.ai,resources=runtimeextensions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=keese.ai,resources=runtimeextensions/finalizers,verbs=update
 // +kubebuilder:rbac:groups=keese.ai,resources=agentruntimes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
 
 // Reconcile moves the RuntimeExtension toward its desired state.
 // Idiom: fetch → DeepCopy for patch → compute desired → SSA → status patch.
@@ -103,8 +109,12 @@ func (r *RuntimeExtensionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// The controller manually checks references on deletion (rule 04.10).
 	// TODO(spec-followup): evaluate adopting a custom GC annotation approach if needed.
 
-	// 7. Write owner tuple (idempotent).
-	tenantName := defaultTenantName
+	// 7. Write owner tuple (idempotent). Tenant resolved from the
+	// RuntimeExtension's namespace via the keese.ai/tenant label that
+	// Capsule's namespaceOptions.additionalMetadata adds; falls back to
+	// defaultTenantName when the label is absent (rule 04.10 manual
+	// reference check — no formal cross-namespace ownerRef).
+	tenantName := r.resolveTenantName(ctx, ext.Namespace)
 	if err := r.Rebac.WriteExtensionOwner(ctx, ext.Name, tenantName); err != nil {
 		msg := fmt.Sprintf("write owner tuple: %v", err)
 		log.Error(err, "OpenFGA unavailable writing owner tuple")
@@ -182,6 +192,20 @@ func (r *RuntimeExtensionReconciler) reconcileDelete(
 	}
 	_ = orig // orig used only for status patch path above
 	return ctrl.Result{}, nil
+}
+
+// resolveTenantName reads the keese.ai/tenant label from the given namespace.
+// Returns defaultTenantName when the namespace is unreachable or the label is
+// absent — keeps the controller usable on dev clusters without Capsule.
+func (r *RuntimeExtensionReconciler) resolveTenantName(ctx context.Context, namespace string) string {
+	var ns corev1.Namespace
+	if err := r.Get(ctx, client.ObjectKey{Name: namespace}, &ns); err != nil {
+		return defaultTenantName
+	}
+	if t, ok := ns.Labels[tenantNamespaceLabel]; ok && t != "" {
+		return t
+	}
+	return defaultTenantName
 }
 
 // patchStatus issues a status-subresource patch.

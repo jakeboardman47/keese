@@ -7,8 +7,22 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
 )
+
+// namespaceLabels fetches the labels of the named Namespace. Returns nil on
+// any error; callers fall back to the name-suffix heuristic in isDevNamespace
+// rather than failing the reconcile on a transient Namespace Get.
+func namespaceLabels(ctx context.Context, c client.Client, name string) map[string]string {
+	var ns corev1.Namespace
+	if err := c.Get(ctx, client.ObjectKey{Name: name}, &ns); err != nil {
+		return nil
+	}
+	return ns.Labels
+}
 
 // BackendProvisioner abstracts provider-specific provisioning so that
 // integration tests can inject a fake without a live Redis/Qdrant/etc.
@@ -117,12 +131,13 @@ func (f *FakeBackendProvisioner) Healthy(_ context.Context, _ keesev1alpha1.Memo
 
 // validateHA returns an error if the provider requires HA replicas outside a dev
 // namespace but is configured with replicas < 2. This is the controller-side
-// enforcement that mirrors the MemoryHARequired VAP.
+// enforcement that mirrors the MemoryHARequired VAP — a defence-in-depth check
+// that stays in even after the VAP is cluster-wide.
 //
-// TODO(spec-followup): Once the VAP is applied cluster-wide, this defence-in-depth
-// check can be relaxed but should remain for belt-and-suspenders.
-func validateHA(provider keesev1alpha1.MemoryProvider, namespace string) error {
-	if isDevNamespace(namespace) {
+// nsLabels are the Namespace's labels (pass nil to skip label inspection and
+// fall back to the name heuristic).
+func validateHA(provider keesev1alpha1.MemoryProvider, namespace string, nsLabels map[string]string) error {
+	if isDevNamespace(nsLabels, namespace) {
 		return nil
 	}
 	switch provider.Type {
@@ -144,11 +159,19 @@ func validateHA(provider keesev1alpha1.MemoryProvider, namespace string) error {
 	return nil
 }
 
-// isDevNamespace returns true for namespaces that are exempt from the HA requirement.
-// Convention: a namespace is "dev" if it has the suffix "-dev" or is named "default".
-//
-// TODO(spec-followup): Replace heuristic with a namespace label selector once the
-// Namespace labelling convention lands in a design doc.
-func isDevNamespace(ns string) bool {
-	return ns == "default" || len(ns) >= 4 && ns[len(ns)-4:] == "-dev"
+// devNamespaceLabel is the namespace label whose value="dev" exempts the
+// namespace from the HA requirement. The label is set by Capsule's
+// namespaceOptions.additionalMetadata on tenant namespaces (see
+// dev/samples/tenant-alpha.yaml).
+const devNamespaceLabel = "keese.ai/env"
+
+// isDevNamespace reports dev-ness from the namespace's labels map, falling
+// back to a name heuristic when the label is absent. Reconcilers fetch the
+// Namespace object and pass labels directly; tests can pass nil to exercise
+// the name-suffix path.
+func isDevNamespace(labels map[string]string, name string) bool {
+	if v, ok := labels[devNamespaceLabel]; ok {
+		return v == "dev"
+	}
+	return name == "default" || (len(name) >= 4 && name[len(name)-4:] == "-dev")
 }

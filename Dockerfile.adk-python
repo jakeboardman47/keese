@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+
+# keese adk-python runtime image — Google ADK Python wrapped for keese pod
+# templates. The keese WorkspaceSession controller supplies the command line
+# at pod spec time (typically `python -m adk.serve --workspace $WS
+# --a2a-port 8080 --gateway $ENVOY_AI_GATEWAY_URL`); the image only carries
+# the interpreter, ADK SDK, and the keese-drain binary for preStop drain.
+#
+# Build:
+#   docker build -f Dockerfile.adk-python -t keese/adk-python:dev .
+# Load into kind:
+#   make adk-python-load
+#
+# Production images MUST be digest-pinned (rule 05.12). VAP
+# `adk-runtime-image-digest-pinned` rejects unpinned references outside
+# namespaces labeled keese.ai/environment=dev. Dev/CI tag only here.
+#
+# Plan ref: docs/plans/expansion/E1-adk-python-runtime.md §T1
+
+# ── Stage 1: install Python deps into a venv on slim base ─────────────
+FROM python:3.12-slim AS pydeps
+ARG ADK_VERSION=1.28.1
+ARG A2A_SDK_VERSION=0.3.23
+ARG OTEL_VERSION=1.31.1
+
+WORKDIR /build
+
+# Bypass the broken pip caching layer; produce a clean venv we can copy.
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Pin floors; CI bumps via dependabot. ADK + A2A + OTEL are the minimum
+# surface area E1 needs; richer ML libs are runtime-installed via Skills
+# (E6) once that CRD lands.
+RUN pip install --upgrade pip==24.3.1 \
+    && pip install \
+        "google-adk>=${ADK_VERSION}" \
+        "a2a-sdk>=${A2A_SDK_VERSION}" \
+        "opentelemetry-distro>=${OTEL_VERSION}" \
+        "opentelemetry-exporter-otlp>=${OTEL_VERSION}"
+
+# ── Stage 2: build keese-drain (Go) — same pattern as goose-runtime ──
+FROM golang:1.25 AS godrain
+ARG TARGETOS
+ARG TARGETARCH
+WORKDIR /workspace
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+COPY cmd/keese-drain/ cmd/keese-drain/
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -a -o /out/keese-drain ./cmd/keese-drain
+
+# ── Stage 3: distroless python3 runtime ───────────────────────────────
+# Distroless has no shell — pod-spec command must invoke python directly.
+# /var/run/keese/{session,tokens,ca} are mounted at runtime by the pod
+# template (E1 T2); no need to mkdir here.
+FROM gcr.io/distroless/python3-debian12:nonroot
+
+COPY --from=pydeps /opt/venv /opt/venv
+COPY --from=godrain /out/keese-drain /usr/local/bin/keese-drain
+
+ENV PATH="/opt/venv/bin:/usr/local/bin:${PATH}" \
+    PYTHONPATH="/opt/venv/lib/python3.12/site-packages" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Runs as the distroless nonroot user (uid 65532). The pod's SecurityContext
+# pins `runAsNonRoot: true` + `readOnlyRootFilesystem: true` (rule 05.11);
+# all writes go to mounted volumes.
+USER 65532:65532
+
+# Default entrypoint is python; the keese controller overrides command +
+# args per session. Smoke check: `docker run --rm IMAGE -m adk --version`.
+ENTRYPOINT ["/opt/venv/bin/python"]

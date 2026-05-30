@@ -641,15 +641,15 @@ func TestValidateHA_Redis(t *testing.T) {
 		Redis: &keesev1alpha1.RedisConfig{Replicas: 1},
 	}
 	// Non-dev namespace: expect error.
-	if err := validateHA(provider, "production"); err == nil {
+	if err := validateHA(provider, "production", nil); err == nil {
 		t.Error("expected HA violation in production namespace")
 	}
 	// Dev namespace: no error.
-	if err := validateHA(provider, "my-team-dev"); err != nil {
+	if err := validateHA(provider, "my-team-dev", nil); err != nil {
 		t.Errorf("unexpected error in dev namespace: %v", err)
 	}
 	// Default namespace: no error.
-	if err := validateHA(provider, "default"); err != nil {
+	if err := validateHA(provider, "default", nil); err != nil {
 		t.Errorf("unexpected error in default namespace: %v", err)
 	}
 }
@@ -659,8 +659,33 @@ func TestValidateHA_Qdrant(t *testing.T) {
 		Type:   keesev1alpha1.ProviderQdrant,
 		Qdrant: &keesev1alpha1.QdrantConfig{Replicas: 1},
 	}
-	if err := validateHA(provider, "staging"); err == nil {
+	if err := validateHA(provider, "staging", nil); err == nil {
 		t.Error("expected HA violation in staging namespace")
+	}
+}
+
+// keese.ai/env=dev label exempts a non-suffixed namespace.
+func TestValidateHA_DevLabelExempts(t *testing.T) {
+	provider := keesev1alpha1.MemoryProvider{
+		Type:  keesev1alpha1.ProviderRedis,
+		Redis: &keesev1alpha1.RedisConfig{Replicas: 1},
+	}
+	labels := map[string]string{devNamespaceLabel: "dev"}
+	if err := validateHA(provider, "production", labels); err != nil {
+		t.Errorf("expected dev label to exempt HA check, got %v", err)
+	}
+}
+
+// A non-"dev" label value falls through to the name heuristic; production
+// with no -dev suffix still violates.
+func TestValidateHA_NonDevLabelDoesNotExempt(t *testing.T) {
+	provider := keesev1alpha1.MemoryProvider{
+		Type:  keesev1alpha1.ProviderRedis,
+		Redis: &keesev1alpha1.RedisConfig{Replicas: 1},
+	}
+	labels := map[string]string{devNamespaceLabel: "prod"}
+	if err := validateHA(provider, "production", labels); err == nil {
+		t.Error("expected HA violation when label != dev and name is non-dev")
 	}
 }
 

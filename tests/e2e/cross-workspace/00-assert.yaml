@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Cross-workspace coord assertions: both Workspaces under tenant alpha
+# reach Ready, the SharedMemory is Active, and the Transport reports
+# the JetStream Stream + Consumer projected.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 240
+commands:
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+  - command: kubectl wait --for=condition=Ready workspace/producer -n alpha --timeout=180s
+  - command: kubectl wait --for=condition=Ready workspace/consumer -n alpha --timeout=180s
+  - command: kubectl wait --for=condition=Ready transport/team-bus -n alpha --timeout=120s
+  - command: kubectl wait --for=condition=Ready sharedmemory/team-notes -n alpha --timeout=180s
+  - command: kubectl get workspaceshare producer-to-consumer -n alpha -o jsonpath='{.status.conditions[?(@.type=="ReferenceGrantProjected")].status}'

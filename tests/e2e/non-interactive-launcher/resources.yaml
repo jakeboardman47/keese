@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+---
+# Recipe ConfigMap mounted at /var/run/keese/recipes/recipe.yaml in the
+# session pod (matches recipeMountPath in the controller).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: batch-recipe
+  namespace: alpha
+data:
+  recipe.yaml: |
+    name: batch-hello
+    description: Tiny non-interactive recipe — say hello and exit.
+    prompt: "Say hello in five words. Be brief."
+---
+# Non-interactive Workspace pointing at the batch recipe.
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: batch-ws
+  namespace: alpha
+  labels:
+    keese.ai/tenant: alpha
+spec:
+  tenantRef:
+    name: alpha
+  runtimeRef:
+    name: goose-default
+  recipeRef:
+    name: batch-recipe
+  interactive: false
+  sessionMode: OnDemand
+  egress:
+    allowedTools:
+      - anthropic.messages
+      - anthropic.messages.haiku-4
+---
+# Pod-based launcher invocation as a Job (mirrors the projected CronJob
+# the Workflow controller would otherwise create). Single-shot Job that
+# exits 0 when the WorkspaceSession reaches Phase=Completed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: launcher-batch-hello
+  namespace: alpha
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: keese-controller-manager
+      containers:
+        - name: launcher
+          image: ghcr.io/keese-ai/keese:dev
+          command: ["keese-wf-launcher"]
+          args:
+            - --workspace=batch-ws
+            - --namespace=alpha
+            - --session-name=batch-hello
+            - --timeout=5m
+            - --cleanup

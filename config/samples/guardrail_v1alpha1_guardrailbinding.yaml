@@ -1,4 +1,4 @@
-apiVersion: guardrail.operator.keese.ai/v1alpha1
+apiVersion: authz.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
   labels:

@@ -277,6 +277,11 @@ func (r *WorkspaceSessionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					r.Recorder.Eventf(&sess, corev1.EventTypeNormal,
 						ReasonSessionAttachedByTupleWritten,
 						"ReBAC attached_by tuple written for subject %s", sess.Spec.AttachSubject)
+				} else if pod.Status.Phase == corev1.PodSucceeded && isNonInteractiveRecipe(&ws) {
+					// Non-interactive recipe ran to completion — success path.
+					sess.Status.Phase = keesev1alpha1.WorkspaceSessionPhaseCompleted
+					r.Recorder.Eventf(&sess, corev1.EventTypeNormal, ReasonSessionCompleted,
+						"Recipe %q completed; pod %s exited 0", ws.Spec.RecipeRef.Name, podName)
 				} else if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
 					// Pod terminated unexpectedly.
 					if sess.Spec.PreserveOnPodFailure {
@@ -296,11 +301,17 @@ func (r *WorkspaceSessionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 	case keesev1alpha1.WorkspaceSessionPhaseActive:
-		// Check idle eviction: if attachGraceSeconds > 0, evict after idle period.
-		// The controller uses LastActivityAt as the idle clock; when the ACP bridge
-		// updates that field, the controller resets the eviction timer.
-		// TODO(spec-followup): ACP bridge writes LastActivityAt via server-side apply;
-		// for now we evict only when attachGraceSeconds > 0 and LastActivityAt is set.
+		// Idle eviction: when attachGraceSeconds > 0 and LastActivityAt has been
+		// updated past the grace window, transition to Draining.
+		//
+		// LastActivityAt source: the ACP bridge sidecar (design 08b §Sidecar)
+		// SSA-patches status.lastActivityAt on every ACP frame it forwards.
+		// Until that sidecar lands, LastActivityAt stays nil and idle eviction
+		// is effectively a no-op — the session lives until explicit delete or
+		// pod failure. This is intentional: kuttl tests + the demo today never
+		// exercise idle eviction, and a "no bridge → no eviction" failure mode
+		// is safer than "no bridge → immediate eviction." The reconciler is
+		// already correct; the bridge is the missing piece, not this code.
 		if sess.Spec.AttachGraceSeconds > 0 && sess.Status.LastActivityAt != nil {
 			grace := time.Duration(sess.Spec.AttachGraceSeconds) * time.Second
 			if time.Since(sess.Status.LastActivityAt.Time) > grace {
@@ -754,24 +765,24 @@ func buildSessionPodObject(
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},
 			},
-			Volumes: sessionPodVolumes(sess, ws, pvcName, tenantName, saTokenExpiry),
+			Volumes:        sessionPodVolumes(sess, ws, pvcName, tenantName, saTokenExpiry),
+			InitContainers: sessionInitContainers(ws, ar),
 			Containers: []corev1.Container{
 				{
 					Name:            "agent",
 					Image:           ar.Spec.Implementation.Goose.Image,
 					ImagePullPolicy: corev1.PullIfNotPresent,
-					// Long-lived ready-to-attach container. We keep `sleep
-					// infinity` (not `goose session`) because goose's
-					// session command requires a TTY/stdin — it exits
-					// immediately under a non-interactive container start.
-					// The user / future ACP bridge attaches via
-					// `kubectl exec` and runs goose interactively. With
-					// the AI Gateway live, the `goose run` invocation
-					// inside the exec works against
-					// $ANTHROPIC_BASE_URL. (TD-P1-02 ACP bridge replaces
-					// this with a real attach handshake.)
-					Command: []string{"/bin/sh", "-c"},
-					Args:    []string{"echo 'goose runtime ready; attach via kubectl exec'; exec sleep infinity"},
+					// Command + Args branch on interactive vs non-interactive:
+					//   - interactive (Workspace.spec.interactive == true): keep
+					//     the container alive with `sleep infinity` so a user
+					//     can `kubectl exec` and run goose interactively. The
+					//     ACP bridge (TD-P1-02 follow-on) will replace this.
+					//   - non-interactive (interactive == false && recipeRef != nil):
+					//     run `goose run --recipe …` as PID 1 so the pod exits
+					//     PodSucceeded on completion and the controller can
+					//     mark Phase=Completed.
+					Command:      sessionAgentCommand(ws),
+					Args:         sessionAgentArgs(ws),
 					Env:          sessionPodEnv(sess, ws, tenantName),
 					VolumeMounts: sessionPodVolumeMounts(ws),
 					SecurityContext: &corev1.SecurityContext{
@@ -819,6 +830,42 @@ func buildSessionPodObject(
 func ptrQuantity(s string) *resource.Quantity {
 	q := resource.MustParse(s)
 	return &q
+}
+
+// recipeMountPath is where the workspace's recipe ConfigMap is mounted in
+// the session pod. Matches sessionPodVolumeMounts; KEESE_RECIPE_PATH env
+// var (set in sessionPodEnv) points at the same file.
+const recipeMountPath = "/var/run/keese/recipes/recipe.yaml"
+
+// sessionAgentCommand returns the container Command for the agent.
+//
+// Branching:
+//   - non-interactive AND recipeRef set → ["/usr/local/bin/goose"]
+//     (Args adds `run --recipe <path>`). Pod exits with PodSucceeded.
+//   - otherwise → ["/bin/sh", "-c"] with sleep-infinity Args, so users can
+//     `kubectl exec` and run goose interactively.
+func sessionAgentCommand(ws *keesev1alpha1.Workspace) []string {
+	if isNonInteractiveRecipe(ws) {
+		return []string{"/usr/local/bin/goose"}
+	}
+	return []string{"/bin/sh", "-c"}
+}
+
+// sessionAgentArgs returns the matching Args slice for sessionAgentCommand.
+func sessionAgentArgs(ws *keesev1alpha1.Workspace) []string {
+	if isNonInteractiveRecipe(ws) {
+		return []string{"run", "--recipe", recipeMountPath}
+	}
+	return []string{"echo 'goose runtime ready; attach via kubectl exec'; exec sleep infinity"}
+}
+
+// isNonInteractiveRecipe reports whether the workspace is the non-
+// interactive batch path (recipeRef set AND interactive=false).
+func isNonInteractiveRecipe(ws *keesev1alpha1.Workspace) bool {
+	if ws == nil || ws.Spec.RecipeRef == nil || ws.Spec.RecipeRef.Name == "" {
+		return false
+	}
+	return !ws.Spec.Interactive
 }
 
 // gatewayCAConfigMapName is the in-namespace ConfigMap that mirrors
@@ -1021,6 +1068,62 @@ func sessionPodVolumeMounts(ws *keesev1alpha1.Workspace) []corev1.VolumeMount {
 		})
 	}
 	return mounts
+}
+
+// sessionInitContainers builds the initContainer slice for the session pod.
+//
+// keese-resume is the only init container today: it copies any prior SQLite
+// checkpoint from /var/run/keese/session/keese-checkpoints/<uid>/sessions.db*
+// back into goose's expected sessions dir before the agent container starts.
+// This implements demo green criterion 6 (resume across pod replacement)
+// without operator-side wiring; the operation is idempotent and a no-op
+// when no checkpoint exists.
+func sessionInitContainers(ws *keesev1alpha1.Workspace, ar *keesev1alpha1.AgentRuntime) []corev1.Container {
+	resumeScript := `set -e
+CKPT_ROOT=/var/run/keese/session/keese-checkpoints
+SDIR=/var/run/keese/session/home/.local/share/goose/sessions
+mkdir -p "$SDIR"
+if [ ! -d "$CKPT_ROOT" ]; then
+  echo "keese-resume: no checkpoints dir; fresh session"
+  exit 0
+fi
+latest=$(ls -t "$CKPT_ROOT"/*/sessions.db 2>/dev/null | head -n1 || true)
+if [ -z "$latest" ]; then
+  echo "keese-resume: no prior checkpoint; fresh session"
+  exit 0
+fi
+echo "keese-resume: restoring from $(dirname $latest)"
+cp -f "$(dirname $latest)/"sessions.db* "$SDIR/" 2>/dev/null || true
+ls -la "$SDIR/" >&2 || true
+`
+	return []corev1.Container{
+		{
+			Name:            "keese-resume",
+			Image:           ar.Spec.Implementation.Goose.Image,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Command:         []string{"/bin/sh", "-c"},
+			Args:            []string{resumeScript},
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: "session", MountPath: "/var/run/keese/session"},
+			},
+			SecurityContext: &corev1.SecurityContext{
+				RunAsNonRoot:             ptr(true),
+				ReadOnlyRootFilesystem:   ptr(true),
+				AllowPrivilegeEscalation: ptr(false),
+				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("10m"),
+					corev1.ResourceMemory: resource.MustParse("32Mi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("128Mi"),
+				},
+			},
+		},
+	}
 }
 
 // ptr returns a pointer to the given value (generic helper).

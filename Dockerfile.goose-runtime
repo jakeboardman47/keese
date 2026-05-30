@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+
+# keese goose-runtime image — thin wrapper around upstream block/goose that
+# bakes the keese-drain preStop sidecar binary into /usr/local/bin/keese-drain.
+# This is the minimal image so the WorkspaceSession pod's preStop lifecycle
+# hook (defined in internal/controller/keese/workspacesession_controller.go)
+# can invoke keese-drain without a dedicated sidecar container.
+#
+# Build:
+#   make goose-runtime-build
+# Load into kind:
+#   make goose-runtime-load
+#
+# When the upstream image needs to be pinned by digest (rule 05.12 for prod),
+# replace `:latest` with `@sha256:...` here. Local dev clusters use `:dev` tag.
+
+# ── Stage 1: build keese-drain (CGO_ENABLED=0, distroless-friendly) ──
+FROM golang:1.25 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+
+# Cache deps before copying source.
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+COPY cmd/keese-drain/ cmd/keese-drain/
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -a -o /out/keese-drain ./cmd/keese-drain
+
+# ── Stage 2: copy onto upstream goose image ──
+# block/goose runs as uid/gid 1000 (`goose` user). The binary is installed
+# to /usr/local/bin (in $PATH) with 0755 perms so the unprivileged container
+# user can exec it via the preStop hook.
+FROM ghcr.io/block/goose:latest
+
+COPY --from=builder /out/keese-drain /usr/local/bin/keese-drain
+USER root
+RUN chmod 0755 /usr/local/bin/keese-drain
+USER 1000:1000
+
+# ENTRYPOINT + CMD inherited from upstream — typically `goose` with `--help`.
+# The keese WorkspaceSession controller overrides `command` per session
+# (interactive: `goose serve`; non-interactive: invoked via SPI Run).

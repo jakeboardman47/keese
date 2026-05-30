@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Weather agent recipe wrapped as a ConfigMap so it installs into a
+# keese workspace via `kubectl apply` instead of `kubectl cp`. The
+# Workspace's spec.recipeRef points at this ConfigMap by name; the
+# WorkspaceSession reconciler mounts it into the goose runtime pod
+# at /var/run/keese/recipes/recipe.yaml and exports
+# $KEESE_RECIPE_PATH for `goose run --recipe $KEESE_RECIPE_PATH`.
+#
+# Apply with:
+#   kubectl apply -f dev/demo/weather-agent-configmap.yaml
+#
+# Future-state: a Recipe + RecipeSource pair (per design 16) replaces
+# this with an OCI-distributable artifact + admission gate. Tracked in
+# docs/plans/demo/tech-debt.md as the keese-native recipe path.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: weather-agent
+  namespace: alpha
+  labels:
+    keese.ai/recipe: "true"
+    app.kubernetes.io/name: weather-agent
+data:
+  recipe.yaml: |
+    version: "1.0.0"
+    title: "Weather agent"
+    description: |
+      A focused agent that answers questions about weather in a given
+      location. Replies in 1-2 sentences using only model knowledge —
+      no tools, no extensions.
+    instructions: |
+      You are a friendly weather agent. When the user asks about the
+      weather in a location, reply concisely in 1-2 natural-language
+      sentences. Cite typical seasonal patterns when appropriate. Do
+      not call tools or extensions.
+    extensions: []
+    prompt: |
+      What is the weather typically like in San Francisco in May? Reply concisely in one sentence.
+    # Native Anthropic provider over the in-cluster Envoy AI Gateway
+    # (`ANTHROPIC_BASE_URL` env on the session pod points at the
+    # gateway Service). EG-AI-Gateway v0.6.0 fixed the streaming-EOF
+    # bug (#1894), so streaming responses parse cleanly through the
+    # native /v1/messages translator — no OpenAI shim needed.
+    settings:
+      goose_provider: anthropic
+      goose_model: claude-opus-4-7

@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Asserts the launcher Job ran to Completed (exit 0). Implicitly proves
+# the launcher created a WorkspaceSession AND polled it to Phase=Completed.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+commands:
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+  - command: kubectl wait --for=condition=Complete job/launcher-batch-hello -n alpha --timeout=300s

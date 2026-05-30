@@ -1,4 +1,4 @@
-apiVersion: observability.operator.keese.ai/v1alpha1
+apiVersion: policy.keese.ai/v1alpha1
 kind: TokenBudget
 metadata:
   labels:

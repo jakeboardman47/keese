@@ -356,8 +356,10 @@ func (r *TokenBudgetReconciler) resetWindow(ctx context.Context, tb *policyv1alp
 	return r.Status().Patch(ctx, tb, client.MergeFrom(orig))
 }
 
-// queryConsumed issues the PromQL increase() query for the given model over the current window.
-// Returns the consumed tokens as a TokenUsageEntry.
+// queryConsumed issues the PromQL increase() queries for the given model over
+// the current window. Three queries: total, input direction, output direction.
+// Returns a TokenUsageEntry with the three fields populated independently so
+// limit checks against input-only / output-only / total all reflect reality.
 func (r *TokenBudgetReconciler) queryConsumed(ctx context.Context, tb *policyv1alpha1.TokenBudget, scopeType, scopeID, model string) (policyv1alpha1.TokenUsageEntry, error) {
 	windowDur := tb.Spec.WindowDuration
 	if windowDur == "" {
@@ -377,31 +379,44 @@ func (r *TokenBudgetReconciler) queryConsumed(ctx context.Context, tb *policyv1a
 		modelFilter = fmt.Sprintf(`,model=%q`, model)
 	}
 
-	expr := fmt.Sprintf(
-		`sum(increase(keese_token_budget_consumed_total{%s%s,direction=~"input|output"}[%s]))`,
-		labelFilter, modelFilter, windowDur,
-	)
+	queryDirection := func(direction string) (int64, error) {
+		dirFilter := `,direction=~"input|output"`
+		if direction != "" {
+			dirFilter = fmt.Sprintf(`,direction=%q`, direction)
+		}
+		expr := fmt.Sprintf(
+			`sum(increase(keese_token_budget_consumed_total{%s%s%s}[%s]))`,
+			labelFilter, modelFilter, dirFilter, windowDur,
+		)
+		result, err := r.PromQuerier.Query(ctx, expr)
+		if err != nil {
+			return 0, err
+		}
+		v := int64(result.Value)
+		if v < 0 {
+			v = 0
+		}
+		return v, nil
+	}
 
-	result, err := r.PromQuerier.Query(ctx, expr)
+	total, err := queryDirection("")
+	if err != nil {
+		return policyv1alpha1.TokenUsageEntry{Model: model}, err
+	}
+	input, err := queryDirection("input")
+	if err != nil {
+		return policyv1alpha1.TokenUsageEntry{Model: model}, err
+	}
+	output, err := queryDirection("output")
 	if err != nil {
 		return policyv1alpha1.TokenUsageEntry{Model: model}, err
 	}
 
-	consumed := int64(result.Value)
-	if consumed < 0 {
-		consumed = 0
-	}
-
-	// For aggregate (*) we put the total in TotalTokens; otherwise split heuristically.
-	// The spec stores totalTokens; input/output split requires separate queries in a full
-	// implementation. For now, totalTokens holds the sum and both input/output are also set
-	// to half for downstream display parity. Real split requires two queries (direction=input
-	// and direction=output), deferred to a follow-up iteration.
 	return policyv1alpha1.TokenUsageEntry{
 		Model:        model,
-		TotalTokens:  consumed,
-		InputTokens:  consumed,
-		OutputTokens: consumed,
+		TotalTokens:  total,
+		InputTokens:  input,
+		OutputTokens: output,
 	}, nil
 }
 

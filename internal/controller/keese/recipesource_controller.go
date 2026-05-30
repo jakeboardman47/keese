@@ -419,7 +419,18 @@ func (r *RecipeSourceReconciler) cleanup(ctx context.Context, rs *keesev1alpha1.
 	r.Recorder.Eventf(rs, corev1.EventTypeNormal, ReasonRecipeCacheCleanup,
 		"RecipeSource cache cleanup on deletion")
 
-	// TODO(controller-author): delete cached artifact from cluster registry here.
+	// Evict the cached artifact. Only the OCI source has a local-cache entry
+	// (git + configmap sources don't write to OCIFetcher). Delete is
+	// idempotent — missing-entry returns nil, so reapply-after-delete is safe.
+	if rs.Spec.OCI != nil && rs.Status.ResolvedDigest != "" && r.Fetcher != nil {
+		if err := r.Fetcher.Delete(ctx, rs.Spec.OCI.Registry, rs.Spec.OCI.Repository, rs.Status.ResolvedDigest); err != nil {
+			// Non-fatal: log + event, but proceed with finalizer removal.
+			// Leaving a few extra MB in the operator's cache dir is better than
+			// blocking RecipeSource deletion on a flaky filesystem.
+			r.Recorder.Eventf(rs, corev1.EventTypeWarning, ReasonRecipeCacheCleanup,
+				"OCI cache evict failed (non-fatal): %v", err)
+		}
+	}
 
 	controllerutil.RemoveFinalizer(rs, recipeSourceFinalizer)
 	return ctrl.Result{}, r.Patch(ctx, rs, client.MergeFrom(orig))

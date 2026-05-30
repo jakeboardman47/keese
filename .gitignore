@@ -139,3 +139,8 @@ sbom-*.spdx.json
 
 # Stray agent-worktree variant (typo of .claude/worktrees) — never commit
 .claire/
+# stray root build binaries (use bin/ or make targets)
+/keese-cosign-webhook
+/keese-wf-launcher
+/keese-authz
+/manager

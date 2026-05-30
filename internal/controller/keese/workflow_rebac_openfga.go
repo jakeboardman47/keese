@@ -6,45 +6,40 @@ package keese
 import (
 	"context"
 
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
 	"github.com/keese-ai/keese/internal/rebac"
 )
 
-// WorkflowOpenFGARebacWriter is a real-OpenFGA WorkflowRebacWriter for the workflow
-// controllers. See original rebac_openfga.go for stub rationale.
+// WorkflowOpenFGARebacWriter is the Workflow + WorkflowRun ReBAC writer.
+//
+// Status: deferred — Workflow has no spec.workspaceRef in the current API
+// (workflows route via TransportRef + NATS subjects, not Workspace
+// ownership), and the OpenFGA model in dev/bootstrap/openfga/model.fga
+// does not yet declare workflow / workflowrun types. Inventing a relation
+// here without schema buy-in would write tuples nothing will Check.
+//
+// When designs 24 (Workflow) and 25 (WorkflowRun) finalize the ownership
+// shape, replace these no-ops with real Write/Delete calls mirroring
+// memory_rebac_openfga.go. Until then the operator runs without workflow
+// authz tuples; cmd/main.go logs that the writer is wired so absence is
+// observable. Tracked as a follow-on of TD-P2-02.
 type WorkflowOpenFGARebacWriter struct {
 	Client *rebac.Client
 }
 
-func (w *WorkflowOpenFGARebacWriter) WriteWorkflowOwner(ctx context.Context, wf *keesev1alpha1.Workflow) (int32, error) {
-	log.FromContext(ctx).V(1).Info("workflow rebac stubbed",
-		"op", "WriteWorkflowOwner",
-		"workflow", wf.Namespace+"/"+wf.Name,
-		"reason", "OpenFGA model lacks workflow type — see rebac_openfga.go")
+func (w *WorkflowOpenFGARebacWriter) WriteWorkflowOwner(_ context.Context, _ *keesev1alpha1.Workflow) (int32, error) {
 	return 0, nil
 }
 
-func (w *WorkflowOpenFGARebacWriter) DeleteWorkflowTuples(ctx context.Context, wf *keesev1alpha1.Workflow) error {
-	log.FromContext(ctx).V(1).Info("workflow rebac stubbed",
-		"op", "DeleteWorkflowTuples",
-		"workflow", wf.Namespace+"/"+wf.Name)
+func (w *WorkflowOpenFGARebacWriter) DeleteWorkflowTuples(_ context.Context, _ *keesev1alpha1.Workflow) error {
 	return nil
 }
 
-func (w *WorkflowOpenFGARebacWriter) WriteWorkflowRunOwner(ctx context.Context, wfr *keesev1alpha1.WorkflowRun) (int32, error) {
-	log.FromContext(ctx).V(1).Info("workflow rebac stubbed",
-		"op", "WriteWorkflowRunOwner",
-		"workflowrun", wfr.Namespace+"/"+wfr.Name,
-		"reason", "OpenFGA model lacks workflowrun type — see rebac_openfga.go")
+func (w *WorkflowOpenFGARebacWriter) WriteWorkflowRunOwner(_ context.Context, _ *keesev1alpha1.WorkflowRun) (int32, error) {
 	return 0, nil
 }
 
-func (w *WorkflowOpenFGARebacWriter) DeleteWorkflowRunTuples(ctx context.Context, wfr *keesev1alpha1.WorkflowRun) error {
-	log.FromContext(ctx).V(1).Info("workflow rebac stubbed",
-		"op", "DeleteWorkflowRunTuples",
-		"workflowrun", wfr.Namespace+"/"+wfr.Name)
+func (w *WorkflowOpenFGARebacWriter) DeleteWorkflowRunTuples(_ context.Context, _ *keesev1alpha1.WorkflowRun) error {
 	return nil
 }
 

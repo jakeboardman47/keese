@@ -5,7 +5,7 @@
 # Loaded by the seed Job (seed.yaml) after store creation.
 #
 # Types defined here map to the key entities in the system:
-#   tenant          → top-level isolation boundary (tenancy.operator.keese.ai/v1alpha1/Tenant)
+#   tenant          → top-level isolation boundary (keese.ai/v1alpha1/Tenant)
 #   workspace       → agent execution scope (keese Workspace CR)
 #   tool            → callable function/extension exposed to agents
 #   extension       → RuntimeExtension provider (tool set)
@@ -64,7 +64,7 @@ type tenant
     # Tenant controller for each entry in Tenant.spec.oidc.allowedProviders[].
     # ext_authz checks Check(tenant:T#uses_oidc_provider@oidc_provider:P) before
     # accepting tokens from issuer P for tenant T. Issuer not in allow-list → deny.
-    # Cross-cut: authz.operator.keese.ai/v1alpha1 spec §1.6, D26/D24 Tenant CRD.
+    # Cross-cut: authz.keese.ai/v1alpha1 spec §1.6, D26/D24 Tenant CRD.
     define uses_oidc_provider: [oidc_provider]
 
 type workspace
@@ -123,5 +123,5 @@ type memory
 
 # oidc_provider: cluster-scoped entity; identity = OIDCProvider.metadata.name.
 # No relations defined on oidc_provider itself — it is a leaf type referenced
-# only via tenant.uses_oidc_provider.  CRD: authz.operator.keese.ai/v1alpha1/OIDCProvider (D28).
+# only via tenant.uses_oidc_provider.  CRD: authz.keese.ai/v1alpha1/OIDCProvider (D28).
 type oidc_provider

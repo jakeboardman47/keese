@@ -173,12 +173,12 @@ var _ = Describe("Memory Controller", func() {
 			}
 			// Use a non-dev namespace for this test by invoking the reconciler
 			// directly with a faked namespace context.
-			err := validateHA(mem.Spec.Provider, "production")
+			err := validateHA(mem.Spec.Provider, "production", nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("MemoryHARequired"))
 
 			// Verify dev namespace exemption.
-			errDev := validateHA(mem.Spec.Provider, "my-team-dev")
+			errDev := validateHA(mem.Spec.Provider, "my-team-dev", nil)
 			Expect(errDev).NotTo(HaveOccurred())
 
 			// Clean up — mem was never created in the cluster above.

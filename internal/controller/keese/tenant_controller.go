@@ -391,9 +391,19 @@ func (r *TenantReconciler) hasActiveCRAs(ctx context.Context, tenantName string)
 }
 
 // hasOwnedWorkspaces checks whether any Workspace still claims this tenant.
-// Returning false is safe — the workspaces finalizer is advisory; the workspace
-// controller also enforces the tenant reference on its side.
-func (r *TenantReconciler) hasOwnedWorkspaces(_ context.Context, _ string) (bool, error) {
+// Lists Workspaces across all namespaces filtered by the keese.ai/tenant
+// label and the spec.tenantRef.name field. Returning true blocks tenant
+// deletion via the cleanup finalizer until the workspaces are removed.
+func (r *TenantReconciler) hasOwnedWorkspaces(ctx context.Context, tenantName string) (bool, error) {
+	var list keesev1alpha1.WorkspaceList
+	if err := r.List(ctx, &list); err != nil {
+		return false, fmt.Errorf("list workspaces: %w", err)
+	}
+	for i := range list.Items {
+		if list.Items[i].Spec.TenantRef.Name == tenantName {
+			return true, nil
+		}
+	}
 	return false, nil
 }
 

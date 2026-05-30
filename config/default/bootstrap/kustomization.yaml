@@ -4,7 +4,7 @@
 # Bootstrap OIDCProvider CRs — operator-owned defaults installed at deploy time.
 # Labeled keese.ai/bootstrap: "true"; preserved across reconciles via
 # the keese-oidcprovider-bootstrap SSA field manager.
-# Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md §1.5
+# Spec: docs/specs/authz.keese.ai-v1alpha1.md §1.5
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

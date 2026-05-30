@@ -1,0 +1,11 @@
+[
+  {
+    "op": "replace",
+    "path": "/spec/lua",
+    "value": [
+      {
+        "inline": "function envoy_on_request(req)\n  -- Defense-in-depth (rule 05.2): the agent pod is not authoritative\n  -- on upstream credentials. Strip every known client-supplied auth\n  -- header so the BSP attached to the AIServiceBackend is the SOLE\n  -- source of upstream credentials. Covers the OpenAI-compat Bearer\n  -- vs x-api-key collision and any future header-based auth scheme.\n  -- Lua header writes propagate to extProc and the BSP injection\n  -- point (only body writes don't — see envoyproxy/envoy#14627).\n  req:headers():remove(\"authorization\")\n  req:headers():remove(\"x-api-key\")\n  req:headers():remove(\"anthropic-api-key\")\nend\n"
+      }
+    ]
+  }
+]

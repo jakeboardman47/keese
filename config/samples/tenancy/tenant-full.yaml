@@ -3,8 +3,8 @@
 #
 # Fully-populated Tenant sample — Mode B (Capsule delegation), dedicated gateway,
 # quota, OIDC filter, retry budget, audit redaction.
-# Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-tenant.md
-apiVersion: tenancy.operator.keese.ai/v1alpha1
+# Spec: docs/specs/keese.ai-v1alpha1-ii-tenant.md
+apiVersion: keese.ai/v1alpha1
 kind: Tenant
 metadata:
   name: acme-corp

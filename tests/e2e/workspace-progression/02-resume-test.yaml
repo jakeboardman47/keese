@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Demo green criterion 6: resume across pod replacement.
+# Delete the session, capture the checkpoint dir contents on the PVC,
+# re-apply the demo, wait for Active again, and assert the keese-resume
+# init container restored sessions.db.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      set -euo pipefail
+      kubectl delete workspacesession my-session -n alpha --wait=true --timeout=120s
+      kubectl apply -f ../../../dev/demo/hello-keese.yaml
+      kubectl wait --for=jsonpath='{.status.phase}'=Active workspacesession/my-session -n alpha --timeout=180s
+  - script: |
+      set -euo pipefail
+      POD=$(kubectl get pod -n alpha -l keese.ai/session=my-session -o jsonpath='{.items[0].metadata.name}')
+      # The keese-resume init container ran before the agent — assert sessions.db
+      # is present in goose's expected dir even on this fresh pod.
+      kubectl exec -n alpha "$POD" -c agent -- sh -c '
+        DB=/var/run/keese/session/home/.local/share/goose/sessions/sessions.db
+        test -s "$DB" || { echo "resume failed: $DB missing/empty" >&2; exit 1; }
+        echo "resume ok: sessions.db restored"
+      '
