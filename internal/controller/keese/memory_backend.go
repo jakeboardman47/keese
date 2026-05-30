@@ -13,6 +13,35 @@ import (
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
 )
 
+// credProjectionVolume builds a projected Secret volume and its matching read-only
+// VolumeMount for a backend credential Secret, following rule 05.7.
+//
+// volName   — the name of the Volume (e.g. "redis-creds").
+// secretRef — the name of the K8s Secret to project.
+// mountPath — the container path, must be /var/run/keese/secrets/<backend>.
+func credProjectionVolume(volName, secretRef, mountPath string) (corev1.Volume, corev1.VolumeMount) {
+	vol := corev1.Volume{
+		Name: volName,
+		VolumeSource: corev1.VolumeSource{
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources: []corev1.VolumeProjection{{
+					Secret: &corev1.SecretProjection{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secretRef,
+						},
+					},
+				}},
+			},
+		},
+	}
+	mount := corev1.VolumeMount{
+		Name:      volName,
+		MountPath: mountPath,
+		ReadOnly:  true,
+	}
+	return vol, mount
+}
+
 // namespaceLabels fetches the labels of the named Namespace. Returns nil on
 // any error; callers fall back to the name-suffix heuristic in isDevNamespace
 // rather than failing the reconcile on a transient Namespace Get.

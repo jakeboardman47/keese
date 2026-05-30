@@ -142,7 +142,7 @@ func TestRedisBackend_NilConfig_Error(t *testing.T) {
 // ---- RedisBackend builder (pure) ----
 
 func TestBuildRedisStatefulSet_SecurityContext(t *testing.T) {
-	sts := buildRedisStatefulSet("mem", "ns", "mem-redis", 2)
+	sts := buildRedisStatefulSet("mem", "ns", "mem-redis", 2, "")
 	c0 := sts.Spec.Template.Spec.Containers[0]
 	if c0.SecurityContext == nil {
 		t.Fatal("SecurityContext is nil")
@@ -159,7 +159,7 @@ func TestBuildRedisStatefulSet_SecurityContext(t *testing.T) {
 }
 
 func TestBuildRedisStatefulSet_Labels(t *testing.T) {
-	sts := buildRedisStatefulSet("my-mem", "ns", "my-mem-redis", 1)
+	sts := buildRedisStatefulSet("my-mem", "ns", "my-mem-redis", 1, "")
 	if sts.Labels["keese.ai/memory"] != "my-mem" {
 		t.Errorf("missing keese.ai/memory label: %v", sts.Labels)
 	}
@@ -220,7 +220,7 @@ func TestQdrantBackend_ExternalMode_Healthy(t *testing.T) {
 
 func TestBuildQdrantStatefulSet_Ports(t *testing.T) {
 	q := resource.MustParse("2Gi")
-	sts := buildQdrantStatefulSet("mem", "ns", "mem-qdrant", 1, q)
+	sts := buildQdrantStatefulSet("mem", "ns", "mem-qdrant", 1, q, "")
 	ports := sts.Spec.Template.Spec.Containers[0].Ports
 	found := map[string]bool{}
 	for _, p := range ports {
@@ -357,7 +357,7 @@ func TestNeo4jBackend_ExternalMode_Healthy(t *testing.T) {
 
 func TestBuildNeo4jStatefulSet_StorageSize(t *testing.T) {
 	storageQ := resource.MustParse(neo4jDefaultStorage)
-	sts := buildNeo4jStatefulSet("mem", "ns", "mem-neo4j", storageQ)
+	sts := buildNeo4jStatefulSet("mem", "ns", "mem-neo4j", storageQ, "")
 	if len(sts.Spec.VolumeClaimTemplates) != 1 {
 		t.Fatalf("expected 1 VolumeClaimTemplate, got %d", len(sts.Spec.VolumeClaimTemplates))
 	}
@@ -369,7 +369,7 @@ func TestBuildNeo4jStatefulSet_StorageSize(t *testing.T) {
 
 func TestBuildNeo4jStatefulSet_Ports(t *testing.T) {
 	q := resource.MustParse("5Gi")
-	sts := buildNeo4jStatefulSet("mem", "ns", "mem-neo4j", q)
+	sts := buildNeo4jStatefulSet("mem", "ns", "mem-neo4j", q, "")
 	found := map[string]bool{}
 	for _, p := range sts.Spec.Template.Spec.Containers[0].Ports {
 		found[p.Name] = true
@@ -388,7 +388,7 @@ func TestBuildNeo4jSvc_Headless(t *testing.T) {
 
 func TestBuildNeo4jStatefulSet_Image(t *testing.T) {
 	q := resource.MustParse("5Gi")
-	sts := buildNeo4jStatefulSet("mem", "ns", "mem-neo4j", q)
+	sts := buildNeo4jStatefulSet("mem", "ns", "mem-neo4j", q, "")
 	if sts.Spec.Template.Spec.Containers[0].Image != neo4jImage {
 		t.Errorf("wrong image: %q", sts.Spec.Template.Spec.Containers[0].Image)
 	}

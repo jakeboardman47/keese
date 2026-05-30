@@ -78,7 +78,7 @@ func (b *RedisBackend) Provision(
 	if replicas <= 0 {
 		replicas = 1
 	}
-	desired := buildRedisStatefulSet(name, namespace, svcName, replicas)
+	desired := buildRedisStatefulSet(name, namespace, svcName, replicas, cfg.CredentialSecretRef)
 
 	var existing appsv1.StatefulSet
 	err := b.Client.Get(ctx, types.NamespacedName{Name: svcName, Namespace: namespace}, &existing)
@@ -177,8 +177,47 @@ func buildRedisSvc(memoryName, namespace, svcName string) *corev1.Service {
 	}
 }
 
-func buildRedisStatefulSet(memoryName, namespace, stsName string, replicas int32) *appsv1.StatefulSet {
+// buildRedisStatefulSet builds the desired StatefulSet for an in-cluster Redis instance.
+//
+// When credSecretRef is non-empty the Secret is mounted as a projected file at
+// /var/run/keese/secrets/redis (rule 05.7) and redis-server is started with
+// --requirepass reading the "password" key from that mount.  When credSecretRef
+// is empty the server starts with no authentication (dev/test only).
+func buildRedisStatefulSet(memoryName, namespace, stsName string, replicas int32, credSecretRef string) *appsv1.StatefulSet {
 	storageQ := resource.MustParse(redisDefaultStorage)
+
+	container := corev1.Container{
+		Name:  "redis",
+		Image: redisImage,
+		Ports: []corev1.ContainerPort{{Name: "redis", ContainerPort: redisPort, Protocol: corev1.ProtocolTCP}},
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: boolPtr(false),
+			ReadOnlyRootFilesystem:   boolPtr(true),
+		},
+		VolumeMounts: []corev1.VolumeMount{{
+			Name: redisDataVolumeName, MountPath: "/data",
+		}},
+	}
+
+	podSpec := corev1.PodSpec{
+		SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(true)},
+	}
+
+	if credSecretRef != "" {
+		// Mount credential Secret as a projected file (rule 05.7).
+		// Never use env.valueFrom.secretKeyRef or envFrom (rule 05.7).
+		vol, mount := credProjectionVolume("redis-creds", credSecretRef, "/var/run/keese/secrets/redis")
+		podSpec.Volumes = []corev1.Volume{vol}
+		container.VolumeMounts = append(container.VolumeMounts, mount)
+		// Read the password from the projected file at startup; exec preserves PID 1.
+		container.Command = []string{"sh", "-c"}
+		container.Args = []string{
+			`exec redis-server --requirepass "$(cat /var/run/keese/secrets/redis/password)"`,
+		}
+	}
+
+	podSpec.Containers = []corev1.Container{container}
+
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSet"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -199,23 +238,7 @@ func buildRedisStatefulSet(memoryName, namespace, stsName string, replicas int32
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"keese.ai/memory": memoryName, "keese.ai/backend": "redis"},
 				},
-				Spec: corev1.PodSpec{
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsNonRoot: boolPtr(true),
-					},
-					Containers: []corev1.Container{{
-						Name:  "redis",
-						Image: redisImage,
-						Ports: []corev1.ContainerPort{{Name: "redis", ContainerPort: redisPort, Protocol: corev1.ProtocolTCP}},
-						SecurityContext: &corev1.SecurityContext{
-							AllowPrivilegeEscalation: boolPtr(false),
-							ReadOnlyRootFilesystem:   boolPtr(true),
-						},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name: redisDataVolumeName, MountPath: "/data",
-						}},
-					}},
-				},
+				Spec: podSpec,
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
 				ObjectMeta: metav1.ObjectMeta{Name: redisDataVolumeName},

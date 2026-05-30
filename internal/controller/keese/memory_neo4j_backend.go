@@ -77,7 +77,7 @@ func (b *Neo4jBackend) Provision(
 	}
 
 	storageQ := resource.MustParse(neo4jDefaultStorage)
-	desired := buildNeo4jStatefulSet(name, namespace, stsName, storageQ)
+	desired := buildNeo4jStatefulSet(name, namespace, stsName, storageQ, cfg.CredentialSecretRef)
 
 	var existing appsv1.StatefulSet
 	getErr := b.Client.Get(ctx, types.NamespacedName{Name: stsName, Namespace: namespace}, &existing)
@@ -171,11 +171,61 @@ func buildNeo4jSvc(memoryName, namespace, svcName string) *corev1.Service {
 	}
 }
 
+// buildNeo4jStatefulSet builds the desired StatefulSet for an in-cluster Neo4j instance.
+//
+// When credSecretRef is non-empty the Secret is mounted as a projected file at
+// /var/run/keese/secrets/neo4j (rule 05.7) and the entrypoint reads the "password"
+// key to set NEO4J_AUTH at runtime.  The hardcoded NEO4J_AUTH=none env var is
+// suppressed in this path — it must not appear alongside authenticated mode.
+// When credSecretRef is empty the server starts unauthenticated (dev/test only).
 func buildNeo4jStatefulSet(
 	memoryName, namespace, stsName string,
 	storageQ resource.Quantity,
+	credSecretRef string,
 ) *appsv1.StatefulSet {
 	replicas := int32(1)
+
+	container := corev1.Container{
+		Name:  "neo4j",
+		Image: neo4jImage,
+		Ports: []corev1.ContainerPort{
+			{Name: "bolt", ContainerPort: neo4jBoltPort, Protocol: corev1.ProtocolTCP},
+			{Name: "http", ContainerPort: neo4jHTTPPort, Protocol: corev1.ProtocolTCP},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: boolPtr(false),
+		},
+		VolumeMounts: []corev1.VolumeMount{{
+			Name: neo4jDataVolumeName, MountPath: "/data",
+		}},
+	}
+
+	podSpec := corev1.PodSpec{
+		SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(true)},
+	}
+
+	if credSecretRef != "" {
+		// Mount credential Secret as a projected file (rule 05.7).
+		// Never use env.valueFrom.secretKeyRef or envFrom (rule 05.7).
+		// NEO4J_AUTH=none must NOT be set when authentication is enabled.
+		vol, mount := credProjectionVolume("neo4j-creds", credSecretRef, "/var/run/keese/secrets/neo4j")
+		podSpec.Volumes = []corev1.Volume{vol}
+		container.VolumeMounts = append(container.VolumeMounts, mount)
+		// Read password from projected file; exec preserves PID 1.
+		container.Command = []string{"sh", "-c"}
+		container.Args = []string{
+			`export NEO4J_AUTH="neo4j/$(cat /var/run/keese/secrets/neo4j/password)"; exec /startup/docker-entrypoint.sh neo4j`,
+		}
+	} else {
+		// Dev/test only: disable authentication.
+		container.Env = []corev1.EnvVar{{
+			Name:  "NEO4J_AUTH",
+			Value: "none",
+		}}
+	}
+
+	podSpec.Containers = []corev1.Container{container}
+
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSet"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -196,28 +246,7 @@ func buildNeo4jStatefulSet(
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"keese.ai/memory": memoryName, "keese.ai/backend": "neo4j"},
 				},
-				Spec: corev1.PodSpec{
-					SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(true)},
-					Containers: []corev1.Container{{
-						Name:  "neo4j",
-						Image: neo4jImage,
-						Ports: []corev1.ContainerPort{
-							{Name: "bolt", ContainerPort: neo4jBoltPort, Protocol: corev1.ProtocolTCP},
-							{Name: "http", ContainerPort: neo4jHTTPPort, Protocol: corev1.ProtocolTCP},
-						},
-						Env: []corev1.EnvVar{{
-							// Disable default password change prompt in community edition.
-							Name:  "NEO4J_AUTH",
-							Value: "none",
-						}},
-						SecurityContext: &corev1.SecurityContext{
-							AllowPrivilegeEscalation: boolPtr(false),
-						},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name: neo4jDataVolumeName, MountPath: "/data",
-						}},
-					}},
-				},
+				Spec: podSpec,
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
 				ObjectMeta: metav1.ObjectMeta{Name: neo4jDataVolumeName},

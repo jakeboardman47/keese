@@ -90,7 +90,7 @@ func (b *QdrantBackend) Provision(
 		return created, nil
 	}
 	// Fall back to StatefulSet when the operator CRD is not installed.
-	return b.applyQdrantStatefulSet(ctx, name, namespace, svcName, replicas)
+	return b.applyQdrantStatefulSet(ctx, name, namespace, svcName, replicas, cfg.CredentialSecretRef)
 }
 
 // applyQdrantCluster SSA-applies a qdrant.io/v1.QdrantCluster via unstructured.
@@ -148,6 +148,7 @@ func (b *QdrantBackend) applyQdrantStatefulSet(
 	ctx context.Context,
 	memoryName, namespace, stsName string,
 	replicas int32,
+	credSecretRef string,
 ) (bool, error) {
 	svc := buildQdrantSvc(memoryName, namespace, stsName)
 	if err := b.Client.Patch(ctx, svc, client.Apply,
@@ -157,7 +158,7 @@ func (b *QdrantBackend) applyQdrantStatefulSet(
 	}
 
 	storageQ := resource.MustParse(qdrantDefaultStorage)
-	desired := buildQdrantStatefulSet(memoryName, namespace, stsName, replicas, storageQ)
+	desired := buildQdrantStatefulSet(memoryName, namespace, stsName, replicas, storageQ, credSecretRef)
 
 	var existing appsv1.StatefulSet
 	getErr := b.Client.Get(ctx, types.NamespacedName{Name: stsName, Namespace: namespace}, &existing)
@@ -269,11 +270,53 @@ func buildQdrantSvc(memoryName, namespace, svcName string) *corev1.Service {
 	}
 }
 
+// buildQdrantStatefulSet builds the desired StatefulSet for an in-cluster Qdrant instance.
+//
+// When credSecretRef is non-empty the Secret is mounted as a projected file at
+// /var/run/keese/secrets/qdrant (rule 05.7) and the entrypoint reads the "api-key"
+// key to set QDRANT__SERVICE__API_KEY at runtime.
+// When credSecretRef is empty the server starts with no API key (dev/test only).
 func buildQdrantStatefulSet(
 	memoryName, namespace, stsName string,
 	replicas int32,
 	storageQ resource.Quantity,
+	credSecretRef string,
 ) *appsv1.StatefulSet {
+	container := corev1.Container{
+		Name:  "qdrant",
+		Image: qdrantImage,
+		Ports: []corev1.ContainerPort{
+			{Name: "grpc", ContainerPort: qdrantGRPCPort, Protocol: corev1.ProtocolTCP},
+			{Name: "http", ContainerPort: qdrantHTTPPort, Protocol: corev1.ProtocolTCP},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: boolPtr(false),
+		},
+		VolumeMounts: []corev1.VolumeMount{{
+			Name: qdrantDataVolumeName, MountPath: "/qdrant/storage",
+		}},
+	}
+
+	podSpec := corev1.PodSpec{
+		SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(true)},
+	}
+
+	if credSecretRef != "" {
+		// Mount credential Secret as a projected file (rule 05.7).
+		// Never use env.valueFrom.secretKeyRef or envFrom (rule 05.7).
+		vol, mount := credProjectionVolume("qdrant-creds", credSecretRef, "/var/run/keese/secrets/qdrant")
+		podSpec.Volumes = []corev1.Volume{vol}
+		container.VolumeMounts = append(container.VolumeMounts, mount)
+		// Read API key from projected file; exec preserves PID 1.
+		container.Command = []string{"sh", "-c"}
+		container.Args = []string{
+			`export QDRANT__SERVICE__API_KEY="$(cat /var/run/keese/secrets/qdrant/api-key)"; exec ./entrypoint.sh`,
+		}
+		container.WorkingDir = "/qdrant"
+	}
+
+	podSpec.Containers = []corev1.Container{container}
+
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSet"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -294,23 +337,7 @@ func buildQdrantStatefulSet(
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"keese.ai/memory": memoryName, "keese.ai/backend": "qdrant"},
 				},
-				Spec: corev1.PodSpec{
-					SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: boolPtr(true)},
-					Containers: []corev1.Container{{
-						Name:  "qdrant",
-						Image: qdrantImage,
-						Ports: []corev1.ContainerPort{
-							{Name: "grpc", ContainerPort: qdrantGRPCPort, Protocol: corev1.ProtocolTCP},
-							{Name: "http", ContainerPort: qdrantHTTPPort, Protocol: corev1.ProtocolTCP},
-						},
-						SecurityContext: &corev1.SecurityContext{
-							AllowPrivilegeEscalation: boolPtr(false),
-						},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name: qdrantDataVolumeName, MountPath: "/qdrant/storage",
-						}},
-					}},
-				},
+				Spec: podSpec,
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
 				ObjectMeta: metav1.ObjectMeta{Name: qdrantDataVolumeName},
