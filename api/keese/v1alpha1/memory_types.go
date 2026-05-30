@@ -53,9 +53,11 @@ type SQLiteConfig struct {
 
 // RedisConfig holds configuration for the redis backend.
 type RedisConfig struct {
-	// address is the Redis endpoint (host:port).
-	// +kubebuilder:validation:MinLength=1
-	Address string `json:"address"`
+	// address is the external Redis endpoint (host:port). Leave empty to
+	// provision an in-cluster StatefulSet + headless Service ("<memory>-redis")
+	// in the Memory's namespace; credentials then come from credentialSecretRef.
+	// +optional
+	Address string `json:"address,omitempty"`
 
 	// replicas is the number of Redis replicas. Must be ≥2 outside dev namespaces (HA VAP).
 	// +kubebuilder:default=1
@@ -75,9 +77,11 @@ type QdrantConfig struct {
 	// +kubebuilder:validation:MinLength=1
 	CollectionName string `json:"collectionName"`
 
-	// endpoint is the Qdrant gRPC endpoint.
-	// +kubebuilder:validation:MinLength=1
-	Endpoint string `json:"endpoint"`
+	// endpoint is the external Qdrant gRPC endpoint. Leave empty to provision
+	// an in-cluster StatefulSet ("<memory>-qdrant"); credentials then come
+	// from credentialSecretRef.
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
 
 	// replicas is the replication factor for the collection. Must be ≥2 outside dev (HA VAP).
 	// +kubebuilder:default=1
@@ -106,9 +110,11 @@ type PGVectorConfig struct {
 
 // Neo4jConfig holds configuration for the neo4j graph backend.
 type Neo4jConfig struct {
-	// uri is the Bolt URI for the Neo4j instance.
-	// +kubebuilder:validation:MinLength=1
-	URI string `json:"uri"`
+	// uri is the external Bolt URI for the Neo4j instance. Leave empty to
+	// provision an in-cluster StatefulSet ("<memory>-neo4j"); credentials then
+	// come from credentialSecretRef.
+	// +optional
+	URI string `json:"uri,omitempty"`
 
 	// credentialSecretRef names the K8s Secret containing neo4j credentials, mounted
 	// as a projected file per rule 05.7.

@@ -91,11 +91,11 @@ spec:
                           as a projected file per rule 05.7.
                         type: string
                       uri:
-                        description: uri is the Bolt URI for the Neo4j instance.
-                        minLength: 1
+                        description: |-
+                          uri is the external Bolt URI for the Neo4j instance. Leave empty to
+                          provision an in-cluster StatefulSet ("<memory>-neo4j"); credentials then
+                          come from credentialSecretRef.
                         type: string
-                    required:
-                    - uri
                     type: object
                   pgvector:
                     description: pgvector configures the PostgreSQL pgvector backend.
@@ -126,8 +126,10 @@ spec:
                           as a projected file per rule 05.7.
                         type: string
                       endpoint:
-                        description: endpoint is the Qdrant gRPC endpoint.
-                        minLength: 1
+                        description: |-
+                          endpoint is the external Qdrant gRPC endpoint. Leave empty to provision
+                          an in-cluster StatefulSet ("<memory>-qdrant"); credentials then come
+                          from credentialSecretRef.
                         type: string
                       replicas:
                         default: 1
@@ -138,14 +140,15 @@ spec:
                         type: integer
                     required:
                     - collectionName
-                    - endpoint
                     type: object
                   redis:
                     description: redis configures the Redis backend.
                     properties:
                       address:
-                        description: address is the Redis endpoint (host:port).
-                        minLength: 1
+                        description: |-
+                          address is the external Redis endpoint (host:port). Leave empty to
+                          provision an in-cluster StatefulSet + headless Service ("<memory>-redis")
+                          in the Memory's namespace; credentials then come from credentialSecretRef.
                         type: string
                       credentialSecretRef:
                         description: |-
@@ -159,8 +162,6 @@ spec:
                         format: int32
                         minimum: 1
                         type: integer
-                    required:
-                    - address
                     type: object
                   sqlite:
                     description: sqlite configures the SQLite-on-PVC backend.
