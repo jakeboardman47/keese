@@ -5,7 +5,80 @@ metadata:
     alm-examples: |-
       [
         {
-          "apiVersion": "authz.operator.keese.ai/v1alpha1",
+          "apiVersion": "authz.keese.ai/v1alpha1",
+          "kind": "CrossTenantAgreement",
+          "metadata": {
+            "name": "alpha-to-beta"
+          },
+          "spec": {
+            "from": {
+              "tenantRef": {
+                "name": "alpha"
+              }
+            },
+            "scope": {
+              "a2aRoles": [
+                "reader"
+              ],
+              "natsSubjects": [
+                "keese.cta.*.events"
+              ]
+            },
+            "to": {
+              "tenantRef": {
+                "name": "beta"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "authz.keese.ai/v1alpha1",
+          "kind": "GuardrailBinding",
+          "metadata": {
+            "labels": {
+              "keese.ai/binding-scope": "Cluster",
+              "keese.ai/bootstrap": "true"
+            },
+            "name": "keese-keese-default",
+            "namespace": "keese-system"
+          },
+          "spec": {
+            "scope": {
+              "type": "Cluster"
+            },
+            "tokenBudget": {
+              "input": 0,
+              "output": 0,
+              "total": 0
+            },
+            "tools": {
+              "deny": [
+                "shell.exec",
+                "filesystem.delete",
+                "kubernetes.exec"
+              ],
+              "rateLimit": {
+                "requests": 0,
+                "scope": "sa",
+                "window": "1m"
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "authz.keese.ai/v1alpha1",
+          "kind": "GuardrailBinding",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese"
+            },
+            "name": "guardrailbinding-sample"
+          },
+          "spec": null
+        },
+        {
+          "apiVersion": "authz.keese.ai/v1alpha1",
           "kind": "OIDCProvider",
           "metadata": {
             "labels": {
@@ -34,7 +107,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "authz.operator.keese.ai/v1alpha1",
+          "apiVersion": "authz.keese.ai/v1alpha1",
           "kind": "OIDCProvider",
           "metadata": {
             "labels": {
@@ -59,7 +132,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "authz.operator.keese.ai/v1alpha1",
+          "apiVersion": "authz.keese.ai/v1alpha1",
           "kind": "OIDCProvider",
           "metadata": {
             "labels": {
@@ -88,7 +161,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "authz.operator.keese.ai/v1alpha1",
+          "apiVersion": "authz.keese.ai/v1alpha1",
           "kind": "OIDCProvider",
           "metadata": {
             "labels": {
@@ -117,7 +190,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "authz.operator.keese.ai/v1alpha1",
+          "apiVersion": "authz.keese.ai/v1alpha1",
           "kind": "OIDCProvider",
           "metadata": {
             "labels": {
@@ -146,7 +219,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "authz.operator.keese.ai/v1alpha1",
+          "apiVersion": "authz.keese.ai/v1alpha1",
           "kind": "OIDCProvider",
           "metadata": {
             "labels": {
@@ -181,7 +254,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "authz.operator.keese.ai/v1alpha1",
+          "apiVersion": "authz.keese.ai/v1alpha1",
           "kind": "OIDCProvider",
           "metadata": {
             "labels": {
@@ -210,7 +283,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "authz.operator.keese.ai/v1alpha1",
+          "apiVersion": "authz.keese.ai/v1alpha1",
           "kind": "OIDCProvider",
           "metadata": {
             "labels": {
@@ -234,53 +307,26 @@ metadata:
           }
         },
         {
-          "apiVersion": "guardrail.operator.keese.ai/v1alpha1",
-          "kind": "GuardrailBinding",
+          "apiVersion": "keese.ai/v1alpha1",
+          "kind": "AgentRuntime",
           "metadata": {
             "labels": {
-              "keese.ai/binding-scope": "Cluster",
-              "keese.ai/bootstrap": "true"
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese",
+              "keese.ai/managed": "true"
             },
-            "name": "keese-keese-default",
-            "namespace": "keese-system"
+            "name": "agentruntime-minimal"
           },
           "spec": {
-            "scope": {
-              "type": "Cluster"
-            },
-            "tokenBudget": {
-              "input": 0,
-              "output": 0,
-              "total": 0
-            },
-            "tools": {
-              "deny": [
-                "shell.exec",
-                "filesystem.delete",
-                "kubernetes.exec"
-              ],
-              "rateLimit": {
-                "requests": 0,
-                "scope": "sa",
-                "window": "1m"
+            "implementation": {
+              "goose": {
+                "image": "ghcr.io/block/goose:latest"
               }
             }
           }
         },
         {
-          "apiVersion": "guardrail.operator.keese.ai/v1alpha1",
-          "kind": "GuardrailBinding",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "keese"
-            },
-            "name": "guardrailbinding-sample"
-          },
-          "spec": null
-        },
-        {
-          "apiVersion": "memory.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "Memory",
           "metadata": {
             "labels": {
@@ -305,7 +351,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "memory.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "Memory",
           "metadata": {
             "labels": {
@@ -329,81 +375,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "memory.operator.keese.ai/v1alpha1",
-          "kind": "SharedMemory",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "keese",
-              "keese.ai/managed": "true"
-            },
-            "name": "sharedmemory-sample-full",
-            "namespace": "default"
-          },
-          "spec": {
-            "embeddingDim": 1536,
-            "provider": {
-              "qdrant": {
-                "collectionName": "shared-vectors",
-                "credentialSecretRef": "qdrant-api-key",
-                "endpoint": "qdrant.qdrant.svc.cluster.local:6334",
-                "replicas": 2
-              },
-              "type": "qdrant"
-            },
-            "sharedWith": [
-              {
-                "access": "writer",
-                "name": "workspace-alpha",
-                "namespace": "team-alpha"
-              },
-              {
-                "access": "reader",
-                "name": "workspace-beta",
-                "namespace": "team-beta"
-              }
-            ],
-            "tenantRef": "acme-tenant"
-          }
-        },
-        {
-          "apiVersion": "memory.operator.keese.ai/v1alpha1",
-          "kind": "SharedMemory",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "keese",
-              "keese.ai/managed": "true"
-            },
-            "name": "sharedmemory-sample-minimal",
-            "namespace": "default"
-          },
-          "spec": {
-            "embeddingDim": 768,
-            "provider": {
-              "sqlite": {
-                "reclaimPolicy": "Retain",
-                "storageSize": "2Gi"
-              },
-              "type": "sqlite"
-            },
-            "tenantRef": "acme-tenant"
-          }
-        },
-        {
-          "apiVersion": "observability.operator.keese.ai/v1alpha1",
-          "kind": "TokenBudget",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "keese"
-            },
-            "name": "tokenbudget-sample"
-          },
-          "spec": null
-        },
-        {
-          "apiVersion": "recipe.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "Recipe",
           "metadata": {
             "labels": {
@@ -425,7 +397,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "recipe.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "Recipe",
           "metadata": {
             "labels": {
@@ -480,7 +452,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "recipe.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "RecipeSource",
           "metadata": {
             "labels": {
@@ -499,7 +471,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "recipe.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "RecipeSource",
           "metadata": {
             "labels": {
@@ -520,26 +492,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "runtime.operator.keese.ai/v1alpha1",
-          "kind": "AgentRuntime",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "keese",
-              "keese.ai/managed": "true"
-            },
-            "name": "agentruntime-minimal"
-          },
-          "spec": {
-            "implementation": {
-              "goose": {
-                "image": "ghcr.io/block/goose:latest"
-              }
-            }
-          }
-        },
-        {
-          "apiVersion": "runtime.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "RuntimeExtension",
           "metadata": {
             "labels": {
@@ -558,34 +511,69 @@ metadata:
           }
         },
         {
-          "apiVersion": "tenancy.operator.keese.ai/v1alpha1",
-          "kind": "CrossTenantAgreement",
+          "apiVersion": "keese.ai/v1alpha1",
+          "kind": "SharedMemory",
           "metadata": {
-            "name": "alpha-to-beta"
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese",
+              "keese.ai/managed": "true"
+            },
+            "name": "sharedmemory-sample-full",
+            "namespace": "default"
           },
           "spec": {
-            "from": {
-              "tenantRef": {
-                "name": "alpha"
-              }
+            "embeddingDim": 1536,
+            "provider": {
+              "qdrant": {
+                "collectionName": "shared-vectors",
+                "credentialSecretRef": "qdrant-api-key",
+                "endpoint": "qdrant.qdrant.svc.cluster.local:6334",
+                "replicas": 2
+              },
+              "type": "qdrant"
             },
-            "scope": {
-              "a2aRoles": [
-                "reader"
-              ],
-              "natsSubjects": [
-                "keese.cta.*.events"
-              ]
-            },
-            "to": {
-              "tenantRef": {
-                "name": "beta"
+            "sharedWith": [
+              {
+                "access": "writer",
+                "name": "workspace-alpha",
+                "namespace": "team-alpha"
+              },
+              {
+                "access": "reader",
+                "name": "workspace-beta",
+                "namespace": "team-beta"
               }
-            }
+            ],
+            "tenantRef": "acme-tenant"
           }
         },
         {
-          "apiVersion": "tenancy.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
+          "kind": "SharedMemory",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese",
+              "keese.ai/managed": "true"
+            },
+            "name": "sharedmemory-sample-minimal",
+            "namespace": "default"
+          },
+          "spec": {
+            "embeddingDim": 768,
+            "provider": {
+              "sqlite": {
+                "reclaimPolicy": "Retain",
+                "storageSize": "2Gi"
+              },
+              "type": "sqlite"
+            },
+            "tenantRef": "acme-tenant"
+          }
+        },
+        {
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "Tenant",
           "metadata": {
             "name": "alpha"
@@ -600,7 +588,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "transport.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "Transport",
           "metadata": {
             "labels": {
@@ -619,7 +607,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "workflow.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "Workflow",
           "metadata": {
             "labels": {
@@ -642,11 +630,14 @@ metadata:
                 "image": "alpine:3.18",
                 "name": "hello"
               }
-            ]
+            ],
+            "workspaceRef": {
+              "name": "workspace-sample-minimal"
+            }
           }
         },
         {
-          "apiVersion": "workflow.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "WorkflowRun",
           "metadata": {
             "labels": {
@@ -667,7 +658,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "workspace.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "Workspace",
           "metadata": {
             "labels": {
@@ -689,7 +680,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "workspace.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "WorkspaceSession",
           "metadata": {
             "labels": {
@@ -708,7 +699,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "workspace.operator.keese.ai/v1alpha1",
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "WorkspaceShare",
           "metadata": {
             "labels": {
@@ -724,10 +715,22 @@ metadata:
               "name": "workspace-sample-minimal"
             }
           }
+        },
+        {
+          "apiVersion": "policy.keese.ai/v1alpha1",
+          "kind": "TokenBudget",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese"
+            },
+            "name": "tokenbudget-sample"
+          },
+          "spec": null
         }
       ]
     capabilities: Basic Install
-    createdAt: "2026-04-26T16:00:19Z"
+    createdAt: "2026-05-30T04:36:46Z"
     operators.operatorframework.io/builder: operator-sdk-unknown
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
   name: keese.v0.0.1
@@ -741,16 +744,16 @@ spec:
         Cluster-scoped; registers a runtime provider implementation.
       displayName: Agent Runtime
       kind: AgentRuntime
-      name: agentruntimes.runtime.operator.keese.ai
+      name: agentruntimes.keese.ai
       version: v1alpha1
     - description: |-
         CrossTenantAgreement is the Schema for the crosstenanagreements API.
         CrossTenantAgreement is cluster-scoped; it governs cross-tenant NATS messaging and A2A roles.
         Design: docs/designs/25-cross-tenant-agreement.md + 25-ii-spec-schema.md + 25-iii-approval-flow.md
-        Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-cra.md
+        Spec: docs/specs/keese.ai-v1alpha1-ii-cra.md
       displayName: Cross Tenant Agreement
       kind: CrossTenantAgreement
-      name: crosstenantagreements.tenancy.operator.keese.ai
+      name: crosstenantagreements.authz.keese.ai
       version: v1alpha1
     - description: |-
         GuardrailBinding is the Schema for the guardrailbindings API.
@@ -759,12 +762,12 @@ spec:
         merge lattice spanning Cluster / Tenant / Workspace scopes.
       displayName: Guardrail Binding
       kind: GuardrailBinding
-      name: guardrailbindings.guardrail.operator.keese.ai
+      name: guardrailbindings.authz.keese.ai
       version: v1alpha1
     - description: Memory is the Schema for the memories API.
       displayName: Memory
       kind: Memory
-      name: memories.memory.operator.keese.ai
+      name: memories.keese.ai
       version: v1alpha1
     - description: |-
         OIDCProvider is the Schema for the oidcproviders API.
@@ -773,89 +776,95 @@ spec:
         created by the keese-oidcprovider-bootstrap Job at install time.
 
         Design: docs/designs/04b-projected-sa-identity.md + docs/designs/04b-ii-oidc-trust.md
-        Spec: docs/specs/authz.operator.keese.ai-v1alpha1.md
+        Spec: docs/specs/authz.keese.ai-v1alpha1.md
 
         tenant.uses_oidc_provider OpenFGA relation: the Tenant controller writes tuples
         (tenant:<name>#uses_oidc_provider@oidc_provider:<spec.oidc.allowedProviders[]>) per
         04a iter-6; this controller owns OIDCProvider CRs only — tuples are written by Tenant.
       displayName: OIDCProvider
       kind: OIDCProvider
-      name: oidcproviders.authz.operator.keese.ai
+      name: oidcproviders.authz.keese.ai
       version: v1alpha1
     - description: Recipe is the Schema for the recipes API.
       displayName: Recipe
       kind: Recipe
-      name: recipes.recipe.operator.keese.ai
+      name: recipes.keese.ai
       version: v1alpha1
     - description: RecipeSource is the Schema for the recipesources API.
       displayName: Recipe Source
       kind: RecipeSource
-      name: recipesources.recipe.operator.keese.ai
+      name: recipesources.keese.ai
       version: v1alpha1
     - description: |-
         RuntimeExtension is the Schema for the runtimeextensions API.
         Namespaced; bundles N tools for a runtime and manages ReBAC tuples.
       displayName: Runtime Extension
       kind: RuntimeExtension
-      name: runtimeextensions.runtime.operator.keese.ai
+      name: runtimeextensions.keese.ai
       version: v1alpha1
     - description: SharedMemory is the Schema for the sharedmemories API.
       displayName: Shared Memory
       kind: SharedMemory
-      name: sharedmemories.memory.operator.keese.ai
+      name: sharedmemories.keese.ai
       version: v1alpha1
     - description: |-
         Tenant is the Schema for the tenants API.
         Tenant is cluster-scoped; its name IS the OpenFGA identity key.
         Design: docs/designs/24-tenant-crd.md + docs/designs/24b-tenant-crd.md
-        Spec: docs/specs/tenancy.operator.keese.ai-v1alpha1-ii-tenant.md
+        Spec: docs/specs/keese.ai-v1alpha1-ii-tenant.md
       displayName: Tenant
       kind: Tenant
-      name: tenants.tenancy.operator.keese.ai
+      name: tenants.keese.ai
       version: v1alpha1
     - description: TokenBudget is the Schema for the tokenbudgets API.
       displayName: Token Budget
       kind: TokenBudget
-      name: tokenbudgets.observability.operator.keese.ai
+      name: tokenbudgets.policy.keese.ai
+      version: v1alpha1
+    - kind: ToolBinding
+      name: toolbindings.authz.keese.ai
       version: v1alpha1
     - description: Transport is the Schema for the transports API.
       displayName: Transport
       kind: Transport
-      name: transports.transport.operator.keese.ai
+      name: transports.keese.ai
       version: v1alpha1
     - description: |-
         WorkflowRun is the Schema for the workflowruns API.
         It projects an Argo Workflow and manages NATS streams, SA tokens, and CTA checks.
       displayName: Workflow Run
       kind: WorkflowRun
-      name: workflowruns.workflow.operator.keese.ai
+      name: workflowruns.keese.ai
       version: v1alpha1
     - description: |-
         Workflow is the Schema for the workflows API.
         It projects an Argo WorkflowTemplate and manages triggers and outputs.
       displayName: Workflow
       kind: Workflow
-      name: workflows.workflow.operator.keese.ai
+      name: workflows.keese.ai
       version: v1alpha1
     - description: Workspace is the Schema for the workspaces API.
       displayName: Workspace
       kind: Workspace
-      name: workspaces.workspace.operator.keese.ai
+      name: workspaces.keese.ai
       version: v1alpha1
     - description: |-
         WorkspaceSession is the Schema for the workspacesessions API.
         WorkspaceSession is namespace-scoped (same namespace as parent Workspace).
         Name pattern: <workspace>-<subject-hash-16>-<session-name>.
         Design: docs/designs/08b-goose-acp-stdio-k8s.md + docs/designs/08b-ii-session-crd-spec.md
-        Spec: docs/specs/workspace.operator.keese.ai-v1alpha1-ii-session.md
+        Spec: docs/specs/keese.ai-v1alpha1-ii-session.md
       displayName: Workspace Session
       kind: WorkspaceSession
-      name: workspacesessions.workspace.operator.keese.ai
+      name: workspacesessions.keese.ai
       version: v1alpha1
     - description: WorkspaceShare is the Schema for the workspaceshares API.
       displayName: Workspace Share
       kind: WorkspaceShare
-      name: workspaceshares.workspace.operator.keese.ai
+      name: workspaceshares.keese.ai
+      version: v1alpha1
+    - kind: WorkspaceTool
+      name: workspacetools.authz.keese.ai
       version: v1alpha1
   description: |
     keese is a secure multi-tenant, multi-workspace Kubernetes operator
@@ -874,6 +883,121 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
+          - keese.ai
+          resources:
+          - recipes
+          - recipesources
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - keese.ai
+          resources:
+          - recipes/status
+          - recipesources/status
+          verbs:
+          - get
+          - update
+          - patch
+        - apiGroups:
+          - keese.ai
+          resources:
+          - recipes/finalizers
+          - recipesources/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - keese.ai
+          resources:
+          - memories
+          - sharedmemories
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - keese.ai
+          resources:
+          - memories/status
+          - sharedmemories/status
+          verbs:
+          - get
+          - update
+          - patch
+        - apiGroups:
+          - keese.ai
+          resources:
+          - memories/finalizers
+          - sharedmemories/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - keese.ai
+          resources:
+          - crosstenantagreements
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - keese.ai
+          resources:
+          - crosstenantagreements/status
+          verbs:
+          - get
+          - update
+          - patch
+        - apiGroups:
+          - keese.ai
+          resources:
+          - crosstenantagreements/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - ""
           resources:
           - events
@@ -884,6 +1008,7 @@ spec:
           - ""
           resources:
           - namespaces
+          - secrets
           verbs:
           - get
           - list
@@ -904,6 +1029,7 @@ spec:
           - ""
           resources:
           - pods
+          - services
           verbs:
           - create
           - delete
@@ -913,8 +1039,22 @@ spec:
           - update
           - watch
         - apiGroups:
-          - authz.operator.keese.ai
+          - apps
           resources:
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - authz.keese.ai
+          resources:
+          - crosstenantagreements
+          - guardrailbindings
           - oidcproviders
           verbs:
           - create
@@ -925,14 +1065,18 @@ spec:
           - update
           - watch
         - apiGroups:
-          - authz.operator.keese.ai
+          - authz.keese.ai
           resources:
+          - crosstenantagreements/finalizers
+          - guardrailbindings/finalizers
           - oidcproviders/finalizers
           verbs:
           - update
         - apiGroups:
-          - authz.operator.keese.ai
+          - authz.keese.ai
           resources:
+          - crosstenantagreements/status
+          - guardrailbindings/status
           - oidcproviders/status
           verbs:
           - get
@@ -951,12 +1095,23 @@ spec:
           - update
           - watch
         - apiGroups:
+          - capsule.clastix.io
+          resources:
+          - tenants
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
           - cert-manager.io
           resources:
           - certificates
           verbs:
+          - create
           - get
           - list
+          - patch
+          - update
           - watch
         - apiGroups:
           - coordination.k8s.io
@@ -966,6 +1121,30 @@ spec:
           - create
           - get
           - update
+        - apiGroups:
+          - eventing.knative.dev
+          resources:
+          - triggers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - external-secrets.io
+          resources:
+          - externalsecrets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - gateway.envoyproxy.io
           resources:
@@ -980,15 +1159,8 @@ spec:
         - apiGroups:
           - gateway.networking.k8s.io
           resources:
+          - httproutes
           - referencegrants
-          verbs:
-          - get
-          - list
-          - watch
-        - apiGroups:
-          - guardrail.operator.keese.ai
-          resources:
-          - guardrailbindings
           verbs:
           - create
           - delete
@@ -997,20 +1169,6 @@ spec:
           - patch
           - update
           - watch
-        - apiGroups:
-          - guardrail.operator.keese.ai
-          resources:
-          - guardrailbindings/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - guardrail.operator.keese.ai
-          resources:
-          - guardrailbindings/status
-          verbs:
-          - get
-          - patch
-          - update
         - apiGroups:
           - jetstream.nats.io
           resources:
@@ -1021,8 +1179,59 @@ spec:
           - delete
           - get
           - list
+          - patch
           - update
           - watch
+        - apiGroups:
+          - keese.ai
+          resources:
+          - agentruntimes
+          - runtimeextensions
+          - tenants
+          - transports
+          - workflowruns
+          - workflows
+          - workspaces
+          - workspacesessions
+          - workspaceshares
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - keese.ai
+          resources:
+          - agentruntimes/finalizers
+          - runtimeextensions/finalizers
+          - tenants/finalizers
+          - transports/finalizers
+          - workflowruns/finalizers
+          - workflows/finalizers
+          - workspaces/finalizers
+          - workspacesessions/finalizers
+          - workspaceshares/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - keese.ai
+          resources:
+          - agentruntimes/status
+          - runtimeextensions/status
+          - tenants/status
+          - transports/status
+          - workflowruns/status
+          - workflows/status
+          - workspaces/status
+          - workspacesessions/status
+          - workspaceshares/status
+          verbs:
+          - get
+          - patch
+          - update
         - apiGroups:
           - mcp.keese.ai
           resources:
@@ -1043,7 +1252,26 @@ spec:
           - patch
           - watch
         - apiGroups:
-          - observability.operator.keese.ai
+          - policy.keese.ai
+          resources:
+          - featuregates
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - policy.keese.ai
+          resources:
+          - featuregates/status
+          - tokenbudgets/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - policy.keese.ai
           resources:
           - tokenbudgets
           verbs:
@@ -1055,24 +1283,15 @@ spec:
           - update
           - watch
         - apiGroups:
-          - observability.operator.keese.ai
+          - policy.keese.ai
           resources:
           - tokenbudgets/finalizers
           verbs:
           - update
         - apiGroups:
-          - observability.operator.keese.ai
+          - postgresql.cnpg.io
           resources:
-          - tokenbudgets/status
-          verbs:
-          - get
-          - patch
-          - update
-        - apiGroups:
-          - runtime.operator.keese.ai
-          resources:
-          - agentruntimes
-          - runtimeextensions
+          - clusters
           verbs:
           - create
           - delete
@@ -1082,26 +1301,9 @@ spec:
           - update
           - watch
         - apiGroups:
-          - runtime.operator.keese.ai
+          - qdrant.io
           resources:
-          - agentruntimes/finalizers
-          - runtimeextensions/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - runtime.operator.keese.ai
-          resources:
-          - agentruntimes/status
-          - runtimeextensions/status
-          verbs:
-          - get
-          - patch
-          - update
-        - apiGroups:
-          - tenancy.operator.keese.ai
-          resources:
-          - crosstenanagreements
-          - tenants
+          - qdrantclusters
           verbs:
           - create
           - delete
@@ -1110,109 +1312,6 @@ spec:
           - patch
           - update
           - watch
-        - apiGroups:
-          - tenancy.operator.keese.ai
-          resources:
-          - crosstenanagreements/finalizers
-          - tenants/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - tenancy.operator.keese.ai
-          resources:
-          - crosstenanagreements/status
-          - tenants/status
-          verbs:
-          - get
-          - patch
-          - update
-        - apiGroups:
-          - transport.operator.keese.ai
-          resources:
-          - transports
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - transport.operator.keese.ai
-          resources:
-          - transports/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - transport.operator.keese.ai
-          resources:
-          - transports/status
-          verbs:
-          - get
-          - patch
-          - update
-        - apiGroups:
-          - workflow.operator.keese.ai
-          resources:
-          - workflowruns
-          - workflows
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - workflow.operator.keese.ai
-          resources:
-          - workflowruns/finalizers
-          - workflows/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - workflow.operator.keese.ai
-          resources:
-          - workflowruns/status
-          - workflows/status
-          verbs:
-          - get
-          - patch
-          - update
-        - apiGroups:
-          - workspace.operator.keese.ai
-          resources:
-          - workspaces
-          - workspacesessions
-          - workspaceshares
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - workspace.operator.keese.ai
-          resources:
-          - workspaces/finalizers
-          - workspacesessions/finalizers
-          - workspaceshares/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - workspace.operator.keese.ai
-          resources:
-          - workspaces/status
-          - workspacesessions/status
-          - workspaceshares/status
-          verbs:
-          - get
-          - patch
-          - update
         - apiGroups:
           - authentication.k8s.io
           resources:
@@ -1258,6 +1357,23 @@ spec:
                 - --health-probe-bind-address=:8081
                 command:
                 - /manager
+                env:
+                - name: OPENFGA_API_URL
+                  value: http://openfga.openfga.svc.cluster.local:8080
+                - name: OPENFGA_STORE_ID
+                  valueFrom:
+                    configMapKeyRef:
+                      key: store_id
+                      name: openfga-config
+                      optional: true
+                - name: OPENFGA_AUTHORIZATION_MODEL_ID
+                  valueFrom:
+                    configMapKeyRef:
+                      key: authorization_model_id
+                      name: openfga-config
+                      optional: true
+                - name: KEESE_GATEWAY_NS
+                  value: keese-system
                 image: controller:latest
                 livenessProbe:
                   failureThreshold: 3
@@ -1290,7 +1406,7 @@ spec:
                 seccompProfile:
                   type: RuntimeDefault
               serviceAccountName: keese-controller-manager
-              terminationGracePeriodSeconds: 60
+              terminationGracePeriodSeconds: 90
       permissions:
       - rules:
         - apiGroups:

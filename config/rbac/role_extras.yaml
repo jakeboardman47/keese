@@ -11,24 +11,24 @@ kind: ClusterRole
 metadata:
   name: manager-role-extras
 rules:
-  # ---- recipe.operator.keese.ai ----
-  - apiGroups: [recipe.operator.keese.ai]
+  # ---- keese.ai ----
+  - apiGroups: [keese.ai]
     resources: [recipes, recipesources]
     verbs: [get, list, watch, create, update, patch, delete]
-  - apiGroups: [recipe.operator.keese.ai]
+  - apiGroups: [keese.ai]
     resources: [recipes/status, recipesources/status]
     verbs: [get, update, patch]
-  - apiGroups: [recipe.operator.keese.ai]
+  - apiGroups: [keese.ai]
     resources: [recipes/finalizers, recipesources/finalizers]
     verbs: [update]
-  # ---- memory.operator.keese.ai ----
-  - apiGroups: [memory.operator.keese.ai]
+  # ---- keese.ai ----
+  - apiGroups: [keese.ai]
     resources: [memories, sharedmemories]
     verbs: [get, list, watch, create, update, patch, delete]
-  - apiGroups: [memory.operator.keese.ai]
+  - apiGroups: [keese.ai]
     resources: [memories/status, sharedmemories/status]
     verbs: [get, update, patch]
-  - apiGroups: [memory.operator.keese.ai]
+  - apiGroups: [keese.ai]
     resources: [memories/finalizers, sharedmemories/finalizers]
     verbs: [update]
   # ---- core: PVC and ConfigMap reads (recipe + memory) ----
@@ -38,19 +38,19 @@ rules:
   - apiGroups: [""]
     resources: [configmaps]
     verbs: [get, list, watch]
-  # ---- tenancy.operator.keese.ai/crosstenantagreements ----
+  # ---- keese.ai/crosstenantagreements ----
   # The kubebuilder:rbac marker on crosstenanagreement_controller.go uses the
   # typo'd plural "crosstenanagreements" (missing 't'). The actual CRD plural
   # is "crosstenantagreements". Until the marker is corrected and regenerated
   # the controller cannot list its own kind without these supplemental rules.
   # TODO(TD-P1): rename marker + identifier to match CRD plural.
-  - apiGroups: [tenancy.operator.keese.ai]
+  - apiGroups: [keese.ai]
     resources: [crosstenantagreements]
     verbs: [get, list, watch, create, update, patch, delete]
-  - apiGroups: [tenancy.operator.keese.ai]
+  - apiGroups: [keese.ai]
     resources: [crosstenantagreements/status]
     verbs: [get, update, patch]
-  - apiGroups: [tenancy.operator.keese.ai]
+  - apiGroups: [keese.ai]
     resources: [crosstenantagreements/finalizers]
     verbs: [update]
 ---

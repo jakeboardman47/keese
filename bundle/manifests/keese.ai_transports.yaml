@@ -1,0 +1,483 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: transports.keese.ai
+spec:
+  group: keese.ai
+  names:
+    kind: Transport
+    listKind: TransportList
+    plural: transports
+    singular: transport
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Transport is the Schema for the transports API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              TransportSpec defines the desired state of a Transport.
+
+              spec.type is immutable after creation (VAP CEL). Exactly one sub-struct
+              matching spec.type must be set; the others must be absent.
+            properties:
+              a2a:
+                description: A2A configures agent-to-agent gRPC transport. Set only
+                  when type=a2a.
+                properties:
+                  endpoint:
+                    description: Endpoint is the gRPC target URI. Must start with
+                      grpc:// or grpcs://.
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: endpoint must start with grpc:// or grpcs://
+                      rule: self.startsWith("grpc://") || self.startsWith("grpcs://")
+                  mutualTLS:
+                    description: |-
+                      MutualTLS configures mutual-TLS authentication.
+                      Required when peerAuth=mutual-tls.
+                    properties:
+                      aclRef:
+                        description: AclRef references an ACL resource for mTLS peers.
+                        properties:
+                          name:
+                            description: Name of the referenced object.
+                            minLength: 1
+                            type: string
+                          namespace:
+                            description: Namespace of the referenced object.
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      certificateRef:
+                        description: |-
+                          CertificateRef points to a cert-manager Certificate in the same namespace.
+                          Required for mutual-tls peerAuth mode.
+                        properties:
+                          name:
+                            description: Name of the referenced object.
+                            minLength: 1
+                            type: string
+                          namespace:
+                            description: Namespace of the referenced object.
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      clientCaBundle:
+                        description: ClientCaBundle is an inline PEM CA bundle for
+                          client certificate validation.
+                        type: string
+                    required:
+                    - certificateRef
+                    type: object
+                  peerAuth:
+                    default: workspace-sa
+                    description: PeerAuth selects the peer-authentication mode. Default
+                      "workspace-sa".
+                    enum:
+                    - workspace-sa
+                    - mutual-tls
+                    type: string
+                  scope:
+                    default: intra-tenant
+                    description: |-
+                      Scope is the messaging scope. Default "intra-tenant".
+                      cross-tenant scope requires an Approved CrossTenantAgreement.
+                    enum:
+                    - intra-tenant
+                    - cross-tenant
+                    type: string
+                  workspaceSA:
+                    description: |-
+                      WorkspaceSA configures workspace service-account authentication.
+                      Required when peerAuth=workspace-sa.
+                    properties:
+                      audience:
+                        description: |-
+                          Audience is the SA token audience. For WorkflowRun transports this must be
+                          keese-wf-<workflow-run-uid> (04b iter-3 workflowRun audience template).
+                        minLength: 1
+                        type: string
+                      authzTupleCheck:
+                        default: true
+                        description: |-
+                          AuthzTupleCheck enables the OpenFGA cross-tenant check. Defaults to true for
+                          scope: cross-tenant. Only meaningful in cross-tenant scope; ignored otherwise.
+                        type: boolean
+                    required:
+                    - audience
+                    type: object
+                required:
+                - endpoint
+                type: object
+              mcp:
+                description: MCP configures MCPRoute-backed transport. Set only when
+                  type=mcp.
+                properties:
+                  mcpRouteRef:
+                    description: |-
+                      McpRouteRef references the MCPRoute object. Required.
+                      Admission validates the MCPRoute exists; emits MCPRouteNotFound if absent.
+                    properties:
+                      name:
+                        description: Name of the referenced object.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: Namespace of the referenced object.
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  protocolVersion:
+                    default: "2024-11-05"
+                    description: ProtocolVersion is the MCP protocol version. Default
+                      "2024-11-05".
+                    type: string
+                  toolTimeout:
+                    description: ToolTimeout is the per-tool-call timeout duration.
+                      Range [1s, 300s]. Default "30s".
+                    type: string
+                required:
+                - mcpRouteRef
+                type: object
+              nats:
+                description: NATS configures NATS JetStream transport. Set only when
+                  type=nats.
+                properties:
+                  ackPolicy:
+                    default: explicit
+                    description: AckPolicy sets the ack policy. Default "explicit".
+                    enum:
+                    - explicit
+                    - none
+                    - all
+                    type: string
+                  ackWait:
+                    description: AckWait is the ack wait duration (e.g. "30s").
+                    type: string
+                  clusterRef:
+                    description: ClusterRef references the NATS cluster object.
+                    properties:
+                      name:
+                        description: Name of the referenced object.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: Namespace of the referenced object.
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  consumerName:
+                    description: ConsumerName is the JetStream consumer/durable name.
+                      Max 64 chars.
+                    maxLength: 64
+                    minLength: 1
+                    type: string
+                  maxDeliver:
+                    default: 3
+                    description: MaxDeliver is the maximum delivery count. Range [1,
+                      100].
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  streamConfig:
+                    description: |-
+                      StreamConfig is the JetStream stream configuration for opt-in ownership mode.
+                      Ignored unless annotation keese.ai/auto-create-stream=true is set.
+                    properties:
+                      maxAge:
+                        description: MaxAge is the maximum age of messages (e.g. "7d").
+                        type: string
+                      replicas:
+                        description: Replicas is the number of stream replicas. Default
+                          3.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      retention:
+                        description: Retention sets the stream retention policy. Default
+                          "limits".
+                        enum:
+                        - limits
+                        - interest
+                        - workqueue
+                        type: string
+                      storage:
+                        description: Storage sets the JetStream storage backend. Default
+                          "file".
+                        enum:
+                        - file
+                        - memory
+                        type: string
+                      subjects:
+                        description: Subjects lists the NATS subjects covered by this
+                          stream.
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                  streamName:
+                    description: StreamName is the JetStream stream name. Max 64 chars.
+                    maxLength: 64
+                    minLength: 1
+                    type: string
+                  tls:
+                    description: TLS configures mTLS for the NATS connection. CertificateRef
+                      must resolve.
+                    properties:
+                      certificateRef:
+                        description: CertificateRef points to a cert-manager Certificate
+                          in the same namespace.
+                        properties:
+                          name:
+                            description: Name of the referenced object.
+                            minLength: 1
+                            type: string
+                          namespace:
+                            description: Namespace of the referenced object.
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
+                required:
+                - clusterRef
+                - consumerName
+                - streamName
+                type: object
+              stdio:
+                description: Stdio configures the stdio bridge transport. Set only
+                  when type=stdio.
+                properties:
+                  bridgeImage:
+                    description: BridgeImage is the container image for the stdio
+                      bridge sidecar. Required.
+                    minLength: 1
+                    type: string
+                  inboundQueueDepth:
+                    default: 100
+                    description: InboundQueueDepth is the number of frames buffered
+                      inbound. Range [10, 10000].
+                    format: int32
+                    maximum: 10000
+                    minimum: 10
+                    type: integer
+                  outboundQueueDepth:
+                    default: 1000
+                    description: |-
+                      OutboundQueueDepth is the number of frames buffered outbound before drop-oldest.
+                      Range [100, 100000].
+                    format: int32
+                    maximum: 100000
+                    minimum: 100
+                    type: integer
+                  reconnectBackoff:
+                    description: ReconnectBackoff configures the exponential back-off
+                      applied between retries.
+                    properties:
+                      initial:
+                        description: Initial is the initial back-off delay (e.g. "1s").
+                        type: string
+                      max:
+                        description: Max is the maximum back-off delay (e.g. "30s").
+                        type: string
+                      multiplier:
+                        description: Multiplier is the factor applied on each retry.
+                          Range [1.0, 10.0].
+                        maximum: 10
+                        minimum: 1
+                        type: number
+                    type: object
+                  reconnectBufferBytes:
+                    default: 4194304
+                    description: |-
+                      ReconnectBufferBytes is the in-memory buffer in bytes for reconnect replay.
+                      Range [1048576, 67108864]. Default 4 MiB.
+                    format: int64
+                    maximum: 67108864
+                    minimum: 1048576
+                    type: integer
+                  reconnectRetries:
+                    default: 3
+                    description: ReconnectRetries is the maximum number of reconnect
+                      attempts. Range [1, 10].
+                    format: int32
+                    maximum: 10
+                    minimum: 1
+                    type: integer
+                required:
+                - bridgeImage
+                type: object
+              type:
+                allOf:
+                - enum:
+                  - nats
+                  - a2a
+                  - mcp
+                  - stdio
+                - enum:
+                  - nats
+                  - a2a
+                  - mcp
+                  - stdio
+                description: Type selects the transport protocol. Immutable after
+                  creation.
+                type: string
+            required:
+            - type
+            type: object
+            x-kubernetes-validations:
+            - message: spec.type is immutable after creation (TransportTypeImmutable)
+              rule: oldSelf.type == self.type
+            - message: spec.nats must be set (and only nats) when spec.type=nats (TransportSubfieldMismatch)
+              rule: 'self.type == ''nats'' ? has(self.nats) && !has(self.a2a) && !has(self.mcp)
+                && !has(self.stdio) : true'
+            - message: spec.a2a must be set (and only a2a) when spec.type=a2a (TransportSubfieldMismatch)
+              rule: 'self.type == ''a2a'' ? has(self.a2a) && !has(self.nats) && !has(self.mcp)
+                && !has(self.stdio) : true'
+            - message: spec.mcp must be set (and only mcp) when spec.type=mcp (TransportSubfieldMismatch)
+              rule: 'self.type == ''mcp'' ? has(self.mcp) && !has(self.nats) && !has(self.a2a)
+                && !has(self.stdio) : true'
+            - message: spec.stdio must be set (and only stdio) when spec.type=stdio
+                (TransportSubfieldMismatch)
+              rule: 'self.type == ''stdio'' ? has(self.stdio) && !has(self.nats) &&
+                !has(self.a2a) && !has(self.mcp) : true'
+          status:
+            description: TransportStatus defines the observed state of Transport.
+            properties:
+              conditions:
+                description: Conditions represents the latest state of the Transport.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the metadata.generation this status
+                  was computed from.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the current lifecycle phase of the Transport.
+                enum:
+                - Pending
+                - Provisioning
+                - Ready
+                - Degraded
+                - Terminating
+                type: string
+              rebacTupleCount:
+                description: ReBAC tuple count written by the last successful sync.
+                  Used for debuggability.
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -5,28 +5,34 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-- bases/workspace.operator.keese.ai_workspaces.yaml
-- bases/workspace.operator.keese.ai_workspaceshares.yaml
-- bases/workspace.operator.keese.ai_workspacesessions.yaml
-- bases/workflow.operator.keese.ai_workflows.yaml
-- bases/workflow.operator.keese.ai_workflowruns.yaml
-- bases/runtime.operator.keese.ai_agentruntimes.yaml
-- bases/runtime.operator.keese.ai_runtimeextensions.yaml
-- bases/memory.operator.keese.ai_memories.yaml
-- bases/memory.operator.keese.ai_sharedmemories.yaml
-- bases/recipe.operator.keese.ai_recipes.yaml
-- bases/recipe.operator.keese.ai_recipesources.yaml
-- bases/guardrail.operator.keese.ai_guardrailbindings.yaml
-- bases/observability.operator.keese.ai_tokenbudgets.yaml
-- bases/transport.operator.keese.ai_transports.yaml
-- bases/authz.operator.keese.ai_oidcproviders.yaml
-- bases/tenancy.operator.keese.ai_tenants.yaml
-- bases/tenancy.operator.keese.ai_crosstenantagreements.yaml
+# core (`keese.ai`) — workload primitives.
+- bases/keese.ai_tenants.yaml
+- bases/keese.ai_workspaces.yaml
+- bases/keese.ai_workspaceshares.yaml
+- bases/keese.ai_workspacesessions.yaml
+- bases/keese.ai_workflows.yaml
+- bases/keese.ai_workflowruns.yaml
+- bases/keese.ai_agentruntimes.yaml
+- bases/keese.ai_runtimeextensions.yaml
+- bases/keese.ai_memories.yaml
+- bases/keese.ai_sharedmemories.yaml
+- bases/keese.ai_recipes.yaml
+- bases/keese.ai_recipesources.yaml
+- bases/keese.ai_transports.yaml
+# authz (`authz.keese.ai`) — access control.
+- bases/authz.keese.ai_oidcproviders.yaml
+- bases/authz.keese.ai_crosstenantagreements.yaml
+- bases/authz.keese.ai_guardrailbindings.yaml
+- bases/authz.keese.ai_toolbindings.yaml
+- bases/authz.keese.ai_workspacetools.yaml
+# policy (`policy.keese.ai`) — quantitative constraints.
+- bases/policy.keese.ai_tokenbudgets.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
-patches:
-# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
-# patches here are for enabling the conversion webhook for each CRD
+# [WEBHOOK] To enable webhook, uncomment the patches section below
+# (see kubebuilder docs §Webhook). Patches enable the conversion
+# webhook for each CRD. Currently no conversion webhooks at v1alpha1
+# (rule 04.13).
 # +kubebuilder:scaffold:crdkustomizewebhookpatch
 
 # [WEBHOOK] To enable webhook, uncomment the following section

@@ -21,46 +21,10 @@ resources:
 - metrics_auth_role.yaml
 - metrics_auth_role_binding.yaml
 - metrics_reader_role.yaml
-# For each CRD, "Admin", "Editor" and "Viewer" roles are scaffolded by
-# default, aiding admins in cluster management. Those roles are
-# not used by the keese itself. You can comment the following lines
-# if you do not want those helpers be installed with your Project.
-- transport_transport_admin_role.yaml
-- transport_transport_editor_role.yaml
-- transport_transport_viewer_role.yaml
-- observability_tokenbudget_admin_role.yaml
-- observability_tokenbudget_editor_role.yaml
-- observability_tokenbudget_viewer_role.yaml
-- guardrail_guardrailbinding_admin_role.yaml
-- guardrail_guardrailbinding_editor_role.yaml
-- guardrail_guardrailbinding_viewer_role.yaml
-- recipe_recipesource_admin_role.yaml
-- recipe_recipesource_editor_role.yaml
-- recipe_recipesource_viewer_role.yaml
-- recipe_recipe_admin_role.yaml
-- recipe_recipe_editor_role.yaml
-- recipe_recipe_viewer_role.yaml
-- memory_sharedmemory_admin_role.yaml
-- memory_sharedmemory_editor_role.yaml
-- memory_sharedmemory_viewer_role.yaml
-- memory_memory_admin_role.yaml
-- memory_memory_editor_role.yaml
-- memory_memory_viewer_role.yaml
-- runtime_runtimeextension_admin_role.yaml
-- runtime_runtimeextension_editor_role.yaml
-- runtime_runtimeextension_viewer_role.yaml
-- runtime_agentruntime_admin_role.yaml
-- runtime_agentruntime_editor_role.yaml
-- runtime_agentruntime_viewer_role.yaml
-- workflow_workflowrun_admin_role.yaml
-- workflow_workflowrun_editor_role.yaml
-- workflow_workflowrun_viewer_role.yaml
-- workflow_workflow_admin_role.yaml
-- workflow_workflow_editor_role.yaml
-- workflow_workflow_viewer_role.yaml
-- workspace_workspaceshare_admin_role.yaml
-- workspace_workspaceshare_editor_role.yaml
-- workspace_workspaceshare_viewer_role.yaml
-- workspace_workspace_admin_role.yaml
-- workspace_workspace_editor_role.yaml
-- workspace_workspace_viewer_role.yaml
+# Per-kind Admin/Editor/Viewer helper roles dropped during the
+# 2026-05-06 group consolidation (10 → 3). They were operator-sdk
+# scaffolding never used by the operator itself; the merged
+# `role.yaml` + `role_extras.yaml` carry every verb the controller
+# manager actually needs. Per-kind helpers can be re-scaffolded under
+# the new group layout later if a cluster admin wants pre-baked
+# bindings to delegate to.

@@ -7,6 +7,17 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - events
   verbs:
   - create
@@ -15,6 +26,7 @@ rules:
   - ""
   resources:
   - namespaces
+  - secrets
   verbs:
   - get
   - list
@@ -35,6 +47,7 @@ rules:
   - ""
   resources:
   - pods
+  - services
   verbs:
   - create
   - delete
@@ -44,8 +57,22 @@ rules:
   - update
   - watch
 - apiGroups:
-  - authz.operator.keese.ai
+  - apps
   resources:
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - authz.keese.ai
+  resources:
+  - crosstenantagreements
+  - guardrailbindings
   - oidcproviders
   verbs:
   - create
@@ -56,14 +83,18 @@ rules:
   - update
   - watch
 - apiGroups:
-  - authz.operator.keese.ai
+  - authz.keese.ai
   resources:
+  - crosstenantagreements/finalizers
+  - guardrailbindings/finalizers
   - oidcproviders/finalizers
   verbs:
   - update
 - apiGroups:
-  - authz.operator.keese.ai
+  - authz.keese.ai
   resources:
+  - crosstenantagreements/status
+  - guardrailbindings/status
   - oidcproviders/status
   verbs:
   - get
@@ -82,12 +113,23 @@ rules:
   - update
   - watch
 - apiGroups:
+  - capsule.clastix.io
+  resources:
+  - tenants
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - cert-manager.io
   resources:
   - certificates
   verbs:
+  - create
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - coordination.k8s.io
@@ -97,6 +139,30 @@ rules:
   - create
   - get
   - update
+- apiGroups:
+  - eventing.knative.dev
+  resources:
+  - triggers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - external-secrets.io
+  resources:
+  - externalsecrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - gateway.envoyproxy.io
   resources:
@@ -111,15 +177,8 @@ rules:
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
+  - httproutes
   - referencegrants
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - guardrail.operator.keese.ai
-  resources:
-  - guardrailbindings
   verbs:
   - create
   - delete
@@ -128,20 +187,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - guardrail.operator.keese.ai
-  resources:
-  - guardrailbindings/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - guardrail.operator.keese.ai
-  resources:
-  - guardrailbindings/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - jetstream.nats.io
   resources:
@@ -152,8 +197,59 @@ rules:
   - delete
   - get
   - list
+  - patch
   - update
   - watch
+- apiGroups:
+  - keese.ai
+  resources:
+  - agentruntimes
+  - runtimeextensions
+  - tenants
+  - transports
+  - workflowruns
+  - workflows
+  - workspaces
+  - workspacesessions
+  - workspaceshares
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - keese.ai
+  resources:
+  - agentruntimes/finalizers
+  - runtimeextensions/finalizers
+  - tenants/finalizers
+  - transports/finalizers
+  - workflowruns/finalizers
+  - workflows/finalizers
+  - workspaces/finalizers
+  - workspacesessions/finalizers
+  - workspaceshares/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - keese.ai
+  resources:
+  - agentruntimes/status
+  - runtimeextensions/status
+  - tenants/status
+  - transports/status
+  - workflowruns/status
+  - workflows/status
+  - workspaces/status
+  - workspacesessions/status
+  - workspaceshares/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - mcp.keese.ai
   resources:
@@ -174,7 +270,26 @@ rules:
   - patch
   - watch
 - apiGroups:
-  - observability.operator.keese.ai
+  - policy.keese.ai
+  resources:
+  - featuregates
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - policy.keese.ai
+  resources:
+  - featuregates/status
+  - tokenbudgets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - policy.keese.ai
   resources:
   - tokenbudgets
   verbs:
@@ -186,24 +301,15 @@ rules:
   - update
   - watch
 - apiGroups:
-  - observability.operator.keese.ai
+  - policy.keese.ai
   resources:
   - tokenbudgets/finalizers
   verbs:
   - update
 - apiGroups:
-  - observability.operator.keese.ai
+  - postgresql.cnpg.io
   resources:
-  - tokenbudgets/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - runtime.operator.keese.ai
-  resources:
-  - agentruntimes
-  - runtimeextensions
+  - clusters
   verbs:
   - create
   - delete
@@ -213,26 +319,9 @@ rules:
   - update
   - watch
 - apiGroups:
-  - runtime.operator.keese.ai
+  - qdrant.io
   resources:
-  - agentruntimes/finalizers
-  - runtimeextensions/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - runtime.operator.keese.ai
-  resources:
-  - agentruntimes/status
-  - runtimeextensions/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - tenancy.operator.keese.ai
-  resources:
-  - crosstenanagreements
-  - tenants
+  - qdrantclusters
   verbs:
   - create
   - delete
@@ -241,106 +330,3 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - tenancy.operator.keese.ai
-  resources:
-  - crosstenanagreements/finalizers
-  - tenants/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - tenancy.operator.keese.ai
-  resources:
-  - crosstenanagreements/status
-  - tenants/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - transport.operator.keese.ai
-  resources:
-  - transports
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - transport.operator.keese.ai
-  resources:
-  - transports/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - transport.operator.keese.ai
-  resources:
-  - transports/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - workflow.operator.keese.ai
-  resources:
-  - workflowruns
-  - workflows
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - workflow.operator.keese.ai
-  resources:
-  - workflowruns/finalizers
-  - workflows/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - workflow.operator.keese.ai
-  resources:
-  - workflowruns/status
-  - workflows/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - workspace.operator.keese.ai
-  resources:
-  - workspaces
-  - workspacesessions
-  - workspaceshares
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - workspace.operator.keese.ai
-  resources:
-  - workspaces/finalizers
-  - workspacesessions/finalizers
-  - workspaceshares/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - workspace.operator.keese.ai
-  resources:
-  - workspaces/status
-  - workspacesessions/status
-  - workspaceshares/status
-  verbs:
-  - get
-  - patch
-  - update

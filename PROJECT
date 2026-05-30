@@ -2,7 +2,7 @@
 # This file is used to track the info used to scaffold your project
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
-domain: operator.keese.ai
+domain: keese.ai
 layout:
 - go.kubebuilder.io/v4
 multigroup: true
@@ -16,142 +16,142 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: workspace
+  domain: keese.ai
+  group: ""
   kind: Workspace
-  path: github.com/keese-ai/keese/api/workspace/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: workspace
+  domain: keese.ai
+  group: ""
   kind: WorkspaceShare
-  path: github.com/keese-ai/keese/api/workspace/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: workflow
+  domain: keese.ai
+  group: ""
   kind: Workflow
-  path: github.com/keese-ai/keese/api/workflow/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: workflow
+  domain: keese.ai
+  group: ""
   kind: WorkflowRun
-  path: github.com/keese-ai/keese/api/workflow/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: runtime
+  domain: keese.ai
+  group: ""
   kind: AgentRuntime
-  path: github.com/keese-ai/keese/api/runtime/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: runtime
+  domain: keese.ai
+  group: ""
   kind: RuntimeExtension
-  path: github.com/keese-ai/keese/api/runtime/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: memory
+  domain: keese.ai
+  group: ""
   kind: Memory
-  path: github.com/keese-ai/keese/api/memory/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: memory
+  domain: keese.ai
+  group: ""
   kind: SharedMemory
-  path: github.com/keese-ai/keese/api/memory/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: recipe
+  domain: keese.ai
+  group: ""
   kind: Recipe
-  path: github.com/keese-ai/keese/api/recipe/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: recipe
+  domain: keese.ai
+  group: ""
   kind: RecipeSource
-  path: github.com/keese-ai/keese/api/recipe/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: guardrail
+  domain: keese.ai
+  group: authz
   kind: GuardrailBinding
-  path: github.com/keese-ai/keese/api/guardrail/v1alpha1
+  path: github.com/keese-ai/keese/api/authz/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: observability
+  domain: keese.ai
+  group: policy
   kind: TokenBudget
-  path: github.com/keese-ai/keese/api/observability/v1alpha1
+  path: github.com/keese-ai/keese/api/policy/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: transport
+  domain: keese.ai
+  group: ""
   kind: Transport
-  path: github.com/keese-ai/keese/api/transport/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: false
   controller: true
-  domain: operator.keese.ai
-  group: tenancy
+  domain: keese.ai
+  group: ""
   kind: Tenant
-  path: github.com/keese-ai/keese/api/tenancy/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: false
   controller: true
-  domain: operator.keese.ai
-  group: tenancy
+  domain: keese.ai
+  group: authz
   kind: CrossTenantAgreement
-  path: github.com/keese-ai/keese/api/tenancy/v1alpha1
+  path: github.com/keese-ai/keese/api/authz/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: false
   controller: true
-  domain: operator.keese.ai
+  domain: keese.ai
   group: authz
   kind: OIDCProvider
   path: github.com/keese-ai/keese/api/authz/v1alpha1
@@ -160,9 +160,9 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: operator.keese.ai
-  group: workspace
+  domain: keese.ai
+  group: ""
   kind: WorkspaceSession
-  path: github.com/keese-ai/keese/api/workspace/v1alpha1
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
 version: "3"

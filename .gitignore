@@ -136,3 +136,6 @@ sbom-*.spdx.json
 .claude/scheduled_tasks.lock
 # operator binary (built by go build at repo root)
 /main
+
+# Stray agent-worktree variant (typo of .claude/worktrees) — never commit
+.claire/
