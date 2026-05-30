@@ -188,6 +188,10 @@ func detectProvider(ar *keesev1alpha1.AgentRuntime) (string, error) {
 		return "claudeCode", nil
 	case impl.Aider != nil:
 		return "aider", nil
+	case impl.AdkPython != nil:
+		return "adkPython", nil
+	case impl.AdkGo != nil:
+		return "adkGo", nil
 	default:
 		return "", fmt.Errorf("spec.implementation: no provider field is set")
 	}
