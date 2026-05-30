@@ -102,7 +102,7 @@ demo cluster only — never commit).
 ### T4 — NetworkPolicy sanity
 
 Workspace egress NetPol allows `keese-system/envoy-ai-gateway:443` and
-`keese-system/nats:4222`. Confirm the actual Service names match what
+`nats/nats:4222`. Confirm the actual Service names match what
 the helmfile chart releases use. The `envoy-ai-gateway` chart by default
 exposes `Service: envoy-<gatewayclass>-<gateway>-<hash>`, **not** a
 fixed name — you may need a static Service alias.

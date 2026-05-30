@@ -103,9 +103,9 @@ keys `workspace/<uid>` and `tenant/<id>`. Propagation:
 
 ### NATS-degraded mode
 
-When the ext_authz sidecar loses its NATS KV watch:
+When the `keese-authz` ext_authz service loses its NATS KV watch:
 1. Liveness probe detects watch-dead (configurable interval, default 5 s).
-2. Sidecar sets `NATS_DEGRADED` flag; emits `AuthzKVWatchDegraded` event on operator namespace (dedup per sidecar per 5 min).
+2. `keese-authz` sets `NATS_DEGRADED` flag; emits `AuthzKVWatchDegraded` event on operator namespace (dedup per pod per 5 min).
 3. **Behavior:** skip local OpenFGA check cache (can't trust version-tag freshness); every authz decision requires a fresh `Check` call to OpenFGA.
 4. **Latency impact:** 1 ms (cache hit) → 15–30 ms (OpenFGA RTT). Correctness preserved; throughput reduced — expected and documented.
 5. **Recovery:** on reconnect, clear flag; emit `AuthzKVWatchRecovered`.

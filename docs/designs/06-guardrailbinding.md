@@ -76,7 +76,7 @@ Rules per field type:
 | `rateLimit.{requests,window,scope}` | `min(requests)` per matching `(window, scope)` tuple |
 
 Effective merge is computed by the guardrail controller and written to
-`status.effectivePolicy`. The ext_authz sidecar in the Envoy AI Gateway reads
+`status.effectivePolicy`. The `keese-authz` ext_authz service reads
 only `status.effectivePolicy` — never raw spec fields.
 
 ## TOCTOU: weaken-blocking and generation freshness

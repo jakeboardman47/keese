@@ -6,11 +6,11 @@
 // keese-goose:1.33.1 image (built from source — see
 // dev/runtimes/goose-from-source/).
 //
-// Today this provider implements the lifecycle SPI methods Bootstrap,
-// Drain, and Resume — the TD-P1-02 minimum needed for the
-// preStop-hook + checkpoint-on-SIGTERM contract from D18 process-
-// lifecycle. Run, Attach, InjectPrompt, InvokeSubAgent, Health, and
-// StreamEvents return v1alpha1.ErrUnsupported and are tracked as
+// This provider implements Bootstrap, Drain, Resume, Run, Attach,
+// InjectPrompt, and Health. The sub-agent and streaming methods —
+// InvokeSubAgent, CleanupSubAgents, and StreamEvents — return
+// v1alpha1.ErrUnsupported (Goose advertises SupportsSubAgents=false and
+// SupportsStreaming=false in its CapabilityMatrix) and are tracked as
 // follow-on TD items.
 //
 // Bootstrap, Drain, and Resume work over the workspace PVC layout

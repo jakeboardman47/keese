@@ -12,6 +12,31 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-05-29 — Documentation overhaul: `book/` site + `docs/features/` tree
+
+- Added the user-facing **mkdocs-material site** at `book/` (79 pages: Home, Getting
+  Started, Concepts, Guides, Reference, Scenarios, Development; 150+ inline Mermaid
+  diagrams). `cd book && mkdocs build --strict` passes (0 warnings); CI `docs.yaml`
+  deploys it. **Local build gotcha:** the system `mkdocs` is a py3.12 nix build that
+  breaks under py3.14 (`regex._regex`); use a fresh `python3.12 -m venv` +
+  `pip install mkdocs mkdocs-material`. Book pages use inline ` ```mermaid ` fences
+  (NOT committed `.mmd` source) so they render natively and aren't coupled to
+  `check-diagram-freshness`. Authoring agents emit `\n` line breaks in Mermaid labels —
+  must be normalized to `<br/>` (a deterministic post-pass did this).
+- Populated the previously-empty `docs/features/` tree: 15 source-linked "WHAT IS
+  BUILT" docs + index; honest about limitations (unauthenticated in-cluster memory
+  backends, WorkflowRun NATS-delete bug, ADK stubs, RAG planned, supervision planned).
+- New [documentation-rubric.md](docs/plans/documentation-rubric.md); 3 adversarial
+  scoring iterations (54.3 → 60.5 → 64.5) + deterministic accuracy sweep — full log in
+  [documentation-iterations.md](docs/plans/documentation-iterations.md). Adversarial
+  grading caps Accuracy at 0.5 on any high-severity factual error, so the headline
+  stayed low while per-claim accuracy is >95%; all *identified* high-severity errors
+  were corrected against source.
+- Fixed stale gate status across README, `docs/{designs,plans}/README`, CLAUDE.md
+  (gate is **OPEN** since 2026-04-22, not CLOSED; **27 specs** not 13; **20 CRD kinds**,
+  21 *_types.go files). Promoted RAG spec draft→current; fixed goose `doc.go` +
+  `agent-runtime-spi.md` `Drain(ctx, session)` signature.
+
 ### 2026-05-07 — TD-P2-12 closed: 6 Memory backends wired
 
 - Six new `memory_<backend>_backend.go` files + `memory_multi_backend.go` dispatcher implement `BackendProvisioner` for redis/qdrant/pgvector/neo4j/mem0/zep. `MemoryReconciler.SetupWithManager` now wires `NewMultiBackendProvisioner` instead of `NewSQLiteBackend`. External-endpoint/credential-ref config fields bypass in-cluster provisioning; in-cluster fallbacks use `apps/v1.StatefulSet` for redis/neo4j/pgvector/zep and `external-secrets.io/v1.ExternalSecret` (unstructured) for mem0/zep-cloud. Operator CRDs (QdrantCluster, CNPG Cluster, ExternalSecret) all use `unstructured.Unstructured` SSA — zero go.mod churn. Credentials mounted as projected files, never env vars (rule 05.7). `memory_backends_test.go` adds 50+ unit tests. `go test -short -race ./internal/controller/keese/...` green.

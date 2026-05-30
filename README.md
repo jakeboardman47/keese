@@ -3,9 +3,13 @@
 
 # keese
 
-> **Status: pre-alpha · DESIGN GATE: CLOSED** — no operator/controller
-> implementation code lands until all 62 designs and 13 specs score ≥ 90/100
-> against [docs/plans/rubric.md](docs/plans/rubric.md).
+> **Status: alpha · DESIGN GATE: OPEN** (since 2026-04-22) — all 62 designs
+> and 27 specs scored ≥ 90/100 against [docs/plans/rubric.md](docs/plans/rubric.md)
+> and the [gate-open audit](docs/plans/gate-open-audit-2026-04-22.md) signed off.
+> 18 reconcilers, 21 CRD types across 3 API groups, and 4 binaries are
+> implemented on `main`. New: the **[user documentation site](book/)** (mkdocs)
+> — start there, or see the [roadmap](book/docs/development/roadmap.md) for what
+> is built vs. planned.
 
 Secure multi-tenant, multi-workspace Kubernetes operator orchestrating
 autonomous AI agent workflows on pluggable agent runtimes (goose first).
@@ -43,9 +47,12 @@ or specs at once.
 | [docs/plans/](docs/plans/) | HOW (phased) + rubric + flake-log |
 | [docs/features/](docs/features/) | WHAT IS BUILT (post-gate) |
 | [docs/references/](docs/references/) | HOW (steady-state) cookbooks |
-| `api/` | CRD Go types (stub-only until gate opens) |
-| `internal/controller/` | Reconcilers (stub-only until gate opens) |
-| `config/` | Kustomize base + overlays (`dev/`, `kind/`) |
+| [book/](book/) | User-facing documentation (mkdocs-material site) |
+| `api/` | CRD Go types — 21 types across `keese.ai` / `authz.keese.ai` / `policy.keese.ai` |
+| `internal/controller/` | Reconcilers — 18 controllers (implemented; gate open) |
+| `internal/runtime/` | Agent runtime SPI + providers (goose; ADK Python/Go stubs) |
+| `cmd/` | Binaries — operator manager, `keese-authz`, `keese-drain`, `keese-wf-launcher`, `keese-cosign-webhook` |
+| `config/` | Kustomize base + overlays (`dev/`, `kind/`, `prod/`) |
 | `deploy/opentofu/` | Cloud deploy — `aws/` `gcp/` `azure/` |
 | `dev/` | Local infra bootstrap (kind, tilt, helmfile) |
 | `dev/ide/` | GoLand + VSCode dlv/debug configs |
@@ -54,12 +61,14 @@ or specs at once.
 
 ## Design gate
 
-Authoring specs before their owning designs reach `status: current` is
-**blocked** by `scripts/check-design-gate.sh` and a GitHub Action. Writing
-non-stub bodies to `api/**/*_types.go` or `internal/controller/**/*.go`
-is **blocked** until the gate opens. See
-[docs/plans/README.md](docs/plans/README.md#gate-status) for the current
-state of the 62 designs and 13 specs.
+The design gate **opened on 2026-04-22**, once all 62 designs and 27 specs
+reached `status: current` with honest rubric scores ≥ 90 (see the
+[gate-open audit](docs/plans/gate-open-audit-2026-04-22.md)). Controller and
+API code now lands freely on `main`. Two guards remain enforced by
+`scripts/check-design-gate.sh` and GitHub Actions: a spec may not be authored
+before its owning designs are `current`, and the gate-open commit is verified
+(`verify-gate-commit.yaml`). See
+[docs/plans/README.md](docs/plans/README.md) for phase status.
 
 ## Quickstart
 
@@ -70,7 +79,7 @@ pre-commit install --hook-type commit-msg
 make help               # target catalog
 ```
 
-Local Kubernetes (after phase P7 lands):
+Local Kubernetes (kind + Tilt — see the [install guide](book/docs/getting-started/install-kind.md)):
 
 ```sh
 make kind-up            # ctlptl-managed kind cluster

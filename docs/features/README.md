@@ -7,7 +7,7 @@ category: index
 depends: [../designs/README.md, ../specs/README.md]
 related_skills: [doc-authoring]
 status: current
-last_verified: 2026-04-19
+last_verified: 2026-05-29
 ---
 
 # features/ — WHAT IS BUILT
@@ -122,6 +122,36 @@ last_verified: YYYY-MM-DD
 
 ## Contents
 
-Populated as features land on `main`. Each feature doc is independently loadable.
-Avoid preloading the directory; use CLAUDE.md routing and the feature's
-`source_refs:` to load only what's needed.
+Each feature doc is independently loadable. Avoid preloading the directory; use
+CLAUDE.md routing and the feature's `source_refs:` to load only what's needed.
+User-facing prose for these features lives in the [`book/`](../../book/) site.
+
+### Core (`keese.ai`)
+
+| Feature | Doc | Status |
+|---|---|---|
+| Workspaces & Sessions | [workspace.md](workspace.md) | implemented |
+| Tenancy & CrossTenantAgreement | [tenancy.md](tenancy.md) | implemented |
+| Memory & SharedMemory | [memory.md](memory.md) | implemented |
+| Recipes & RecipeSources | [recipe.md](recipe.md) | implemented |
+| Transport (messaging plane) | [transport.md](transport.md) | implemented |
+| Workflows & WorkflowRuns | [workflow.md](workflow.md) | implemented |
+| Agent Runtime SPI & Goose | [agent-runtime-spi.md](agent-runtime-spi.md) | implemented |
+| ADK Python & Go runtimes | [adk-runtimes.md](adk-runtimes.md) | in-development |
+
+### Access control (`authz.keese.ai`)
+
+| Feature | Doc | Status |
+|---|---|---|
+| GuardrailBinding | [guardrailbinding.md](guardrailbinding.md) | implemented |
+| Egress ext_authz (keese-authz) | [ext-authz.md](ext-authz.md) | implemented |
+| OIDCProvider | [oidc-provider.md](oidc-provider.md) | implemented |
+
+### Quantitative constraints & platform (`policy.keese.ai` + cross-cutting)
+
+| Feature | Doc | Status |
+|---|---|---|
+| TokenBudget | [token-budget.md](token-budget.md) | implemented |
+| Feature Gates | [feature-gates.md](feature-gates.md) | implemented |
+| Supply-chain admission (cosign) | [cosign-webhook.md](cosign-webhook.md) | implemented |
+| ValidatingAdmissionPolicies | [admission-policies.md](admission-policies.md) | implemented |

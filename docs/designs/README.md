@@ -7,16 +7,18 @@ category: index
 depends: []
 related_skills: [doc-authoring]
 status: current
-last_verified: 2026-04-19
+last_verified: 2026-05-29
 ---
 
 # designs/ — WHY
 
 Design docs explain **why** the project is shaped the way it is.
-All 62 design docs must reach `status: current` and score ≥ 90/100
-before any spec is authored and before any controller code is written.
+All 62 design docs reached `status: current` with scores ≥ 90/100 — which,
+together with the 27 specs, opened the design gate on 2026-04-22. Controller
+and API code now lands on `main`.
 
-> **Gate status: CLOSED.** See [../plans/README.md](../plans/README.md).
+> **Gate status: OPEN** (since 2026-04-22). See [../plans/README.md](../plans/README.md)
+> and the [gate-open audit](../plans/gate-open-audit-2026-04-22.md).
 
 ## Index
 
@@ -84,6 +86,13 @@ before any spec is authored and before any controller code is written.
 | 25-ii | [25-ii-spec-schema.md](25-ii-spec-schema.md) | CrossTenantAgreement: Spec Schema + VAP CEL | tenancy | current |
 | 25-iii | [25-iii-approval-flow.md](25-iii-approval-flow.md) | CrossTenantAgreement: Approval Flow + Failure Modes + Samples | tenancy | current |
 | 25-iv | [25-iv-iter-log.md](25-iv-iter-log.md) | CrossTenantAgreement: Iteration Log | tenancy | current |
+| 26 | [26-workspace-managed-predicate-adr.md](26-workspace-managed-predicate-adr.md) | Workspace controller predicate ADR | controller | current |
+| 27 | [27-feature-gates-openfeature.md](27-feature-gates-openfeature.md) | Feature gates via OpenFeature | lifecycle | current |
+| 27-ii | [27-ii-iter-log.md](27-ii-iter-log.md) | Feature gates: Iteration Log | lifecycle | current |
+| 27b | [27b-feature-gate-catalog.md](27b-feature-gate-catalog.md) | Feature gate catalog | lifecycle | current |
+| 28 | [28-rag-ingestion.md](28-rag-ingestion.md) | RAG Ingestion | rag | current |
+| 28b | [28b-rag-backends.md](28b-rag-backends.md) | RAG Backends (Qdrant / Elasticsearch / pgvector) | rag | current |
+| 28c | [28c-rag-pipeline.md](28c-rag-pipeline.md) | RAG Pipeline + Retrieval Contract | rag | current |
 
 ## Lifecycle
 

@@ -107,7 +107,7 @@ kubectl get pods -n keese-system \
 ```
 
 If one pod is stuck (event `ReadinessGateStuck`): restart that pod; operator
-will re-poll. If stuck for > 5 min, investigate ext_authz sidecar health.
+will re-poll. If stuck for > 5 min, investigate `keese-authz` ext_authz pod health.
 
 ## Step 7 — Exit MODEL_MIGRATION
 

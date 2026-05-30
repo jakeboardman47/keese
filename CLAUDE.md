@@ -106,8 +106,10 @@ Goal: keep this file small and stable so prompt caching stays warm across sessio
 - **No secrets in git — ever.** `.env.local` is gitignored; use `.env.local.example`.
 - **Designs before specs.** No spec reaches `status: current` before its owning design
   does. Enforced by `scripts/check-design-gate.sh` (P3/P8).
-- **Design gate before controller code.** No non-stub body in `internal/controller/` or
-  `api/` until all 62 designs + 13 specs score ≥ 90 and the gate opens.
+- **Design gate (OPEN since 2026-04-22).** Controller/API code lands freely now that
+  all 62 designs + 27 specs scored ≥ 90. Pre-gate the rule blocked non-stub bodies in
+  `internal/controller/` and `api/`; post-gate, `scripts/check-design-gate.sh` enforces
+  only designs-before-specs and the verified gate-open commit.
 - **Server-Side Apply** with `fieldOwner = keese-<kind>-controller` for every
   controller write (rule 04.7).
 - **Multi-agent**: use git worktrees via `scripts/agent-dispatch.sh`; automated merge via

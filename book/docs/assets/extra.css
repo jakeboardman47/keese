@@ -1,0 +1,38 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright (c) 2026 keese-ai */
+
+/* Give Mermaid diagrams room to breathe and center them. */
+.mermaid {
+  text-align: center;
+  margin: 1.2rem 0;
+}
+
+/* Wider content for the large architecture diagrams. */
+.md-grid {
+  max-width: 68rem;
+}
+
+/* "Planned" / "new" status chips used inline in prose. */
+.keese-chip {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border-radius: 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.keese-chip.planned {
+  background: var(--md-accent-fg-color);
+  color: var(--md-primary-bg-color);
+}
+.keese-chip.built {
+  background: #2e7d32;
+  color: #fff;
+}
+
+/* Tighten the API-reference field tables. */
+.md-typeset table:not([class]) td code {
+  white-space: nowrap;
+}

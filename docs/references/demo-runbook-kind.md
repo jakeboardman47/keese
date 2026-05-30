@@ -140,7 +140,7 @@ kubectl get networkpolicy -n alpha
 Expected:
 
 - `keese-workspace-<UID>-default-deny` — fail-closed Ingress + Egress
-- `keese-workspace-<UID>-egress` — allows only :443 to the AI Gateway and :4222 to NATS in `keese-system`
+- `keese-workspace-<UID>-egress` — allows only :443 to the AI Gateway and :4222 to NATS in `nats`
 
 ## 7. Tear down
 

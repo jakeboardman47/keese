@@ -143,7 +143,7 @@ True atomicity requires the following 6-step flow:
 1. **Stage.** Seed Job applies new `model.fga`; returns new model ID; does NOT update ConfigMap yet.
 2. **Enter MODEL_MIGRATION.** Cluster-wide flag set (operator Deployment annotation or `ClusterModelVersion` CR). Webhook blocks new `WorkflowRun` creation (`ModelMigrationInProgress`) and Trigger scheduling.
 3. **Drain.** Existing WorkflowRuns continue on old model ID. Operator polls until in-flight = 0 or drain-timeout (default 10 min). On timeout: emit `DrainTimeout`; abort (recommended) or force-revoke stuck runs via 04c.
-4. **Atomic swap.** PATCH ConfigMap `keese-rebac-config` with new model ID. Controllers and ext_authz sidecars observe via informer; re-cache ≤ 1 s.
+4. **Atomic swap.** PATCH ConfigMap `keese-rebac-config` with new model ID. Controllers and `keese-authz` pods observe via informer; re-cache ≤ 1 s.
 5. **Readiness gate.** Operator polls all controller and ext_authz pods for `status.observedModelID`. Block exit until 100% report new ID. Controllers must expose `status.observedModelID` — flagged for controller phase.
 6. **Exit MODEL_MIGRATION.** Clear flag; webhook resumes.
 

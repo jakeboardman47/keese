@@ -48,12 +48,12 @@ events:
 
 # egress-authz-protocol — spec
 
-Cross-cutting contract between Envoy AI Gateway's `ext_authz` filter and the `keese-ext-authz` sidecar. Consumed by 05a (gateway), 09 (a2a transport), 03c (Workflow cross-tenant admission). Iteration log: [egress-authz-protocol-iter-log.md](egress-authz-protocol-iter-log.md).
+Cross-cutting contract between Envoy AI Gateway's `ext_authz` filter and the `keese-authz` standalone Deployment (`keese-system:9001`). Consumed by 05a (gateway), 09 (a2a transport), 03c (Workflow cross-tenant admission). Iteration log: [egress-authz-protocol-iter-log.md](egress-authz-protocol-iter-log.md).
 
 ## 1. Wire protocol
 
 **gRPC:** `envoy.service.auth.v3.Authorization/Check` at
-`keese-ext-authz.keese-system.svc.cluster.local:9191`.
+`keese-authz.keese-system.svc.cluster.local:9001`.
 `failure_mode_allow: false` — Envoy denies on gRPC error or timeout.
 
 ### CheckRequest fields consumed

@@ -105,7 +105,7 @@ type AgentRuntime interface {
     // Drain: SIGTERM handler. Budget = 90 s (120 s grace − 20 s OTEL − 10 s buf).
     // Steps: SQLite checkpoint → NATS publish → CleanupSubAgents → close ACP →
     // flush OTEL keese.process.shutdown → exit 0. ErrBudget if deadline exceeded.
-    Drain(ctx context.Context) error
+    Drain(ctx context.Context, session WorkspaceSession) error
     // CleanupSubAgents: drain sub-agents before parent delete (07 iter-2).
     // SupportsSubAgentCleanup guard. ErrTransient → batch pod-delete by label.
     CleanupSubAgents(ctx context.Context, workspace Workspace) error

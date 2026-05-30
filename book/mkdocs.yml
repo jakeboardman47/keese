@@ -1,0 +1,188 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+
+site_name: keese
+site_description: >-
+  Secure multi-tenant Kubernetes operator for orchestrating autonomous AI agent
+  workflows on pluggable agent runtimes.
+site_author: keese-ai
+repo_url: https://github.com/keese-ai/keese
+repo_name: keese-ai/keese
+edit_uri: edit/main/book/docs/
+copyright: Copyright &copy; 2026 keese-ai — Apache-2.0
+
+theme:
+  name: material
+  language: en
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/robot-happy-outline
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - navigation.tracking
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      title: On this page
+  - pymdownx.details
+  - pymdownx.caret
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+
+extra:
+  status:
+    new: Recently added
+    planned: Planned (not yet implemented)
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/keese-ai/keese
+
+extra_css:
+  - assets/extra.css
+
+# Navigation. Page list is grounded in the audit inventory; reconciled after
+# the docs-audit workflow. Files live under book/docs/.
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Concepts in 5 minutes: getting-started/concepts-in-5-minutes.md
+      - Prerequisites: getting-started/prerequisites.md
+      - Install on kind (local): getting-started/install-kind.md
+      - Your first workspace & session: getting-started/first-workspace.md
+      - Your first workflow: getting-started/first-workflow.md
+      - Where to go next: getting-started/next-steps.md
+  - Concepts:
+      - concepts/index.md
+      - Architecture overview: concepts/architecture.md
+      - Tenancy & namespaces: concepts/tenancy.md
+      - Workspaces & sessions: concepts/workspaces.md
+      - Identity & zero-trust: concepts/identity-zero-trust.md
+      - Authorization (ReBAC / OpenFGA): concepts/authorization-rebac.md
+      - Egress & the AI Gateway: concepts/egress-ai-gateway.md
+      - Credential broker: concepts/credential-broker.md
+      - Agent runtimes (SPI): concepts/agent-runtimes.md
+      - Memory: concepts/memory.md
+      - RAG & knowledge bases: concepts/rag.md
+      - Workflows & triggers: concepts/workflows.md
+      - Guardrails: concepts/guardrails.md
+      - Token budgets & observability: concepts/observability.md
+      - OTEL pipeline topology: concepts/otel-pipeline.md
+      - Transports & messaging: concepts/transports.md
+      - Recipes: concepts/recipes.md
+      - Feature gates: concepts/feature-gates.md
+      - Cross-tenant collaboration: concepts/cross-tenant.md
+      - Process lifecycle & supervision: concepts/lifecycle-supervision.md
+      - Network isolation: concepts/network-isolation.md
+  - Guides:
+      - guides/index.md
+      - Install via OLM: guides/install-olm.md
+      - Bootstrap a local cluster (kind + Tilt): guides/bootstrap-local.md
+      - Provision a tenant: guides/provision-tenant.md
+      - Create a workspace & attach a session: guides/workspace-session.md
+      - Configure an agent runtime: guides/configure-runtime.md
+      - Write & distribute a recipe: guides/recipes.md
+      - Configure memory backends: guides/memory-backends.md
+      - Set up RAG ingestion: guides/rag-ingestion.md
+      - Define guardrails: guides/guardrails.md
+      - Set token budgets: guides/token-budgets.md
+      - Configure egress credentials: guides/egress-credentials.md
+      - Cross-tenant agreements: guides/cross-tenant-agreements.md
+      - Cloud deploy (OpenTofu): guides/cloud-deploy.md
+      - Backup & disaster recovery: guides/backup-dr.md
+      - Observability setup (OTEL): guides/observability-setup.md
+      - Toggle feature gates: guides/feature-gates.md
+      - IDE setup & debugging: guides/ide-debugging.md
+  - Reference:
+      - reference/index.md
+      - Feature implementation status: reference/feature-status.md
+      - API overview: reference/api/index.md
+      - "API: keese.ai group": reference/api/keese.md
+      - "API: authz.keese.ai group": reference/api/authz.md
+      - "API: policy.keese.ai group": reference/api/policy.md
+      - Agent Runtime SPI: reference/agent-runtime-spi.md
+      - OpenFGA authorization model: reference/openfga-model.md
+      - Admission policies (VAPs): reference/admission-policies.md
+      - CLI & binaries: reference/cli.md
+      - Make targets: reference/make-targets.md
+      - Configuration & env: reference/configuration.md
+      - Feature gate catalog: reference/feature-gate-catalog.md
+      - Metrics, events & conditions: reference/metrics-events.md
+      - Glossary: reference/glossary.md
+  - Scenarios:
+      - scenarios/index.md
+      - Multi-tenant agent platform from zero: scenarios/multi-tenant-platform.md
+      - Autonomous code-review workflow: scenarios/code-review-workflow.md
+      - RAG-backed knowledge agent: scenarios/rag-knowledge-agent.md
+      - Cross-tenant collaboration: scenarios/cross-tenant-collab.md
+  - Development:
+      - development/index.md
+      - Repository map: development/repo-map.md
+      - Development environment (Nix): development/dev-environment.md
+      - SDLC & the design gate: development/sdlc.md
+      - Documentation system: development/documentation.md
+      - Testing strategy: development/testing.md
+      - CI/CD pipeline: development/cicd.md
+      - Build & release (OLM + cosign): development/build-release.md
+      - Diagram authoring: development/diagrams.md
+      - Multi-agent worktree workflow: development/multi-agent.md
+      - Roadmap (built vs remaining): development/roadmap.md
+      - Contributing: development/contributing.md

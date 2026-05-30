@@ -74,7 +74,7 @@ Agent pod projected volume (set by workspace controller):
 
 ```
 /var/run/keese/tokens/
-  egress        # keese-egress-<tenant>    → Envoy AI Gateway sidecar
+  egress        # keese-egress-<tenant>    → Envoy AI Gateway (keese-authz ext_authz)
   supervisor    # keese-supervisor-<ws-uid> → 08b ACP bridge (human-attach)
 ```
 

@@ -25,7 +25,7 @@ rollback: |
 ## Context
 
 Keese runs three binary classes: controllers (operator + projectors), agent runtime
-pods (goose), and gateway sidecars (ext_authz, ext_proc). Each has a different SIGTERM
+pods (goose), and gateway services (keese-authz ext_authz, ext_proc). Each has a different SIGTERM
 budget, state ownership model, and SIGKILL recovery path. Without a concrete contract,
 implementers guess drain windows, lose session state mid-flight, and write liveness
 probes that race the drain. This design turns D21 (`rules/06-signal-handling.md`)
@@ -38,7 +38,7 @@ idempotent restart, shutdown event schema, and probe composition.
 |---|---|---|
 | Controllers (operator + projectors) | 60 s | Release leader lease (5 s max) → drain reconcile queue (30 s) → flush OTEL exporter (15 s) → exit (10 s buffer) |
 | Agent runtime pods (goose) | 120 s | `preStop` invokes SPI `Drain(ctx, session, 90s)` → checkpoint session to PVC + NATS (70 s) → final OTEL span (10 s) → exit (10 s buffer) |
-| Gateway sidecars (ext_authz, ext_proc) | 30 s | `preStop: sleep 25` + `/healthcheck/fail` (marks NotReady, stops routing) → complete in-flight authz checks (≤ 25 s) → exit |
+| Gateway services (keese-authz ext_authz, ext_proc) | 30 s | `preStop: sleep 25` + `/healthcheck/fail` (marks NotReady, stops routing) → complete in-flight authz checks (≤ 25 s) → exit |
 
 Controllers install `signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)` before
 starting the manager. `scripts/check-signal-handling.sh` (P3) rejects any
@@ -107,7 +107,7 @@ terminationGracePeriodSeconds`.
 |---|---|---|---|---|---|
 | Controllers | 30 s | 10 s | 3 | 60 s | = 60 s ✅ |
 | Agent runtime | 60 s | 10 s | 6 | 120 s | = 120 s ✅ |
-| Gateway sidecar | 10 s | 5 s | 4 | 30 s | = 30 s ✅ |
+| keese-authz / gateway service | 10 s | 5 s | 4 | 30 s | = 30 s ✅ |
 
 **Readiness NotReady-on-drain (rule 06.9):** the `preStop` hook writes
 `/tmp/draining`; the readiness probe returns 503 when the sentinel is present.
@@ -168,7 +168,7 @@ three probe parameters to maintain the `= grace` equality from the table above.
 - [rules/06-signal-handling.md](../../.claude/rules/06-signal-handling.md) — D21; 11 load-bearing rules
 - [04a-openfga-authz-model.md](04a-openfga-authz-model.md) — MODEL_MIGRATION drain-and-rollout precedent
 - [04c-token-revocation.md](04c-token-revocation.md) — `abort|finish` checkpoint path; `RevokedMidFlight`
-- [05a-envoy-ai-gateway-topology.md](05a-envoy-ai-gateway-topology.md) — gateway sidecar grace = 30 s
+- [05a-envoy-ai-gateway-topology.md](05a-envoy-ai-gateway-topology.md) — keese-authz / gateway service grace = 30 s
 - [07-agent-runtime-spi.md](07-agent-runtime-spi.md) — `Drain(ctx, session, budget)` + `Resume` signatures
 - [23-agent-supervision.md](23-agent-supervision.md) — "stuck" detection depends on liveness probe semantics here
 - [../plans/scaffolding-plan.md](../plans/scaffolding-plan.md) — D21, D24, D25

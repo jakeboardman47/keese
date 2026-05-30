@@ -28,7 +28,7 @@ rollback: |
 ## Context
 
 Agent pods carry only a projected SA token (04b); upstream API keys never reach
-them (rule 05.2). The `keese-ext-authz` sidecar inside each Envoy AI Gateway pod
+them (rule 05.2). The `keese-authz` standalone Deployment in `keese-system`
 is the credential trust boundary: it verifies the SA token, checks OpenFGA (04a),
 selects a `BackendSecurityPolicy`, and injects the upstream credential. This design
 defines the per-gateway-pod credential cache — its tiers, 70% TTL refresh goroutine,
@@ -46,7 +46,7 @@ TTL; synchronous L2 flush on 04c revocation signal; pool cooling on 429.
 | Tier | Scope | Key | Purpose | Lifetime |
 |---|---|---|---|---|
 | L1 per-request | In-process request context | `(tenant, workspace, upstream)` | Avoids duplicate STS calls within one logical request | Request lifetime |
-| L2 per-pod | In-process map in `keese-ext-authz` sidecar | `(tenant-audience, upstream-role)` | Primary cache; avoids per-request STS RTT | 70% TTL → refresh; 95% TTL → fail-closed |
+| L2 per-pod | In-process map in `keese-authz` pod | `(tenant-audience, upstream-role)` | Primary cache; avoids per-request STS RTT | 70% TTL → refresh; 95% TTL → fail-closed |
 | L3 distributed | NATS KV bucket `keese-credential-cache` | `(tenant, upstream-role, version)` | Pool state coordination across pods (05b `least-used`) | Up to 5 min; opt-in |
 
 L3 is enabled per tenant via `Tenant.spec.credentialBroker.sharedCache: true`.
@@ -102,8 +102,8 @@ One background goroutine per unique `(tenant-audience, upstream-role)` L2 entry:
 ## 04c revocation flush — exact sequence
 
 1. Controller writes NATS KV `keese-revocation-version/workspace/<uid>` (04c).
-2. `keese-ext-authz` NATS watch fires on all gateway pods within < 1 s (04c SLO).
-3. Sidecar atomically removes all L2 entries whose `(tenant, workspace, upstream)`
+2. `keese-authz` NATS watch fires on all `keese-authz` pods within < 1 s (04c SLO).
+3. Each pod atomically removes all L2 entries whose `(tenant, workspace, upstream)`
    matches the revoked workspace's tenant + workspace UID.
 4. Next request: ext_authz `Check` → OpenFGA → deny (tuple removed); broker
    not consulted; 403 returned. Contributes to revocation p95 ≤ 60 s SLO.

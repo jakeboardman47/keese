@@ -86,7 +86,7 @@ OpenFGA tuples at admission time:
 status:
   peerIP: 10.224.0.42/32
   allowedServices:
-    - nats.keese-system.svc.cluster.local:4222
+    - nats.nats.svc.cluster.local:4222
     - envoy-ai-gateway.keese-system.svc.cluster.local:443
   expiresAt: "2026-04-22T14:00:00Z"
 ```

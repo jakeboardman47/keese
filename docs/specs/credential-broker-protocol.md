@@ -47,8 +47,8 @@ events:
 # credential-broker-protocol — spec
 
 **Goal:** define the contract between `BackendSecurityPolicy`, cloud STS providers
-(AWS / GCP / Azure), and OpenBao for credential swap inside the `keese-ext-authz`
-sidecar on each Envoy AI Gateway pod. Consumed by designs 05a, 05b, and 17.
+(AWS / GCP / Azure), and OpenBao for credential swap inside the `keese-authz`
+standalone Deployment (`keese-system`, gRPC `:9001`). Consumed by designs 05a, 05b, and 17.
 
 ## 1. Credential source types
 
@@ -117,7 +117,7 @@ independent L2 per pod when not.
 ## 5. Revocation hook (design 04c)
 
 On OpenFGA tuple revoke: controller bumps NATS KV `keese-revocation-version/workspace/<uid>`
-(atomic CAS) → `keese-ext-authz` watch fires on all pods (< 1 s) → sidecar atomically removes
+(atomic CAS) → `keese-authz` watch fires on all pods (< 1 s) → each pod atomically removes
 matching L2 entries → goroutine aborts write if revocation flag set (entry never written) →
 next request: OpenFGA `Check` → deny → 403. **SLO:** p95 ≤ 60 s (04c). L2 entries carry
 `version uint64`; stale entries (version < current) are denied immediately.

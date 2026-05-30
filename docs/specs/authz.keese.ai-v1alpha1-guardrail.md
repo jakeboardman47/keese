@@ -108,8 +108,8 @@ Given bindings B₀ (cluster default), B₁ (tenant), B₂ (workspace):
 `effective = merge(B₀, B₁, B₂)` per field-type rules in §2 above.
 Full merge table in [06-guardrailbinding.md §Merge lattice](../designs/06-guardrailbinding.md).
 
-Controller writes merged output to `status.effectivePolicy`. Gateway
-ext_authz sidecar reads ONLY `status.effectivePolicy` — never raw spec.
+Controller writes merged output to `status.effectivePolicy`. The `keese-authz`
+ext_authz service reads ONLY `status.effectivePolicy` — never raw spec.
 
 ## 6. TOCTOU guard (cross-cut with design 16)
 
