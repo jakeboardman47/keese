@@ -286,15 +286,7 @@ func (r *WorkflowRunReconciler) ensureNATSStream(ctx context.Context, wfr *keese
 		maxAge = wfr.Spec.Timeout.Duration
 	}
 
-	tenantUID, err := r.resolveTenantUID(ctx, wfr)
-	if err != nil {
-		// Falls back to the run UID so the stream name is still unique;
-		// log + continue so a missing tenant doesn't block the run.
-		tenantUID = string(wfr.UID)
-	}
-	runUID := string(wfr.UID)
-	streamName := fmt.Sprintf("keese-tenant-%s-wf-%s", tenantUID, runUID)
-	subject := fmt.Sprintf("keese.tenant.%s.wf.%s.>", tenantUID, runUID)
+	streamName, subject := r.natsStreamName(ctx, wfr)
 
 	spec := NatsStreamSpec{
 		Name:             streamName,
@@ -330,6 +322,21 @@ func (r *WorkflowRunReconciler) resolveTenantUID(ctx context.Context, wfr *keese
 		return string(ws.UID), nil
 	}
 	return string(tenant.UID), nil
+}
+
+// natsStreamName returns the per-run JetStream stream name and subject. It MUST
+// be computed identically at provision and at delete time, so both paths call
+// this single helper. The tenant segment comes from resolveTenantUID (falling
+// back to the run UID), never the WorkflowRun UID directly — recomputing it
+// inconsistently at delete time was the cause of leaked streams.
+func (r *WorkflowRunReconciler) natsStreamName(ctx context.Context, wfr *keesev1alpha1.WorkflowRun) (stream, subject string) {
+	tenantUID, err := r.resolveTenantUID(ctx, wfr)
+	if err != nil {
+		tenantUID = string(wfr.UID)
+	}
+	runUID := string(wfr.UID)
+	return fmt.Sprintf("keese-tenant-%s-wf-%s", tenantUID, runUID),
+		fmt.Sprintf("keese.tenant.%s.wf.%s.>", tenantUID, runUID)
 }
 
 // projectArgoWorkflow projects (or idempotently updates) the Argo Workflow for a WorkflowRun.
@@ -439,9 +446,7 @@ func (r *WorkflowRunReconciler) reconcileRunDelete(ctx context.Context, wfr *kee
 
 	// Delete NATS JetStream stream.
 	if wfr.Status.ArgoWorkflowName != "" {
-		tenantUID := string(wfr.UID)
-		runUID := string(wfr.UID)
-		streamName := fmt.Sprintf("keese-tenant-%s-wf-%s", tenantUID, runUID)
+		streamName, _ := r.natsStreamName(ctx, wfr)
 		if delErr := r.NatsDeleter.Delete(ctx, streamName); delErr != nil {
 			log.Error(delErr, "failed to delete NATS stream", "stream", streamName)
 			r.emitRunEvent(wfr, "Warning", ReasonNATSStreamDeleteFailed, "NATS stream %s delete failed: %v", streamName, delErr)
