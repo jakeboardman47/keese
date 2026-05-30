@@ -73,9 +73,14 @@ Acceptance: both digests resolve via `crane manifest`; `cosign verify
 --certificate-oidc-issuer https://token.actions.githubusercontent.com`
 returns 0.
 
-**Fallback** if CI is broken: `make docker-build docker-push IMG=...`
-then `make bundle bundle-build bundle-push BUNDLE_IMG=...`. Local push
-misses cosign signing — log as tech-debt P1.
+**No local-build fallback (TD-P1-05 closed 2026-05-06).** A
+locally-built image is unsigned, and the cosign-webhook (TD-P1-04)
+fails-closed on unsigned keese images at InstallPlan time. If the
+CI tag flow is broken, fix CI before installing. The break-glass
+escape hatch (rule 05.13) exists only for genuine emergencies and
+must be reverted immediately. See
+[docs/references/csv-rotate-to-signed-bundle.md](../../references/csv-rotate-to-signed-bundle.md)
+for rotating an existing unsigned CSV onto a signed image.
 
 ### T3 — Install OLM
 

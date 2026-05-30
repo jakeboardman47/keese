@@ -64,7 +64,7 @@ tiers (≤15/25/50 ms p99) absorb this budget. Fail-closed semantics are identic
 ### Shared mode (default)
 
 One `keese-ext-authz` Deployment in `keese-system`, 3 replicas, PDB `minAvailable: 2`,
-HPA on CPU target 60%. Service: `keese-ext-authz.keese-system.svc.cluster.local:9191`
+HPA on CPU target 60%. Service: `keese-authz.keese-system.svc.cluster.local:9001`
 (ClusterIP). All shared-gateway Envoy pods reference this Service via `envoy_grpc` cluster
 `keese_ext_authz_v1`. Image: `ghcr.io/keese-ai/keese-ext-authz:<semver>` — keese-owned
 adapter built from `cmd/ext-authz/`. Dependencies: `github.com/openfga/go-sdk`,

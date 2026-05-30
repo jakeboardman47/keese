@@ -48,7 +48,7 @@ message: "exactly one provider must be set"
 
 | Provider key | Required fields | Notes |
 |---|---|---|
-| `sqlite` | `pvClaim` | PVC name in workspace namespace |
+| `sqlite` | `pvClaim` | PVC name in workspace namespace. **Single-pod-per-Memory invariant** — see below. |
 | `redis` | `host`, `port`, `dbIndex`, `sentinel` | `sentinel: true` required outside dev (VAP) |
 | `qdrant` | `host`, `collectionName`, `embeddingDim`, `replicationFactor` | `embeddingDim` immutable (VAP); `replicationFactor≥2` outside dev (VAP) |
 | `pgvector` | `dsnSecretRef.{name,key}`, `table` | projected file ref (rule 05.7); never env var |
@@ -77,6 +77,46 @@ message: "exactly one provider must be set"
 **Finalizer:** `finalizers.memory.keese.ai/cleanup` — deprovision backend, then release. No OpenFGA tuples on `Memory` (namespace isolation is the authz boundary).
 
 **SSA field owner:** `keese-memory-controller`.
+
+### sqlite single-pod-per-Memory invariant
+
+The `sqlite` provider uses a `ReadWriteOnce` PVC. SQLite is not
+safe for concurrent writers across pods — even with WAL mode, two
+pods writing the same `sessions.db` racing each other can corrupt
+the WAL and leave the database unrecoverable on next open.
+
+**Invariant (TD-P1-09 closure):** at most one pod at any time may
+have the `Memory.spec.provider.sqlite.pvClaim` PVC mounted in
+read-write mode. The keese controller enforces this by:
+
+1. **PVC `accessModes: [ReadWriteOnce]`** in the projector. RWO
+   prevents the kubelet from scheduling a second pod with the
+   same PVC on a different node — the apiserver rejects the
+   binding. (Same-node RWO is technically possible but unusual
+   under normal scheduling.)
+2. **Per-Memory PVC name uniqueness.** The Memory controller
+   names the PVC after `metadata.uid` so two Memory CRs cannot
+   collide on the same PVC.
+3. **Single session pod per Workspace.** The WorkspaceSession
+   reconciler runs one pod per `(Workspace, AttachSubject)` pair
+   and gates the per-user pod creation behind the workspace's
+   single sqlite mount.
+
+**What this rules out:** running goose `--multi-replica` with a
+sqlite-backed Memory; live-migration of a session pod across
+nodes without first writing a checkpoint and dropping the old
+pod; backup tooling that mounts the PVC alongside the live agent
+pod (use a sidecar instead, sharing the agent pod's PVC mount).
+
+**Production guidance:** sqlite is the demo default for fast
+local iteration. For production multi-replica deployments switch
+to one of the network-attached providers (`pgvector`, `qdrant`,
+`redis`, `mem0`, `zep`) which support concurrent writers natively.
+
+A future VAP `SqliteSingleConsumer` (tracked in TD-P2-08) will
+enforce the invariant at admission time by rejecting any
+Workspace whose `spec.sessionMode + AttachPolicy` combination
+would produce > 1 pod against an `sqlite`-backed Memory.
 
 ## SharedMemory CRD
 

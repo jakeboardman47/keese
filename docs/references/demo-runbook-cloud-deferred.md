@@ -10,7 +10,7 @@ depends:
   - ../plans/demo/tech-debt.md
 related_skills: []
 status: current
-last_verified: 2026-04-27
+last_verified: 2026-05-06
 ---
 
 # Cloud deployment — deferred items
@@ -39,8 +39,8 @@ deployment.
 | Tag-triggered image push via [.github/workflows/image.yaml](../../.github/workflows/image.yaml) | Wired but unrun | push a `vX.Y.Z` tag |
 | cosign keyless OIDC sign of `ghcr.io/keese-ai/keese` and `…-bundle` | Wired in workflow | runs on tag push |
 | syft SBOM attestation | Wired in workflow | runs on tag push |
-| `cosign verify` ValidatingAdmissionPolicy on InstallPlans | Designed (14a F7); no manifest | `config/admission/` (does not exist) |
-| Local `make docker-build/push` fallback | Works; **misses signing** | flag as TD-P1-05 in any release notes |
+| `cosign verify` ValidatingWebhookConfiguration on InstallPlans | **Implemented 2026-05-06 (TD-P1-04)** — `cmd/keese-cosign-webhook/`, `internal/admission/cosign/`, `config/cosign-webhook/` | applied via `kubectl apply -k config/cosign-webhook/` |
+| Local `make docker-build/push` fallback | **Removed 2026-05-06 (TD-P1-05)** — CI is the only signing path | see [csv-rotate-to-signed-bundle.md](csv-rotate-to-signed-bundle.md) |
 
 ## 3. OLM-based install
 
