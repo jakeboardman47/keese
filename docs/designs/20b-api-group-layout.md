@@ -123,6 +123,13 @@ that own each group do. This design establishes naming conventions:
 
 ## Iteration Log
 
+> **Note (2026-06-08):** iterations 1–2 scored an earlier design — a shared
+> `api/core` package, an embedded status base, Phase "Option C", and the
+> `check-phase-enum-drift.sh` / `check-printer-columns.sh` hooks plus shared-type
+> envtests. None of that was implemented; the body reflects the per-kind status
+> convention that shipped. The scores and gap/next-step notes below are kept as
+> the historical review trail and refer to that superseded design.
+
 ### Iteration 1 — 2026-04-20
 
 | # | Category | Weight | Ratio | Score | Notes |
@@ -148,21 +155,20 @@ Top gaps:
 
 ### Iteration 2 — 2026-04-20
 
-Changes from iter 1:
-- Added Phase enum Option C (hybrid): per-kind `+kubebuilder:validation:Enum` marker
-  on `StatusBase.Phase` field + `check-phase-enum-drift.sh` hook (security, correctness).
-- Added printer column validation: `check-printer-columns.sh` hook + controller-gen
-  JSONPath validation requirement moved to 20b (automatability, verifiability).
+Changes from iter 1 (the shared-`core`-package / embedded-status / "Option C"
+approach scored here was later superseded by the per-kind status convention now
+in the body; bullets retained as the scoring rationale):
+- Added a phase-enum strategy: per-kind `+kubebuilder:validation:Enum` markers
+  (security, correctness).
+- Added printer-column validation requirements, moved to 20b (automatability, verifiability).
 - Revised soak gate: timer starts at first external customer production deployment
   (not GA tag); migration plan must cite Elastic APM trace ID or release-notes entry.
-- Added `core` package alias note (`keesecore`) clarifying no collision with `k8s.io/api/core/v1`.
+- Clarified the shared-types naming approach (no collision with `k8s.io/api/core/v1`).
 - Added per-group RBAC summary table (pointer to design 01 as authoritative source).
-- Added 4 named envtest assertions for shared types (`TestCoreCondition_RoundTrip`,
-  `TestCorePhase_EnumValidation`, `TestCoreResourceRef_ValidateCrossGroup`,
-  `TestCoreStatusBase_ObservedGenerationMonotonic`).
+- Added named envtest assertions for status round-trip + enum validation.
 - Updated `depends:` in 20a to include `docs/designs/01-tenancy-capsule.md`.
 - Added phase-enum and printer-column failure modes in 20b failure modes table.
-- Added 2 trade-off rows for Phase enum options C vs. alternatives.
+- Added trade-off rows for the phase-enum options.
 
 | # | Category | Weight | Ratio | Score | Notes |
 |---|---|---:|---:|---:|---|

@@ -37,7 +37,7 @@ Broken into **nine phases (P0–P8)**. Each scored against `docs/plans/rubric.md
 | # | Decision | Notes |
 |---|---|---|
 | D1 | **Go + Operator SDK** (`go/v4` plugin) | OLM bundle tooling included. |
-| D2 | **Multi-group CRDs** under `*.operator.keese.ai` base domain | Renamed from `*.keese.ai` per user. |
+| D2 | **Multi-group CRDs** — 3 groups (`keese.ai` / `authz.keese.ai` / `policy.keese.ai`) | Consolidated from the original 10-subgroup layout by TD-P1-03. |
 | D3 | **Use Capsule `capsule.clastix.io/Tenant` directly** — no keese `Tenant` CRD | Capsule reconciles namespaces + NetworkPolicy/Quota/LimitRange/RBAC per tenant. `vcluster` via `Workspace.spec.isolation: hard` opt-in. |
 | D4 | **OpenFGA** for ReBAC — CNCF Incubating, Apache-2.0, DSL + `fga` CLI + playground | SpiceDB is stronger on consistency tokens + raw graph scale; revisit at >100M tuples. Ory Keto rejected (anemic 2024–2026 releases). |
 | D5 | **Envoy AI Gateway v0.5.x + Envoy Gateway v1.5+** — not plain Envoy Gateway | `MCPRoute` (JSON-RPC parsing, per-method CEL), `BackendSecurityPolicy` (AWS OIDC / GCP WI / Azure Entra / static API keys), token-cost rate limiting, ext_proc for Presidio/LlamaGuard guardrails. v1alpha1 CRDs — pin by digest, thin adapter in operator. |
@@ -68,9 +68,10 @@ Broken into **nine phases (P0–P8)**. Each scored against `docs/plans/rubric.md
 
 ---
 
-## Final kind list — **17 kinds across 10 groups** (+1 kind since D28)
+## Final kind list — **17 kinds** (+1 kind since D28)
 
-All groups under `*.operator.keese.ai`, all `v1alpha1`:
+All kinds at `v1alpha1`. The original sub-domains below were consolidated into the
+3 `keese.ai` groups (`keese.ai` / `authz.keese.ai` / `policy.keese.ai`) by TD-P1-03:
 
 | Group | Kinds | Count |
 |---|---|---:|
@@ -206,7 +207,7 @@ All 7 agents, 3 commands, 3 hooks, 4 rules, 6 skills; scripts (`conductor/agent-
 6. **`guardrail-author.md`** — sonnet; worktree `agent/guardrail-<slug>`. Owns `GuardrailBinding` CRs + `dev/samples/guardrails/`; enforces default-inherit webhook pattern.
 
 ### Rules (new + updated)
-- **`rules/04-kubernetes.md`** (12 rules) — domain `<group>.operator.keese.ai` · v1alpha1 first · controller-runtime-only reconcilers · `status` subresource + `observedGeneration` · finalizer IDs `finalizers.<kind>.operator.keese.ai/<purpose>` · no `panic`/`log.Fatal`/`os.Exit` · no wildcard RBAC · printer columns mandatory · event reasons enumerated · envtest-first with ≥ 3-reconcile idempotency · webhooks do only validation/defaulting · samples pass `--dry-run=server`. **+ rule: all writes via Server-Side Apply with controller-specific fieldOwner**.
+- **`rules/04-kubernetes.md`** (12 rules) — 3 groups `keese.ai`/`authz.keese.ai`/`policy.keese.ai` · v1alpha1 first · controller-runtime-only reconcilers · `status` subresource + `observedGeneration` · finalizer IDs `finalizers.<kind>.keese.ai/<purpose>` · no `panic`/`log.Fatal`/`os.Exit` · no wildcard RBAC · printer columns mandatory · event reasons enumerated · envtest-first with ≥ 3-reconcile idempotency · webhooks do only validation/defaulting · samples pass `--dry-run=server`. **+ rule: all writes via Server-Side Apply with controller-specific fieldOwner**.
 - **`rules/05-security-zero-trust.md`** (13 rules) — agent pods get no kubeconfig, no LLM keys · identity = projected SA token with **per-tenant audience** `keese-egress-<tenant>` · upstream creds live only in OpenBao/KMS, swapped at Envoy AI Gateway via `BackendSecurityPolicy` · NetworkPolicy fail-closed · every authz-affecting CRD field carries `// +keese:rebac-tuple=...` marker · secrets = projected files under `/var/run/keese/secrets/` · no `host{Network,PID,IPC}`/`privileged`/`allowPrivilegeEscalation` · images pinned by digest in CSVs · ext_authz logs (tuple, SA, host, decision) — never tokens/bodies · `keese.ai/unsafe-*` blocked unless `break-glass=true` · `kubectl apply` to `prod-*` contexts denied · SBOM + cosign signature required · **+ rule: credential caching per-gateway-pod, refresh at 70% TTL, fail-closed past 95%**.
 - **NEW `rules/06-signal-handling.md`** (D21) — 8 rules:
   1. Every long-running process installs a SIGTERM handler that drains in-flight work, checkpoints state (PVC/NATS/ES), and exits 0 within the configured `terminationGracePeriodSeconds` (default 60s; agent runtime 120s).
@@ -220,7 +221,7 @@ All 7 agents, 3 commands, 3 hooks, 4 rules, 6 skills; scripts (`conductor/agent-
 - **Update `rules/01-conventions.md`** header — add rule precedence ladder: `05-security > 04-kubernetes > 06-signal-handling > 02-security > 03-context-mgmt > 01-conventions > 06-testing`.
 
 ### Two new skills
-- **`skills/crd-authoring.md`** — naming, `<group>.operator.keese.ai`, openAPIV3Schema, CEL `XValidation`, printer columns, status convention, conversion strategy, discriminated one-of for provider-style fields (per `Memory.spec.provider`), sample discipline (≥ 2 per CRD).
+- **`skills/crd-authoring.md`** — naming, the 3 `keese.ai` groups, openAPIV3Schema, CEL `XValidation`, printer columns, status convention, conversion strategy, discriminated one-of for provider-style fields (per `Memory.spec.provider`), sample discipline (≥ 2 per CRD).
 - **`skills/controller-authoring.md`** — reconcile idiom (fetch → deepcopy → desired → **SSA with fieldOwner** → status patch), idempotency, finalizers, spec/status separation, event reasons table, `predicate.GenerationChangedPredicate`, rate limiting (`DefaultControllerRateLimiter`; max 1000s), envtest patterns (`Eventually` 10s/250ms), **SIGTERM drain pattern**.
 
 ### `.claude/settings.json` deltas
@@ -357,7 +358,7 @@ Each: SPDX (Apache-2.0) + frontmatter (`scope: design`, `category`, `depends`, `
 - `19-ide-and-debugging.md` — GoLand primary + VSCode secondary; `kubectl-keese attach`; Workspace status debugging fields; dlv-in-kind.
 
 **API surface:**
-- `20-api-group-layout.md` — which kinds in which group under `operator.keese.ai`; version strategy (v1alpha1 → v1beta1 requires conversion webhook); shared-types package.
+- `20-api-group-layout.md` — which kinds in which of the 3 `keese.ai` groups; version strategy (v1alpha1 → v1beta1 requires conversion webhook); shared-types package.
 
 **Cloud deployment (new):**
 - `21-opentofu-cloud-deployment.md` — per-cloud modules (EKS/GKE/AKS + secret manager + IAM/WI + DNS); keese OLM install step; state backend (S3/GCS/Azure Storage with encryption + locking).
@@ -430,7 +431,7 @@ Copy template refs. New: `references/envtest-kuttl-harness.md`, `tilt-local-loop
 ### Init
 ```
 operator-sdk init \
-  --domain=operator.keese.ai \
+  --domain=keese.ai \
   --repo=github.com/keese-ai/keese \
   --plugins=go/v4 \
   --project-name=keese
@@ -576,7 +577,7 @@ Verifies `open-gate` commit signed by an architect identity (GPG key in org); ba
 | Pre-commit | `.pre-commit-config.yaml` |
 | Dev shell | `flake.nix` |
 | Operator Makefile | `Makefile` |
-| Operator SDK manifest | `PROJECT` (multigroup:true; domain: operator.keese.ai) |
+| Operator SDK manifest | `PROJECT` (multigroup:true; domain: keese.ai) |
 | Tiltfile | `Tiltfile` |
 | Helmfile | `dev/bootstrap/helmfile.yaml` |
 | Kind cluster (ctlptl) | `dev/kind/ctlptl.yaml` + `kind-config.yaml` |
@@ -645,5 +646,5 @@ Verifies `open-gate` commit signed by an architect identity (GPG key in org); ba
 
 - **Iter 1 (2026-04-19 10:00):** Initial 9-phase scaffold + rubric + D1–D14. Mean phase score 86.7; P7 at 82 (REVISE).
 - **Iter 2 (2026-04-19 11:30):** Integrated 3 Plan-agent outputs; added D15 (release-please), D16 (VAP+SSA), D17 (APM-dev). Resolved kind count to 18. P7 → 92. Meta 98.
-- **Iter 3 (2026-04-19 14:00):** User feedback integrated — API group `*.operator.keese.ai`, Capsule direct (drop Tenant CRD), guardrail consolidation to `GuardrailBinding`, 13 kinds (down from 18) across 8 groups. Envoy AI Gateway (not plain Envoy GW) + MCPRoute + BackendSecurityPolicy. Three-table credential decomposition (D13 revision). OpenTofu for cloud (D18). GoLand primary IDE (D19). Argo Workflows delegation (D20). SIGTERM drain rules (D21, new rule 06). Model-discipline per agent (D22). Compose-over-replicate (D23). 22 design docs (split for < 200 lines); designs-before-specs gate. Meta 99.25 (SHIP).
+- **Iter 3 (2026-04-19 14:00):** User feedback integrated — multi-group API-group layout (later consolidated to 3 groups under `keese.ai` by TD-P1-03), Capsule direct (drop Tenant CRD), guardrail consolidation to `GuardrailBinding`, 13 kinds (down from 18). Envoy AI Gateway (not plain Envoy GW) + MCPRoute + BackendSecurityPolicy. Three-table credential decomposition (D13 revision). OpenTofu for cloud (D18). GoLand primary IDE (D19). Argo Workflows delegation (D20). SIGTERM drain rules (D21, new rule 06). Model-discipline per agent (D22). Compose-over-replicate (D23). 22 design docs (split for < 200 lines); designs-before-specs gate. Meta 99.25 (SHIP).
 - **Iter 3.1 (2026-04-19 post-review):** License reverted to **Apache-2.0** per user. SPDX + `addlicense` config stay on `apache`; no other changes.

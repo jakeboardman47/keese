@@ -91,8 +91,8 @@ working build:
 9. **A9**: Update docs:
    - `docs/specs/`: rename per-group spec files; update
      frontmatter `depends`. The 12 spec files collapse to 3.
-   - `docs/designs/`: text references to `<group>.operator.keese.ai`
-     bulk-replaced with the new value.
+   - `docs/designs/`: text references to the old per-subgroup domain
+     bulk-replaced with the 3-group names.
    - `docs/plans/README.md`, `docs/plans/demo/*.md` task tables.
    - `CLAUDE.md` task table rows that name groups.
    - `MEMORY.md` per-group entries get a one-line note pointing to
@@ -244,7 +244,7 @@ remaining SPI methods, pod-name plumbing).
 | 267-file rename leaves a half-renamed tree on session boundary | Each step in Phase A keeps `go build ./...` clean before commit; resumable |
 | CRD migration breaks the running demo cluster | Phase A12 runs against the demo cluster only; production gate is closed (rule 14) |
 | Generated bundle assets drift from CSV | `make bundle-validate` runs in Phase A6 |
-| New API groups conflict with rule 04.1 ("must be `<domain>.operator.keese.ai`") | Rule 04.1 is rewritten in step A1; ADR is this plan |
+| New API groups conflict with the prior rule 04.1 domain requirement | Rule 04.1 is rewritten in step A1; ADR is this plan |
 | ext_authz service introduces a new SPOF in front of every LLM call | One replica is fine for demo; production requires HA + circuit breaker (TD-P2 follow-on) |
 | Body-discriminator JSON parsing requires Envoy `with_request_body` config — increases latency | Spec budget is p99 ≤ 50 ms; measure during Phase D verify, escalate to TD-P2 if breached |
 
