@@ -8,6 +8,9 @@ Run multiple Claude subagents in parallel, each in its own isolated git worktree
 !!! info "Audience"
     Keese contributors and operators who want to parallelize agent-driven development work. **Prerequisites:** familiarity with git worktrees; a working clone of the keese repo.
 
+!!! note "Scope: single-phase primitives vs. the conductor wave build"
+    This page documents the low-level **single-phase** primitives `conductor/agent-dispatch.sh` (dispatch one agent into a worktree) and `conductor/worktree-merge.sh` (merge one branch back). To drive the **whole parallel phase build** — footprint-coloured batching, scheduling, review-fix, and auto-merge across many phases — use the `conductor/` wave orchestrator via the `/conduct` chat command (watch with `/workflows`). See [ADR 29 — Conductor orchestration](../../../docs/designs/29-conductor-orchestration.md) and [`conductor/README.md`](https://github.com/keese-ai/keese/blob/main/conductor/README.md).
+
 ## Why worktrees
 
 One human plus several Claude agents editing a single checkout produces overlapping diffs,
@@ -29,7 +32,7 @@ keese-worktrees/
 ```
 
 Worktrees live in a **sibling directory** (`keese-worktrees/` by default, governed by
-`scripts/lib/paths.sh::paths::worktree_base`). The sibling placement keeps IDE file-watchers
+`conductor/lib/common.sh::paths::worktree_base`, overridable via `WORKTREE_BASE`). The sibling placement keeps IDE file-watchers
 on the main checkout free of spurious change events.
 
 ## Full dispatch-to-merge sequence
@@ -42,7 +45,7 @@ sequenceDiagram
     participant A as Claude Agent
     participant M as worktree-merge.sh
 
-    O->>D: scripts/agent-dispatch.sh phase-04 implementer
+    O->>D: conductor/agent-dispatch.sh phase-04 implementer
     D->>D: validate agent file (.claude/agents/implementer.md)
     D->>D: validate phase file (docs/plans/phase-04.md)
     D->>W: git worktree add -b agent/phase-04-implementer (from main)
@@ -55,7 +58,7 @@ sequenceDiagram
     A->>W: write .plan-logs/SUMMARY.md (status: ready-for-merge)
     A-->>O: agent exits
 
-    O->>M: scripts/worktree-merge.sh agent/phase-04-implementer
+    O->>M: conductor/worktree-merge.sh agent/phase-04-implementer
     M->>W: check protected-path diff (CLAUDE.md, MEMORY.md, .claude/rules/, settings.json)
     M->>W: make lint && make test
     M->>W: git rebase main
@@ -82,7 +85,7 @@ stateDiagram-v2
 ## Dispatching an agent
 
 ```bash
-scripts/agent-dispatch.sh <phase-id> <agent-name> [--branch=<name>] [--base=<ref>]
+conductor/agent-dispatch.sh <phase-id> <agent-name> [--branch=<name>] [--base=<ref>]
 ```
 
 | Argument | Required | Default | Notes |
@@ -102,9 +105,9 @@ scripts/agent-dispatch.sh <phase-id> <agent-name> [--branch=<name>] [--base=<ref
 
 ```bash
 # Examples
-scripts/agent-dispatch.sh phase-02 implementer
-scripts/agent-dispatch.sh phase-03a security-reviewer --branch=review/phase-03a
-scripts/agent-dispatch.sh feature-rebac rebac-modeler --base=main
+conductor/agent-dispatch.sh phase-02 implementer
+conductor/agent-dispatch.sh phase-03a security-reviewer --branch=review/phase-03a
+conductor/agent-dispatch.sh feature-rebac rebac-modeler --base=main
 ```
 
 ### Agent selection
@@ -175,7 +178,7 @@ Each worktree inherits the full repo layout. Key files the agent reads:
 ## Merging back to main
 
 ```bash
-scripts/worktree-merge.sh <branch> [--squash] [--keep-worktree] [--no-verify-green]
+conductor/worktree-merge.sh <branch> [--squash] [--keep-worktree] [--no-verify-green]
 ```
 
 | Flag | Effect |
@@ -198,29 +201,35 @@ first commit subject from the worktree's log as the commit message.
 
 ```bash
 # Standard merge (preserves individual commits)
-scripts/worktree-merge.sh agent/phase-04-implementer
+conductor/worktree-merge.sh agent/phase-04-implementer
 
 # Squash a WIP-heavy branch into one commit
-scripts/worktree-merge.sh agent/phase-04-implementer --squash
+conductor/worktree-merge.sh agent/phase-04-implementer --squash
 
 # Keep the worktree for post-merge inspection
-scripts/worktree-merge.sh agent/phase-04-implementer --keep-worktree
+conductor/worktree-merge.sh agent/phase-04-implementer --keep-worktree
 ```
 
 ## Protected paths
 
-The merge script hard-blocks any branch whose diff touches these four paths:
+The merge script hard-blocks any branch whose diff touches a protected path —
+the files that control what dispatched agents are allowed to do. The headline
+ones:
 
 | Path | Reason |
 |---|---|
 | `CLAUDE.md` | Claude's task-to-doc index; cache warmth |
 | `MEMORY.md` | Cross-session decision log; append on main only |
-| `.claude/rules/` | Non-negotiable conventions; drive all agent behavior |
-| `.claude/settings.json` | Permissions + hooks; central authority |
+| `.claude/rules/`, `.claude/settings.json` | Non-negotiable conventions; permissions + hooks |
+| `.claude/agents/`, `.claude/commands/`, `.claude/skills/` | Agent definitions + skills the orchestrator dispatches |
+| `conductor/`, `scripts/lib/` | The dispatch/merge system + shared shell libraries |
 
-There is intentionally **no override flag** — changes to protected paths must happen
-on `main` directly. To add a new protected path, edit the `protected_hits` grep
-regex in [`scripts/worktree-merge.sh`](https://github.com/keese-ai/keese/blob/main/scripts/worktree-merge.sh)
+The **authoritative, complete list** lives in
+[`.claude/rules/07-autonomy.md`](https://github.com/keese-ai/keese/blob/main/.claude/rules/07-autonomy.md)
+(§ Protected paths). There is intentionally **no override flag** — changes to
+protected paths must happen on `main` directly. To add a new protected path, edit
+the `protected_hits` grep regex in
+[`conductor/worktree-merge.sh`](https://github.com/keese-ai/keese/blob/main/conductor/worktree-merge.sh)
 on `main`.
 
 Everything else is explicitly allowed in worktrees, including `docs/**`, `book/**`,
@@ -266,13 +275,13 @@ Multiple agents can run simultaneously as long as their branches are independent
 
 ```bash
 # Dispatch two agents in parallel (run in separate terminals or background)
-scripts/agent-dispatch.sh phase-04 implementer &
-scripts/agent-dispatch.sh phase-04 security-reviewer --branch=review/phase-04-sec &
+conductor/agent-dispatch.sh phase-04 implementer &
+conductor/agent-dispatch.sh phase-04 security-reviewer --branch=review/phase-04-sec &
 wait
 
 # Merge sequentially (fast-forward requires serial merges to main)
-scripts/worktree-merge.sh agent/phase-04-implementer
-scripts/worktree-merge.sh review/phase-04-sec
+conductor/worktree-merge.sh agent/phase-04-implementer
+conductor/worktree-merge.sh review/phase-04-sec
 ```
 
 !!! warning "Merge order matters"
@@ -290,7 +299,7 @@ scripts/worktree-merge.sh review/phase-04-sec
     or restructure. Symptom: the worktree references old path layouts; merging back
     produces a massive create/delete diff instead of a clean patch.
 
-    **Workaround:** Use `scripts/agent-dispatch.sh` directly rather than relying on
+    **Workaround:** Use `conductor/agent-dispatch.sh` directly rather than relying on
     the SDK's built-in worktree isolation. The script always branches from the ref
     you pass with `--base` (default `main`). If you must use the SDK pool, verify
     the worktree's base commit with `git log --oneline -3` before letting the agent

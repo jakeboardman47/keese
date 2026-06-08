@@ -131,7 +131,7 @@ sbom-*.spdx.json
 
 # ===== Agent worktrees =====
 # Sub-Agent tool with isolation: worktree creates worktrees here; ignore them.
-# Worktrees launched via scripts/agent-dispatch.sh remain external (sibling dirs).
+# Worktrees launched via conductor/agent-dispatch.sh remain external (sibling dirs).
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 # operator binary (built by go build at repo root)

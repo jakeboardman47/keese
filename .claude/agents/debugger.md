@@ -53,3 +53,12 @@ instruction. Reading and reporting only.
 - **Goose runtime not responding?** ACP is stdio — check the pod's
   stderr via `kubectl logs`, not a port-forward. Session state is at
   `/var/lib/goose/sessions/sessions.db` in the workspace PVC.
+
+## Conductor participation
+
+When dispatched by the Conductor (env `CONDUCT_PHASE_ID` set):
+
+- Heartbeat if helpful: `source conductor/lib/conduct-log.sh`, then `conduct::state <state> "<step>"`.
+  No-ops outside a conductor run.
+- You make NO file changes and NO commits — return your findings/verdict as your final message (and to
+  `${CONDUCT_SUMMARY_PATH}` if it is set). The conductor's review-fix loop and merge gate consume it.

@@ -12,8 +12,16 @@ depends:
   - ../../designs/07-agent-runtime-spi.md
   - ../../specs/agent-runtime-spi.md
 related_skills: [plan-management, crd-authoring, controller-authoring]
-status: planned
-last_verified: 2026-05-13
+status: shipped
+last_verified: 2026-06-08
+phase: E0
+model_tier: sonnet
+depends_on: []
+agent: implementer
+outputs:
+  - api/keese/v1alpha1/agentruntime_types.go
+  - internal/runtime/providers/adk/
+  - internal/controller/keese/runtime_runtimes.go
 ---
 
 # E0 — AgentRuntime SPI expansion
@@ -44,8 +52,11 @@ runtime logic ships in this phase — stubs only.
 Edit [`api/keese/v1alpha1/agentruntime_types.go`](../../../api/keese/v1alpha1/agentruntime_types.go).
 
 Add structs:
-- `ADKPythonSpec{Image string; PythonVersion string; ADKVersion string; SessionStoreRef *LocalObjectRef; CompactionInterval *metav1.Duration}`
-- `ADKGoSpec{Image string; GoVersion string; ADKVersion string; SessionStoreRef *LocalObjectRef; CompactionInterval *metav1.Duration}`
+
+```go
+ADKPythonSpec{Image string; PythonVersion string; ADKVersion string; SessionStoreRef *LocalObjectRef; CompactionInterval *metav1.Duration}
+ADKGoSpec{Image string; GoVersion string; ADKVersion string; SessionStoreRef *LocalObjectRef; CompactionInterval *metav1.Duration}
+```
 
 Add to `AgentRuntimeImplementation`: `AdkPython *ADKPythonSpec` and `AdkGo *ADKGoSpec`.
 

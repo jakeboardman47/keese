@@ -2,6 +2,7 @@
 name: plan-scorer
 description: Scores a plan or spec against the rubric, proposes improvements
 model: sonnet
+effort: high
 allowed-tools:
   - Read
   - Glob
@@ -68,3 +69,12 @@ Do not rewrite the target doc unless invoked with an explicit "apply improvement
   and one event reason cited in the doc.
 - Gate rule: no spec scores ≥ 90 until its owning design doc already
   scores ≥ 90.
+
+## Conductor participation
+
+When dispatched by the Conductor (env `CONDUCT_PHASE_ID` set):
+
+- Heartbeat if helpful: `source conductor/lib/conduct-log.sh`, then `conduct::state <state> "<step>"`.
+  No-ops outside a conductor run.
+- You make NO file changes and NO commits — return your findings/verdict as your final message (and to
+  `${CONDUCT_SUMMARY_PATH}` if it is set). The conductor's review-fix loop and merge gate consume it.

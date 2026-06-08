@@ -93,6 +93,7 @@ and API code now lands on `main`.
 | 28 | [28-rag-ingestion.md](28-rag-ingestion.md) | RAG Ingestion | rag | current |
 | 28b | [28b-rag-backends.md](28b-rag-backends.md) | RAG Backends (Qdrant / Elasticsearch / pgvector) | rag | current |
 | 28c | [28c-rag-pipeline.md](28c-rag-pipeline.md) | RAG Pipeline + Retrieval Contract | rag | current |
+| 29 | [29-conductor-orchestration.md](29-conductor-orchestration.md) | Autonomous parallel phase orchestration (Conductor) | orchestration | draft |
 
 ## Lifecycle
 

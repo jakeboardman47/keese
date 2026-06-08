@@ -13,6 +13,16 @@ depends:
 related_skills: [plan-management, crd-authoring, controller-authoring]
 status: planned
 last_verified: 2026-05-13
+phase: E5
+model_tier: sonnet
+depends_on: [E2]
+agent: crd-author
+outputs:
+  - api/keese/v1alpha1/
+  - internal/controller/keese/modelprovider/
+  - config/crd/bases/
+  - PROJECT
+  - bundle/
 ---
 
 # E5 — ModelProvider CRD

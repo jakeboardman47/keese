@@ -13,12 +13,18 @@ last_verified: 2026-04-19
 # Git Worktree Merging
 
 Agents ship work in a worktree branch; the orchestrator merges back to `main`.
-This file specifies how.
+This file specifies how (`conductor/worktree-merge.sh`).
+
+> **Part of the Conductor system.** The green gate is `make lint && make test`
+> run *after* rebase onto current `main`; the merge refuses diffs touching
+> protected paths (see [`.claude/rules/07-autonomy.md`](../../.claude/rules/07-autonomy.md)).
+> Wave-level orchestration + drift refresh: [ADR 29](../designs/29-conductor-orchestration.md),
+> [`conductor/README.md`](../../conductor/README.md).
 
 ## Merge Command
 
 ```sh
-scripts/worktree-merge.sh <branch> [--squash] [--keep-worktree]
+conductor/worktree-merge.sh <branch> [--squash] [--keep-worktree]
 ```
 
 Flags:
@@ -31,7 +37,7 @@ Flags:
 Example:
 
 ```sh
-scripts/worktree-merge.sh feat/phase-02 --squash
+conductor/worktree-merge.sh feat/phase-02 --squash
 ```
 
 ## Default Flow (non-squash)
@@ -92,7 +98,7 @@ Everything else is editable on a branch. In particular, the following are
 - Source code, manifests, scripts, CI — obvious.
 
 To add a stricter guardrail on a specific path, edit the `protected_hits`
-regex in [`../../scripts/worktree-merge.sh`](../../scripts/worktree-merge.sh) on
+regex in [`../../conductor/worktree-merge.sh`](../../conductor/worktree-merge.sh) on
 `main`. There is intentionally no override flag — changes that would touch
 protected paths must happen on `main`.
 
@@ -119,6 +125,6 @@ commit generated files — block merge.
 
 ## Related
 
-- Script: `scripts/worktree-merge.sh`.
+- Script: `conductor/worktree-merge.sh`.
 - Commit rules: [conventional-commits.md](conventional-commits.md).
 - Dispatch: [agent-dispatch.md](agent-dispatch.md).

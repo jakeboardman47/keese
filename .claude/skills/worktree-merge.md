@@ -19,7 +19,7 @@ An agent has reported "complete" on a branch created by `agent-dispatch`.
 ## Steps
 
 1. Verify branch is green: tests pass, lint passes, conventional commits only.
-2. `scripts/worktree-merge.sh <branch-name> [--squash] [--keep-worktree]`:
+2. `conductor/worktree-merge.sh <branch-name> [--squash] [--keep-worktree]`:
    - Fetches origin, rebases the branch on `main`.
    - If clean: fast-forwards `main`; deletes branch and worktree by default.
    - If conflict: aborts the merge and prints the conflicting files.

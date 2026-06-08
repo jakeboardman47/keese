@@ -166,6 +166,10 @@ test-e2e-olm-upgrade:  ## kuttl OLM upgrade suite: install v1, upgrade to v2, as
 .PHONY: test
 test: test-unit test-integration  ## Composed: unit + integration
 
+.PHONY: conductor-test
+conductor-test:  ## Conductor orchestrator unit tests (scheduler/parity/registry; needs bash>=4)
+	@bash conductor/tests/run.sh
+
 .PHONY: verify
 verify: fmt vet lint test bundle-validate  ## fmt+vet+lint+test+bundle-validate aggregator
 

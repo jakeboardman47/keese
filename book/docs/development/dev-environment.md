@@ -138,7 +138,7 @@ The table below covers every section in `.env.local.example`:
 | Registries | `IMG`, `BUNDLE_IMG` | Commented out; set to push a dev image to a personal registry. |
 | Envtest | `KUBEBUILDER_ASSETS` | Auto-set by `make envtest-setup`; override only if needed. |
 | OpenTofu cloud | `TF_VAR_*` | Commented out; required only for cloud deploy work. |
-| Worktree base | `WORKTREE_BASE` | Path used by `scripts/agent-dispatch.sh` for multi-agent worktrees. |
+| Worktree base | `WORKTREE_BASE` | Path used by `conductor/agent-dispatch.sh` for multi-agent worktrees. |
 
 !!! danger "Never commit .env.local"
     `.env.local` contains real credentials. The `gitleaks` and `detect-secrets` pre-commit hooks will catch accidental staging, but prevention is better than detection. Keep the file out of version control entirely.

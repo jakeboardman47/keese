@@ -124,11 +124,11 @@ See the [`plan-management` skill](.claude/skills/plan-management.md).
 
 - Dispatch an agent into an isolated worktree:
   ```sh
-  scripts/agent-dispatch.sh phase-04 implementer
+  conductor/agent-dispatch.sh phase-04 implementer
   ```
 - Merge back when the agent reports complete:
   ```sh
-  scripts/worktree-merge.sh agent/phase-04-implementer
+  conductor/worktree-merge.sh agent/phase-04-implementer
   ```
 
 See [docs/references/agent-dispatch.md](docs/references/agent-dispatch.md) and

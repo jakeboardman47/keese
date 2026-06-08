@@ -10,7 +10,7 @@ model: sonnet
 ---
 
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- Copyright (c) 2026 Aviz Networks, Inc. -->
+<!-- Copyright (c) 2026 keese-ai -->
 
 Score the document at `$ARGUMENTS` against `docs/plans/rubric.md`.
 

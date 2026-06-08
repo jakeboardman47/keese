@@ -16,6 +16,15 @@ depends:
 related_skills: [plan-management, controller-authoring]
 status: planned
 last_verified: 2026-05-13
+phase: E1
+model_tier: sonnet
+depends_on: [E0]
+agent: implementer
+outputs:
+  - internal/runtime/providers/adk/
+  - internal/controller/keese/workspacesession_controller.go
+  - internal/runtime/a2a/bridge/
+  - Dockerfile.adk-python
 ---
 
 # E1 — ADK Python runtime

@@ -2,6 +2,7 @@
 name: crd-author
 description: Authors and revises keese CRDs; runs operator-sdk + controller-gen; envtest-verifies
 model: sonnet
+effort: high
 allowed-tools:
   - Read
   - Glob
@@ -77,3 +78,18 @@ stubs + incremental field additions, sonnet is sufficient.
 
 - No `kubectl apply` outside `--dry-run`.
 - No `git push`.
+
+## Conductor participation
+
+When dispatched by the Conductor (env `CONDUCT_PHASE_ID` set):
+
+- Heartbeat so the dashboard + stuck-detector see you: `source conductor/lib/conduct-log.sh`, then
+  `conduct::state <state> "<step>"` and `conduct::pct <0-100>` at each step. No-ops outside a conductor run.
+- Stay inside your worktree and the phase doc's declared `outputs:` footprint; don't touch files another wave phase owns.
+- Commit per logical unit — commits are the conductor's checkpoints; uncommitted work is lost on interruption.
+- If you must ship a stub: declare it in `${CONDUCT_SUMMARY_PATH}`, set the phase `status: shipped-with-stubs`,
+  and add a `revisit_when_phase`/`revisit_when_env` trigger so a later wave auto-requeues it.
+- Never edit protected paths (`conductor/worktree-merge.sh` rejects them) — propose such changes under
+  "Changes requiring orchestrator review" in your SUMMARY. See `.claude/rules/07-autonomy.md`.
+- Final SUMMARY → `${CONDUCT_SUMMARY_PATH}`: what shipped · stubs · follow-ups · test evidence ·
+  "MEMORY.md entries to add on merge".

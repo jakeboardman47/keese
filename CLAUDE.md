@@ -11,7 +11,7 @@ Goal: keep this file small and stable so prompt caching stays warm across sessio
 ## Always loaded
 
 - This file (`CLAUDE.md`)
-- `.claude/rules/*.md` — non-negotiable conventions (01 · 02 · 03 · 04 · 05 · 06 signal-handling · 06 testing)
+- `.claude/rules/*.md` — non-negotiable conventions (01 · 02 · 03 · 04 · 05 · 06 signal-handling · 06 testing · 07 autonomy)
 - `MEMORY.md` — running log of decisions and gotchas
 
 ## Project quick reference
@@ -63,8 +63,9 @@ Goal: keep this file small and stable so prompt caching stays warm across sessio
 | Author or update a diagram | `docs/references/diagram-authoring.md` | depicted source files | `diagram-authoring` |
 | Create or update a plan phase | `docs/plans/README.md` + `docs/plans/rubric.md` | the phase doc | `plan-management` |
 | Edit a Makefile or recipe script | `.claude/skills/makefile-authoring.md` | `scripts/lib/{log,signals}.sh` | `makefile-authoring` |
-| Multi-agent worktree | `docs/references/agent-dispatch.md` | `scripts/agent-dispatch.sh` | `agent-dispatch` |
-| Auto-merge subagent work | `docs/references/git-worktree-merging.md` | `scripts/worktree-merge.sh` | `worktree-merge` |
+| Run the parallel build (conduct a wave) | `docs/designs/29-conductor-orchestration.md` | `conductor/README.md` + `conductor/scheduler.sh` | `/conduct` · `/workflows` |
+| Multi-agent worktree (single phase) | `docs/references/agent-dispatch.md` | `conductor/agent-dispatch.sh` | `agent-dispatch` |
+| Auto-merge subagent work | `docs/references/git-worktree-merging.md` | `conductor/worktree-merge.sh` | `worktree-merge` |
 | Create a new CRD | `docs/references/crd-design-checklist.md` | `docs/designs/20-api-group-layout.md` + owning design | `crd-authoring` · agent `crd-author` · `/gen-crd` |
 | Implement a reconciler | `docs/references/envtest-kuttl-harness.md` | owning spec in `docs/specs/` (e.g. `keese.ai-v1alpha1-<kind>.md`, `authz.keese.ai-v1alpha1.md`, `policy.keese.ai-v1alpha1.md`) | `controller-authoring` · agent `controller-author` |
 | Edit an admission webhook | `.claude/rules/04-kubernetes.md` | owning spec | `controller-authoring` |
@@ -112,8 +113,10 @@ Goal: keep this file small and stable so prompt caching stays warm across sessio
   only designs-before-specs and the verified gate-open commit.
 - **Server-Side Apply** with `fieldOwner = keese-<kind>-controller` for every
   controller write (rule 04.7).
-- **Multi-agent**: use git worktrees via `scripts/agent-dispatch.sh`; automated merge via
-  `scripts/worktree-merge.sh`.
+- **Multi-agent**: drive the parallel phase build from chat with the `/conduct`
+  command (the `conductor/` wave orchestrator, [ADR 29](docs/designs/29-conductor-orchestration.md));
+  single worktrees via `conductor/agent-dispatch.sh`; automated merge via
+  `conductor/worktree-merge.sh`. Autonomy + protected paths: `.claude/rules/07-autonomy.md`.
 
 ## Refinement iterations
 

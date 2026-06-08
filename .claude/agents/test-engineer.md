@@ -2,6 +2,7 @@
 name: test-engineer
 description: Test engineer — authors and runs unit, integration, and e2e tests; triages flakes; reports coverage deltas
 model: sonnet
+effort: high
 allowed-tools:
   - Read
   - Glob
@@ -69,9 +70,9 @@ coverage deltas.
 
 ## Worktree discipline
 
-- Always runs in an isolated worktree (`scripts/agent-dispatch.sh`).
+- Always runs in an isolated worktree (`conductor/agent-dispatch.sh`).
 - Branch: `agent/test-<feature-slug>`.
-- Merge via `scripts/worktree-merge.sh` after all layers green.
+- Merge via `conductor/worktree-merge.sh` after all layers green.
 
 ## Tool restrictions
 
@@ -98,3 +99,18 @@ coverage deltas.
   `TestReconcileIdempotent_<Kind>` — reconcile ≥ 3 times with no spec
   change, assert stable status.
 - **Mandatory** SIGTERM drain test per `cmd/` binary (rule 06.10).
+
+## Conductor participation
+
+When dispatched by the Conductor (env `CONDUCT_PHASE_ID` set):
+
+- Heartbeat so the dashboard + stuck-detector see you: `source conductor/lib/conduct-log.sh`, then
+  `conduct::state <state> "<step>"` and `conduct::pct <0-100>` at each step. No-ops outside a conductor run.
+- Stay inside your worktree and the phase doc's declared `outputs:` footprint; don't touch files another wave phase owns.
+- Commit per logical unit — commits are the conductor's checkpoints; uncommitted work is lost on interruption.
+- If you must ship a stub: declare it in `${CONDUCT_SUMMARY_PATH}`, set the phase `status: shipped-with-stubs`,
+  and add a `revisit_when_phase`/`revisit_when_env` trigger so a later wave auto-requeues it.
+- Never edit protected paths (`conductor/worktree-merge.sh` rejects them) — propose such changes under
+  "Changes requiring orchestrator review" in your SUMMARY. See `.claude/rules/07-autonomy.md`.
+- Final SUMMARY → `${CONDUCT_SUMMARY_PATH}`: what shipped · stubs · follow-ups · test evidence ·
+  "MEMORY.md entries to add on merge".

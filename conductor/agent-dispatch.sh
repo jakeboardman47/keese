@@ -4,20 +4,18 @@
 #
 # Dispatch a Claude subagent into an isolated git worktree.
 # Usage:
-#   scripts/agent-dispatch.sh <phase-id> <agent-name> [--branch=<name>] [--base=<ref>]
+#   conductor/agent-dispatch.sh <phase-id> <agent-name> [--branch=<name>] [--base=<ref>]
 #
 # Examples:
-#   scripts/agent-dispatch.sh phase-04 implementer
-#   scripts/agent-dispatch.sh phase-08 architect --branch=agent/phase-08-redesign
+#   conductor/agent-dispatch.sh phase-04 implementer
+#   conductor/agent-dispatch.sh phase-08 architect --branch=agent/phase-08-redesign
 
 set -euo pipefail
 IFS=$'\n\t'
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/lib/paths.sh
-source "${HERE}/lib/paths.sh"
-# shellcheck source=scripts/lib/log.sh
-source "${HERE}/lib/log.sh"
+# shellcheck source=conductor/lib/common.sh
+source "${HERE}/lib/common.sh"
 
 if (($# < 2)); then
   log::err "usage: $(basename "$0") <phase-id> <agent-name> [--branch=<name>] [--base=<ref>]"
@@ -63,10 +61,20 @@ if [[ ! -f "${agent_file}" ]]; then
   exit 1
 fi
 
-# Validate phase file exists for phase-* inputs.
-if [[ "${phase_id}" == phase-* ]]; then
-  phase_file="${REPO_ROOT}/docs/plans/${phase_id}.md"
-  [[ -f "${phase_file}" ]] || log::warn "phase file ${phase_file} not found — agent will still run"
+# Resolve the phase plan file. keese keeps phase docs in track subdirs under
+# arbitrary slugged names (docs/plans/expansion/E1-adk-python-runtime.md), so
+# search recursively for <phase-id>.md or <phase-id>-<slug>.md. The id is keese's
+# bare phase id (E1, D5, P0) — no "phase-" prefix.
+phase_file_rel=""
+mapfile -t matches < <(find "${REPO_ROOT}/docs/plans" -type f \
+  \( -name "${phase_id}.md" -o -name "${phase_id}-*.md" \) 2>/dev/null | sort)
+if ((${#matches[@]} == 0)); then
+  log::warn "no docs/plans/**/${phase_id}*.md found — agent will still run"
+elif ((${#matches[@]} > 1)); then
+  log::warn "multiple plan files match ${phase_id}: ${matches[*]} — using first"
+  phase_file_rel="${matches[0]#"${REPO_ROOT}/"}"
+else
+  phase_file_rel="${matches[0]#"${REPO_ROOT}/"}"
 fi
 
 # Ensure worktree base exists.
@@ -97,14 +105,15 @@ cat >"${wt_path}/.plan-logs/prompt.md" <<EOF
 
 ## Start here
 
-1. Read \`docs/plans/${phase_id}.md\` (if it exists) and follow the plan.
+1. Read \`${phase_file_rel:-docs/plans/${phase_id}.md}\` (if it exists) and follow the plan.
 2. Obey all \`.claude/rules/*\`.
 3. Commit using Conventional Commits; the hook will reject otherwise.
-4. When complete, write \`\${PLAN_LOGS}/SUMMARY.md\` with:
+4. When complete, write your summary to \`\${CONDUCT_SUMMARY_PATH:-\${PLAN_LOGS}/SUMMARY.md}\` with:
    - what landed
-   - what was deferred
+   - what was deferred (declare every stub; add a revisit_when_* frontmatter
+     block to the phase doc so the conductor can auto-requeue it)
    - any new entries for MEMORY.md (these are applied on merge back to main).
-5. Exit. The parent will invoke \`scripts/worktree-merge.sh ${branch}\`.
+5. Exit. The parent will invoke \`conductor/worktree-merge.sh ${branch}\`.
 EOF
 
 log::ok "worktree ready: ${wt_path} (branch ${branch})"

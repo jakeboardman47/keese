@@ -30,7 +30,7 @@ without conflict.
    - `explorer` (Haiku) — code/doc search
    - `security-reviewer` (Opus) — audit pass
    - `debugger` (Haiku) — investigate a failure
-2. `scripts/agent-dispatch.sh <phase-id> <agent-name> [--branch=...]` creates:
+2. `conductor/agent-dispatch.sh <phase-id> <agent-name> [--branch=...]` creates:
    - a fresh branch `agent/<phase-id>-<slug>` off `main`
    - a worktree in `$worktree_base/<phase-id>-<slug>`
    - a prompt file in the worktree's `.plan-logs/prompt.md`

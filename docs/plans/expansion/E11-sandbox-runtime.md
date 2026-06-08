@@ -13,6 +13,14 @@ depends:
 related_skills: [plan-management, crd-authoring, controller-authoring]
 status: planned
 last_verified: 2026-05-13
+phase: E11
+model_tier: sonnet
+depends_on: [E1]
+agent: implementer
+outputs:
+  - api/keese/v1alpha1/agentruntime_types.go
+  - internal/runtime/providers/sandbox/
+  - Dockerfile.sandbox-runtime
 ---
 
 # E11 — Sandbox runtime

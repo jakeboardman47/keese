@@ -2,6 +2,7 @@
 name: security-reviewer
 description: Security audit — reviews code, manifests, and configs for security issues
 model: opus
+effort: xhigh
 allowed-tools:
   - Read
   - Glob
@@ -79,3 +80,12 @@ Report in fewer than 500 words. If a finding is complex, link to a follow-up doc
 - **Credential path audit:** verify no agent pod spec mounts a
   `Secret` as env or file (rule 05.2, 05.7). Upstream creds reach
   pods only via the gateway's `BackendSecurityPolicy`.
+
+## Conductor participation
+
+When dispatched by the Conductor (env `CONDUCT_PHASE_ID` set):
+
+- Heartbeat if helpful: `source conductor/lib/conduct-log.sh`, then `conduct::state <state> "<step>"`.
+  No-ops outside a conductor run.
+- You make NO file changes and NO commits — return your findings/verdict as your final message (and to
+  `${CONDUCT_SUMMARY_PATH}` if it is set). The conductor's review-fix loop and merge gate consume it.

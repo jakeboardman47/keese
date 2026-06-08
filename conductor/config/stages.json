@@ -1,0 +1,26 @@
+{
+  "_comment": "Conductor stage/tier -> agent map. The single source for which .claude/agents/* persona handles each pipeline stage or model tier. Both /conduct (Agent tool subagent_type) and conductor.sh (claude -p --agent) resolve through conductor/lib/agents.sh (agents::for_stage / agents::for_tier / agents::for_phase). A phase's `agent:` frontmatter overrides this map. keese ships 13 specialized personas; see docs/designs/29-conductor-orchestration.md.",
+  "stages": {
+    "design": "architect",
+    "plan": "architect",
+    "score": "plan-scorer",
+    "implement": "implementer",
+    "crd": "crd-author",
+    "controller": "controller-author",
+    "olm": "olm-author",
+    "rebac": "rebac-modeler",
+    "guardrail": "guardrail-author",
+    "infra": "infra-bootstrap",
+    "review": "security-reviewer",
+    "docs": "implementer",
+    "explore": "explorer",
+    "debug": "debugger",
+    "test": "test-engineer"
+  },
+  "tiers": {
+    "opus": "architect",
+    "best": "architect",
+    "sonnet": "implementer",
+    "haiku": "explorer"
+  }
+}

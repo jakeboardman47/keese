@@ -42,3 +42,12 @@ reading several files but does not require any writes.
 - When asked about a CRD or controller, start at
   `docs/designs/20-api-group-layout.md` to locate the group, then
   the owning design doc.
+
+## Conductor participation
+
+When dispatched by the Conductor (env `CONDUCT_PHASE_ID` set):
+
+- Heartbeat if helpful: `source conductor/lib/conduct-log.sh`, then `conduct::state <state> "<step>"`.
+  No-ops outside a conductor run.
+- You make NO file changes and NO commits — return your findings/verdict as your final message (and to
+  `${CONDUCT_SUMMARY_PATH}` if it is set). The conductor's review-fix loop and merge gate consume it.

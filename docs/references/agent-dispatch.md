@@ -12,6 +12,12 @@ last_verified: 2026-04-19
 
 # Multi-Agent Dispatch
 
+> **Now part of the Conductor system.** This doc is the single-phase dispatch
+> contract (`conductor/agent-dispatch.sh`). To drive *many* phases in parallel
+> as recoverable, budget-aware waves, use the `/conduct` command and the
+> `conductor/` orchestrator — see [ADR 29](../designs/29-conductor-orchestration.md)
+> and [`conductor/README.md`](../../conductor/README.md).
+
 ## Motivation
 
 One human + many Claude agents editing the same checkout corrupts state fast:
@@ -22,14 +28,14 @@ level while sharing one `.git` directory.
 ## Dispatch Command
 
 ```sh
-scripts/agent-dispatch.sh <phase-id> <agent-name> [--branch=<name>] [--base=main]
+conductor/agent-dispatch.sh <phase-id> <agent-name> [--branch=<name>] [--base=main]
 ```
 
 Examples:
 
 ```sh
-scripts/agent-dispatch.sh phase-02 implementer
-scripts/agent-dispatch.sh phase-03a security-reviewer --branch=review/phase-03a
+conductor/agent-dispatch.sh phase-02 implementer
+conductor/agent-dispatch.sh phase-03a security-reviewer --branch=review/phase-03a
 ```
 
 The script:
@@ -112,6 +118,6 @@ see [git-worktree-merging.md](git-worktree-merging.md).
 
 ## Related
 
-- Script: `scripts/agent-dispatch.sh`.
+- Script: `conductor/agent-dispatch.sh`.
 - Merge: [git-worktree-merging.md](git-worktree-merging.md).
 - Models: [model-selection.md](model-selection.md).

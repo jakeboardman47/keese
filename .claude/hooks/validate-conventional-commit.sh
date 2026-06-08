@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) 2026 Aviz Networks, Inc.
+# Copyright (c) 2026 keese-ai
 #
 # PreToolUse hook: require Conventional Commits format on `git commit -m` and
 # `git commit -F`. Does not replace the pre-commit commitizen hook — this fires

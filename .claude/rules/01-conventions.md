@@ -17,9 +17,10 @@ From highest to lowest — a higher rule wins any conflict:
 2. [`04-kubernetes.md`](04-kubernetes.md)
 3. [`06-signal-handling.md`](06-signal-handling.md)
 4. [`02-security.md`](02-security.md)
-5. [`03-context-mgmt.md`](03-context-mgmt.md)
-6. [`01-conventions.md`](01-conventions.md) (this file)
-7. [`06-testing.md`](06-testing.md)
+5. [`07-autonomy.md`](07-autonomy.md)
+6. [`03-context-mgmt.md`](03-context-mgmt.md)
+7. [`01-conventions.md`](01-conventions.md) (this file)
+8. [`06-testing.md`](06-testing.md)
 
 A deviation from a lower rule to comply with a higher rule is normal.
 A deviation from a higher rule to comply with a lower rule requires

@@ -14,6 +14,13 @@ depends:
 related_skills: [plan-management, controller-authoring]
 status: planned
 last_verified: 2026-05-13
+phase: E10
+model_tier: sonnet
+depends_on: [E8]
+agent: implementer
+outputs:
+  - cmd/keese-api/
+  - web/
 ---
 
 # E10 — Web UI

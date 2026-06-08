@@ -2,6 +2,7 @@
 name: implementer
 description: Implementation agent — writes code against approved plans
 model: sonnet
+effort: high
 allowed-tools:
   - Read
   - Glob
@@ -36,9 +37,9 @@ isolated git worktree so other agents can work in parallel.
 
 ## Worktree discipline
 
-- This agent always runs in an isolated worktree (see `scripts/agent-dispatch.sh`).
+- This agent always runs in an isolated worktree (see `conductor/agent-dispatch.sh`).
 - Branch name: `agent/<phase-id>-<short-slug>`.
-- When complete, the parent can merge via `scripts/worktree-merge.sh`.
+- When complete, the parent can merge via `conductor/worktree-merge.sh`.
 - Do not mutate `CLAUDE.md`, `MEMORY.md`, `.claude/rules/*`, or `.claude/settings.json`
   in an agent worktree — those edits must happen on `main` to avoid cache thrash
   across agents. The merge script will refuse a branch that touches them.
@@ -66,3 +67,18 @@ isolated git worktree so other agents can work in parallel.
   `client.FieldOwner("keese-<kind>-controller")` (rule 04.7).
 - Every long-running binary installs a SIGTERM handler per rule 06;
   `scripts/check-signal-handling.sh` will fail the commit if absent.
+
+## Conductor participation
+
+When dispatched by the Conductor (env `CONDUCT_PHASE_ID` set):
+
+- Heartbeat so the dashboard + stuck-detector see you: `source conductor/lib/conduct-log.sh`, then
+  `conduct::state <state> "<step>"` and `conduct::pct <0-100>` at each step. No-ops outside a conductor run.
+- Stay inside your worktree and the phase doc's declared `outputs:` footprint; don't touch files another wave phase owns.
+- Commit per logical unit — commits are the conductor's checkpoints; uncommitted work is lost on interruption.
+- If you must ship a stub: declare it in `${CONDUCT_SUMMARY_PATH}`, set the phase `status: shipped-with-stubs`,
+  and add a `revisit_when_phase`/`revisit_when_env` trigger so a later wave auto-requeues it.
+- Never edit protected paths (`conductor/worktree-merge.sh` rejects them) — propose such changes under
+  "Changes requiring orchestrator review" in your SUMMARY. See `.claude/rules/07-autonomy.md`.
+- Final SUMMARY → `${CONDUCT_SUMMARY_PATH}`: what shipped · stubs · follow-ups · test evidence ·
+  "MEMORY.md entries to add on merge".

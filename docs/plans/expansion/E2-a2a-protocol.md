@@ -17,6 +17,15 @@ depends:
 related_skills: [plan-management, controller-authoring, crd-authoring]
 status: planned
 last_verified: 2026-05-13
+phase: E2
+model_tier: sonnet
+depends_on: [E1]
+agent: controller-author
+outputs:
+  - api/keese/v1alpha1/workspace_types.go
+  - internal/controller/keese/workspace_controller.go
+  - api/authz/v1alpha1/
+  - config/crd/bases/
 ---
 
 # E2 — A2A protocol on Workspace

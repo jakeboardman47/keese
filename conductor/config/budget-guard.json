@@ -1,0 +1,20 @@
+{
+  "_comment": "Conductor budget guard config. windowCeilingUSD is intentionally null; the conductor setup wizard writes it on first run from your ccusage history. Edit any field; re-run the wizard with `conductor/conductor.sh --budget-setup` to reset the ceiling. Values are a USD proxy for how much of a Claude usage window you are willing to spend per 5h block (subscription users do not pay per token, but cost tracks rate-limit consumption).",
+  "windowHours": 5,
+  "windowCeilingUSD": null,
+  "perAgentMaxUSD": 8.0,
+  "_perAgentMaxUSD_note": "Hard --max-budget-usd cap per dispatched implementer (Claude Code 2.1.x). Aborts a runaway agent; its git commits survive and it can be re-dispatched. Set null to disable.",
+  "warnFraction": 0.85,
+  "pauseFraction": 0.95,
+  "weeklyCeilingUSD": null,
+  "weeklyWarnFraction": 0.80,
+  "maxConcurrentSlots": 4,
+  "dispatchStaggerSeconds": 8,
+  "estimatorSafetyMargin": 1.5,
+  "planTier": "unset",
+  "estimator": {
+    "perTierUSD": { "haiku": 0.4, "sonnet": 3.0, "opus": 9.0 },
+    "sizeMultiplier": { "small": 0.5, "medium": 1.0, "large": 2.0 }
+  },
+  "calibration": {}
+}

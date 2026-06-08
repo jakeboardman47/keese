@@ -12,6 +12,48 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-06-08 — Conductor: parallel-build orchestrator adopted
+
+- Ported the `conductor/` wave orchestrator (scheduler · footprint-coloring ·
+  run ledger · budget guard · review-fix · worktree refresh · status dashboard)
+  into keese; drive it from chat with `/conduct` (`/workflows` to watch). Design:
+  [29-conductor-orchestration.md](docs/designs/29-conductor-orchestration.md)
+  (status `draft` — score to ≥90 before promoting); how-to:
+  [conductor/README.md](conductor/README.md); autonomy + protected paths:
+  [.claude/rules/07-autonomy.md](.claude/rules/07-autonomy.md).
+- keese-specific adaptation: footprint predictor tuned for `api:<group>/<kind>`,
+  `ctrl:<group>/<kind>`, and HOT shared paths (`go.mod`/`PROJECT`, generated
+  deepcopy `HOT:gen:<group>`, OLM CSV `HOT:olm`, OpenFGA model `HOT:rebac`) so
+  CRD/OLM/ReBAC phases serialize correctly; green gate is `make lint && make test`;
+  phases route to SPECIALIZED personas via a phase-doc `agent:` field
+  (crd-author / controller-author / olm-author / rebac-modeler / …).
+- Migrated the **expansion** track (`docs/plans/expansion/E*.md`) to the conductor
+  frontmatter schema (`phase`/`model_tier`/`depends_on`/`agent`/`outputs`); the
+  demo track + historical P-phases were intentionally NOT migrated (shipped /
+  in-progress / deferred — not the parallel-build target). All 13 agents gained
+  `effort:` frontmatter + a "Conductor participation" section.
+- Retired `scripts/{agent-dispatch,worktree-merge}.sh` → superseded by
+  `conductor/` versions; `CLAUDE_CODE_SUBAGENT_MODEL` flipped `sonnet`→`inherit`
+  so per-agent model/effort is honored. `make conductor-test` gates the orchestrator.
+  Follow-up remaining: score ADR 29 to `current` (still `draft`).
+- 2026-06-08 staleness sweep (after the conductor adoption): repointed all live
+  `scripts/{agent-dispatch,worktree-merge}.sh` references to `conductor/` in
+  `book/docs/development/multi-agent.md` (+ conductor-scope note & protected-path
+  list), `dev-environment.md`, `.env.local.example`, `.gitignore` (historical
+  records in `scaffolding-plan.md` + this file's earlier entries left as-is).
+  Status fixes: E0 `planned`→`shipped` (ADK skeletons + CRD variants landed,
+  verified in `agentruntime_controller.go` detectProvider + tests); RAG spec index
+  row `draft`→`current`; runtime spec gained `adkPython`/`adkGo` + 5-way CEL +
+  `cmd/main.go`; `last_verified` bumped on plans/specs READMEs, memory + runtime
+  specs. Fixed LICENSE copyright `Aviz Networks, Inc.`→`keese-ai` (rule 01).
+- Designs `20a`/`20b` carried an **errata**: they still described the retired
+  10-group `operator.keese.ai` layout. Updated the Decision/Context/group-table/
+  PROJECT prose to the 3-group layout (`keese.ai`/`authz.keese.ai`/`policy.keese.ai`,
+  packages `api/{keese,authz,policy}/v1alpha1`). **Flagged for architect:** 20a's
+  *Shared-Types Package Layout* + cross-group *import-rule* sections still reference
+  the deleted `api/core/v1alpha1` — shared types now live in `api/keese/v1alpha1`,
+  so the unidirectional-import contract needs a re-pass.
+
 ### 2026-05-29 — Documentation overhaul: `book/` site + `docs/features/` tree
 
 - Added the user-facing **mkdocs-material site** at `book/` (79 pages: Home, Getting

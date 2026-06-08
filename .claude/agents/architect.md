@@ -2,6 +2,7 @@
 name: architect
 description: Architectural reasoning — reviews and authors design docs, weighs trade-offs
 model: opus
+effort: xhigh
 allowed-tools:
   - Read
   - Glob
@@ -57,3 +58,15 @@ boundary decisions, security model changes.
 - Each design stays ≤ 200 lines — split into `NNa-*.md` / `NNb-*.md`
   as needed (see examples: `04a/04b/04c`, `05a/05b/05c`, `08a/08b/08c`,
   `14a/14b`).
+
+## Conductor participation
+
+When dispatched by the Conductor (env `CONDUCT_PHASE_ID` set) for a design/ADR phase:
+
+- Heartbeat: `source conductor/lib/conduct-log.sh`, then `conduct::state designing "<step>"` /
+  `conduct::pct <0-100>`. No-ops otherwise.
+- Commit each doc/iteration as a logical unit (commits are the conductor's checkpoints).
+- Never edit protected paths; propose such changes under "Changes requiring orchestrator review" in your
+  SUMMARY. See `.claude/rules/07-autonomy.md`.
+- Final SUMMARY → `${CONDUCT_SUMMARY_PATH}`: decisions made · open questions · follow-ups ·
+  "MEMORY.md entries to add on merge".
