@@ -7,7 +7,7 @@ category: index
 depends: [../designs/README.md]
 related_skills: [doc-authoring]
 status: current
-last_verified: 2026-05-06
+last_verified: 2026-06-08
 ---
 
 # specs/ — WHAT (testable)
@@ -33,7 +33,7 @@ by test harnesses. Each spec is keyed to one or more design docs.
 | [keese.ai-v1alpha1-runtime.md](keese.ai-v1alpha1-runtime.md) | `AgentRuntime`, `RuntimeExtension` | 07, 07b, 08a, 08b, 08c, 16, 04a | current |
 | [keese.ai-v1alpha1-runtime-b-iter-log.md](keese.ai-v1alpha1-runtime-b-iter-log.md) | Runtime spec iteration log | — | current |
 | [keese.ai-v1alpha1-memory.md](keese.ai-v1alpha1-memory.md) | `Memory`, `SharedMemory` | 15, 04a | current |
-| [keese.ai-v1alpha1-rag.md](keese.ai-v1alpha1-rag.md) | `KnowledgeBase`, `DocumentSource`, `IngestionRun`, `EmbeddingModel`, `SharedKnowledgeBase` | 28, 28b, 28c, 04a, 15 | draft |
+| [keese.ai-v1alpha1-rag.md](keese.ai-v1alpha1-rag.md) | `KnowledgeBase`, `DocumentSource`, `IngestionRun`, `EmbeddingModel`, `SharedKnowledgeBase` | 28, 28b, 28c, 04a, 15 | current |
 | [keese.ai-v1alpha1-recipe.md](keese.ai-v1alpha1-recipe.md) | `Recipe`, `RecipeSource` | 16, 06, 08a | current |
 | [authz.keese.ai-v1alpha1-guardrail.md](authz.keese.ai-v1alpha1-guardrail.md) | `GuardrailBinding` | 06, 06-ii, 06-iii, 05c | current |
 | [policy.keese.ai-v1alpha1.md](policy.keese.ai-v1alpha1.md) | `TokenBudget` | 10a, 10b | current |

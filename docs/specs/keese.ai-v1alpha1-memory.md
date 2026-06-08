@@ -11,7 +11,7 @@ depends:
   - ../designs/17-credential-broker.md
 related_skills: [crd-authoring, controller-authoring]
 status: current
-last_verified: 2026-04-21
+last_verified: 2026-06-08
 regression_lock: false
 tests:
   unit: [internal/controller/memory/memory_controller_test.go, internal/controller/memory/sharedmemory_controller_test.go]

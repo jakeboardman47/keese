@@ -7,7 +7,7 @@ category: index
 depends: [../README.md, ../rubric.md]
 related_skills: [plan-management]
 status: current
-last_verified: 2026-05-13
+last_verified: 2026-06-08
 ---
 
 # E — Ecosystem Expansion track
@@ -45,7 +45,7 @@ kagent integration is explicitly out of scope; keese remains standalone.
 
 | Phase | Title | Effort | Deps | Critical path | Status |
 |---|---|---|---|---|---|
-| E0 | [AgentRuntime SPI expansion](E0-runtime-spi-expansion.md) | 3 d | — | yes | planned |
+| E0 | [AgentRuntime SPI expansion](E0-runtime-spi-expansion.md) | 3 d | — | yes | shipped (ADK skeletons; logic in E1/E3) |
 | E1 | [ADK Python runtime](E1-adk-python-runtime.md) | 2 w | E0 | yes | planned |
 | E2 | [A2A protocol on Workspace](E2-a2a-protocol.md) | 1 w | E1 | yes | planned |
 | E3 | [ADK Go runtime](E3-adk-go-runtime.md) | 2 w | E0 | yes | planned |

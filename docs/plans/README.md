@@ -8,7 +8,7 @@ gate_status: open
 depends: [../designs/README.md, rubric.md, gate-open-audit-2026-04-22.md]
 related_skills: [plan-management]
 status: current
-last_verified: 2026-05-29
+last_verified: 2026-06-08
 ---
 
 # plans/ — HOW (phased)
@@ -56,7 +56,7 @@ shortcut. See [demo/README.md](demo/README.md) for the full index.
 
 | Phase | Title | Effort | Critical path | Status |
 |---|---|---|---|---|
-| E0 | [AgentRuntime SPI expansion](expansion/E0-runtime-spi-expansion.md) | 3 d | yes | partial (ADK provider skeletons landed; runtime logic in E1/E3) |
+| E0 | [AgentRuntime SPI expansion](expansion/E0-runtime-spi-expansion.md) | 3 d | yes | shipped (ADK skeletons + CRD variants landed; runtime logic in E1/E3) |
 | E1 | [ADK Python runtime](expansion/E1-adk-python-runtime.md) | 2 w | yes | planned |
 | E2 | [A2A protocol on Workspace](expansion/E2-a2a-protocol.md) | 1 w | yes | planned |
 | E3 | [ADK Go runtime](expansion/E3-adk-go-runtime.md) | 2 w | yes | planned |

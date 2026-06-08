@@ -7,7 +7,7 @@ category: api
 depends: [docs/designs/20a-api-group-layout.md]
 related_skills: [crd-authoring, doc-authoring]
 status: current
-last_verified: 2026-04-20
+last_verified: 2026-06-08
 rollback: See 20a rollback field. No conversion webhooks at v1alpha1 makes CRD
   removal the rollback path; operator must be scaled down first, CRDs deleted,
   then operator re-deployed with prior image. Document in migration plan at
@@ -17,6 +17,14 @@ rollback: See 20a rollback field. No conversion webhooks at v1alpha1 makes CRD
 # 20b — API Group Layout: Trade-offs, Failure Modes, Rollback, Observability
 
 Continuation of [20a-api-group-layout.md](20a-api-group-layout.md).
+
+> **Errata (2026-06-08):** the API-group layout consolidated from 10
+> `*.operator.keese.ai` subgroups to **3 groups** (`keese.ai`, `authz.keese.ai`,
+> `policy.keese.ai`) under TD-P1-03 (2026-05-06), and the `api/core/v1alpha1`
+> shared-types package was folded into `api/keese/v1alpha1`. Trade-off,
+> failure-mode, and observability rows below that still name `operator.keese.ai`
+> or `api/core/v1alpha1` describe the pre-migration design — see the
+> [20a Errata](20a-api-group-layout.md) for the authoritative current layout.
 
 ## Printer Column Validation
 
@@ -64,8 +72,8 @@ When `v1beta1` is introduced for a kind:
 
 | Option | Chosen? | Rationale |
 |---|---|---|
-| All kinds in one group (`operator.keese.ai`) | No | Single group RBAC is all-or-nothing for tenants; 10 groups allow per-group RBAC bindings aligned to team ownership. |
-| Per-kind top-level groups (`workspace.keese.ai`, etc.) | No | D2 locks `*.operator.keese.ai`; top-level is too broad for future expansion without collision. |
+| All kinds in one group | No | Single-group RBAC is all-or-nothing for tenants; the 3 groups (`keese.ai` / `authz.keese.ai` / `policy.keese.ai`) let access-control and policy kinds carry RBAC bindings distinct from core workload kinds. |
+| Per-kind top-level groups (`workspace.keese.ai`, etc.) | No | Too broad for future expansion without collision; concerns are separated by the 3 fixed groups instead. |
 | Shared types in each group package | No | Leads to duplication and drift. Unidirectional `api/core/v1alpha1` import enforces consistency. |
 | Promote groups to v1beta1 on first stable release | No | Conversion webhooks before 90-day customer soak add premature complexity; conservative gate prevents thrash. |
 | New kind triggers new version | No | API versions attach to kinds in K8s; adding a kind to an existing version is safe and preferred (D23). |

@@ -7,7 +7,7 @@ category: api
 depends: [docs/plans/scaffolding-plan.md, docs/designs/01-tenancy-capsule.md]
 related_skills: [crd-authoring, doc-authoring]
 status: current
-last_verified: 2026-04-20
+last_verified: 2026-06-08
 rollback: Revert to prior commit; no migration plan required at v1alpha1 because no
   conversion webhooks exist yet. At v1beta1 promotion a migration plan in
   docs/plans/migration-<kind>.md is required before rollback of any group.
@@ -15,43 +15,64 @@ rollback: Revert to prior commit; no migration plan required at v1alpha1 because
 
 # 20a — API Group Layout: Groups, Kinds, Shared Types, Versioning
 
-**Decision:** 16 kinds across 10 sub-groups all under `operator.keese.ai`,
-all at `v1alpha1`. A shared-types package at
-`github.com/keese-ai/keese/api/core/v1alpha1` holds cross-group primitives.
-Promotion to `v1beta1` requires a rubric score ≥ 90, 90-day customer-production
-soak, and architect sign-off via a migration plan doc. (D26, 2026-04-20: added
-`keese.ai/Tenant` — the one cluster-scoped kind. See
-`docs/designs/24-tenant-crd.md`.)
+> **Errata (2026-06-08): API groups consolidated 10 → 3.** The 10-subgroup
+> `*.operator.keese.ai` layout this doc was originally written against was
+> replaced by a **3-group** layout under TD-P1-03 (2026-05-06): `keese.ai`
+> (core workload primitives), `authz.keese.ai` (access control), and
+> `policy.keese.ai` (quantitative constraints). The `.operator.` segment and
+> the separate `api/core/v1alpha1` shared-types package were removed — shared
+> types now live in the core group package `api/keese/v1alpha1`. The Decision,
+> Context, group table, and PROJECT sections below are updated to the 3-group
+> names; the **Shared-Types Package Layout** and cross-group **import-rule**
+> prose still describe the retired `api/core` package and need an architect
+> re-pass to restate the import contract under the consolidated layout.
+> Authoritative current rule:
+> [`.claude/rules/04-kubernetes.md`](../../.claude/rules/04-kubernetes.md) § API surface.
+
+**Decision:** keese's kinds are split across **3 API groups**, all at
+`v1alpha1`: `keese.ai` (core workload primitives), `authz.keese.ai` (access
+control), and `policy.keese.ai` (quantitative constraints). Shared cross-group
+primitives live in the core group package
+`github.com/keese-ai/keese/api/keese/v1alpha1`. Promotion to `v1beta1` requires
+a rubric score ≥ 90, 90-day customer-production soak, and architect sign-off via
+a migration plan doc. (D26, 2026-04-20: added `keese.ai/Tenant` — the one
+cluster-scoped core kind. See `docs/designs/24-tenant-crd.md`.)
 
 ## Context
 
 Keese is a secure multi-tenant K8s operator orchestrating autonomous AI agent
-workflows on pluggable runtimes. Nine API groups under `*.operator.keese.ai`
-host 16 kinds, all at `v1alpha1`. Three concerns drive this design:
+workflows on pluggable runtimes. Three API groups (`keese.ai`,
+`authz.keese.ai`, `policy.keese.ai`) host all kinds, all at `v1alpha1`. Three
+concerns drive this design:
 (1) group boundaries that map cleanly to controller ownership and RBAC,
 (2) a shared-types package that prevents duplication of conditions and status
 patterns while keeping cross-group imports unidirectional, and
 (3) a versioning policy that is conservative enough to avoid premature v1beta1
 promotion and the conversion webhook overhead that comes with it.
 
-## The 10 Groups and 16 Kinds
+## The 3 Groups and Their Kinds
 
-| Group | Full API Group | Kinds | Go package path | Scope |
+The **Logical domain** column is a readability grouping only; at runtime every
+row in the same API group shares one Go package (`api/<group>/v1alpha1`).
+
+| Logical domain | API Group | Kinds | Go package path | Scope |
 |---|---|---|---|---|
-| tenancy | `keese.ai` | `Tenant` (D26) | `api/tenancy/v1alpha1` | cluster |
-| workspace | `keese.ai` | `Workspace`, `WorkspaceShare`, `WorkspaceSession` (D27) | `api/workspace/v1alpha1` | namespace |
-| workflow | `keese.ai` | `Workflow`, `WorkflowRun` | `api/workflow/v1alpha1` | namespace |
-| runtime | `keese.ai` | `AgentRuntime`, `RuntimeExtension` | `api/runtime/v1alpha1` | namespace |
-| memory | `keese.ai` | `Memory`, `SharedMemory` | `api/memory/v1alpha1` | namespace |
-| recipe | `keese.ai` | `Recipe`, `RecipeSource` | `api/recipe/v1alpha1` | namespace |
-| guardrail | `authz.keese.ai` | `GuardrailBinding` | `api/guardrail/v1alpha1` | namespace |
-| observability | `policy.keese.ai` | `TokenBudget` | `api/observability/v1alpha1` | namespace |
-| transport | `keese.ai` | `Transport` | `api/transport/v1alpha1` | namespace |
+| tenancy | `keese.ai` | `Tenant` (D26) | `api/keese/v1alpha1` | cluster |
+| workspace | `keese.ai` | `Workspace`, `WorkspaceShare`, `WorkspaceSession` (D27) | `api/keese/v1alpha1` | namespace |
+| workflow | `keese.ai` | `Workflow`, `WorkflowRun` | `api/keese/v1alpha1` | namespace |
+| runtime | `keese.ai` | `AgentRuntime`, `RuntimeExtension` | `api/keese/v1alpha1` | namespace |
+| memory | `keese.ai` | `Memory`, `SharedMemory` | `api/keese/v1alpha1` | namespace |
+| recipe | `keese.ai` | `Recipe`, `RecipeSource` | `api/keese/v1alpha1` | namespace |
+| transport | `keese.ai` | `Transport` | `api/keese/v1alpha1` | namespace |
+| guardrail | `authz.keese.ai` | `GuardrailBinding` | `api/authz/v1alpha1` | namespace |
 | authz | `authz.keese.ai` | `OIDCProvider` (D28) | `api/authz/v1alpha1` | cluster |
+| observability | `policy.keese.ai` | `TokenBudget` | `api/policy/v1alpha1` | namespace |
 
 `Tenant` and `OIDCProvider` are cluster-scoped (tenants span namespaces; OIDC
-providers are cluster-wide). All other 14 kinds are namespace-scoped. Additional
-cluster-scoped kinds require an ADR in `docs/designs/`.
+providers are cluster-wide). All other kinds enumerated here are namespace-scoped.
+Additional cluster-scoped kinds require an ADR in `docs/designs/`. (RAG kinds —
+D28's `KnowledgeBase` family — also live in `keese.ai`; see
+`docs/designs/28-rag-ingestion.md`.)
 
 ## Shared-Types Package Layout
 
@@ -178,10 +199,11 @@ roles into every tenant namespace automatically (D-01.2).
 
 ## PROJECT Encoding and New-Kind Policy
 
-The PROJECT file uses `multigroup: true`, `domain: operator.keese.ai`. Each
-`create api` call sets `--group=<subgroup>`; the SDK constructs
-`<subgroup>.operator.keese.ai`. `api/core/v1alpha1` is a plain Go package —
-no PROJECT entry, no SchemeBuilder, no CRD.
+The PROJECT file uses `multigroup: true`, `domain: keese.ai`. Core kinds use an
+empty `--group=""` (group `keese.ai`); access-control kinds use `--group=authz`
+(`authz.keese.ai`) and quantitative-constraint kinds use `--group=policy`
+(`policy.keese.ai`). Shared cross-group primitives live in `api/keese/v1alpha1`
+alongside the core kinds (the retired `api/core/v1alpha1` package — see Errata).
 
 After a group's `v1alpha1` is published, new kinds are added at the same version
 (`operator-sdk create api --group=<g> --version=v1alpha1 --kind=<K>`). API

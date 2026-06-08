@@ -14,7 +14,7 @@ depends:
   - ../designs/04a-openfga-authz-model.md
 related_skills: [controller-authoring, crd-authoring]
 status: current
-last_verified: 2026-04-21
+last_verified: 2026-06-08
 regression_lock: false
 tests:
   unit: []
@@ -72,15 +72,27 @@ spec:
           image: string       # empty = operator-embedded default digest
     claudeCode: {}  # stub; no sub-fields at v1alpha1
     aider: {}       # stub; no sub-fields at v1alpha1
+    adkPython:      # Google ADK Python runtime (E0 skeleton; SPI returns ErrUnsupported until E1)
+      image: string                 # OCI ref; digest-pinned prod (VAP adk-runtime-image-digest-pinned)
+      pythonVersion: string         # optional; e.g. "3.12"
+      adkVersion: string            # optional; pins google-adk, e.g. "0.4.0"
+      sessionStoreRef: {name}       # optional; LocalObjectReference to session-store Secret/ConfigMap (E8)
+      compactionInterval: duration  # optional; session-store compaction cadence (E4)
+    adkGo:          # Google ADK Go runtime (E0 skeleton; SPI returns ErrUnsupported until E3)
+      image: string                 # OCI ref; digest-pinned prod (VAP adk-runtime-image-digest-pinned)
+      goVersion: string             # optional; e.g. "1.24"
+      adkVersion: string            # optional; pins google-adk-go, e.g. "0.1.0"
+      sessionStoreRef: {name}       # optional; LocalObjectReference to session-store Secret/ConfigMap (E8)
+      compactionInterval: duration  # optional; session-store compaction cadence (E4)
 ```
 
 **No ReBAC tuple** — AgentRuntime is cluster-scoped config, not a per-identity object.
 
 **Static registration.** Provider registers via Go `init()` in
-`internal/runtime/providers/<provider>/register.go`; `cmd/operator/main.go` blank-imports each built-in (07 iter-2).
+`internal/runtime/providers/<provider>/register.go`; `cmd/main.go` blank-imports each built-in (07 iter-2).
 Unknown impl → `400 UnknownProvider` + event. Image outside `SupportedImageVersions` → `400 ImageVersionUnsupported` (08a).
 
-**CEL XValidation:** `has(self.goose) ? !has(self.claudeCode) && !has(self.aider) : true`
+**CEL XValidation (exactly one provider):** `(has(self.goose) ? 1 : 0) + (has(self.claudeCode) ? 1 : 0) + (has(self.aider) ? 1 : 0) + (has(self.adkPython) ? 1 : 0) + (has(self.adkGo) ? 1 : 0) == 1`
 
 **Printer columns:** `Age`, `Ready`, `Phase`, `Provider`.
 
