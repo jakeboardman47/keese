@@ -39,20 +39,23 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 - 2026-06-08 staleness sweep (after the conductor adoption): repointed all live
   `scripts/{agent-dispatch,worktree-merge}.sh` references to `conductor/` in
   `book/docs/development/multi-agent.md` (+ conductor-scope note & protected-path
-  list), `dev-environment.md`, `.env.local.example`, `.gitignore` (historical
-  records in `scaffolding-plan.md` + this file's earlier entries left as-is).
+  list), `dev-environment.md`, `.env.local.example`, `.gitignore`, plus the
+  `scaffolding-plan.md` + this file's 2026-05-06 references (current paths only —
+  no historical-record carve-outs).
   Status fixes: E0 `planned`→`shipped` (ADK skeletons + CRD variants landed,
   verified in `agentruntime_controller.go` detectProvider + tests); RAG spec index
   row `draft`→`current`; runtime spec gained `adkPython`/`adkGo` + 5-way CEL +
   `cmd/main.go`; `last_verified` bumped on plans/specs READMEs, memory + runtime
   specs. Fixed LICENSE copyright `Aviz Networks, Inc.`→`keese-ai` (rule 01).
-- Designs `20a`/`20b` carried an **errata**: they still described the retired
-  10-group `operator.keese.ai` layout. Updated the Decision/Context/group-table/
-  PROJECT prose to the 3-group layout (`keese.ai`/`authz.keese.ai`/`policy.keese.ai`,
-  packages `api/{keese,authz,policy}/v1alpha1`). **Flagged for architect:** 20a's
-  *Shared-Types Package Layout* + cross-group *import-rule* sections still reference
-  the deleted `api/core/v1alpha1` — shared types now live in `api/keese/v1alpha1`,
-  so the unidirectional-import contract needs a re-pass.
+- Designs `20a`/`20b` rewritten to current implementation (3-group layout
+  `keese.ai`/`authz.keese.ai`/`policy.keese.ai`, packages
+  `api/{keese,authz,policy}/v1alpha1`). Verified against code that the designed
+  `api/core/v1alpha1` shared-types package was **never built**: no
+  `StatusBase`/canonical `Phase`; each kind declares status inline with its own
+  `<Kind>Phase` enum, and the only shared types are `LocalObjectReference` +
+  `ConcurrencyPolicy` in `api/keese/v1alpha1/common_types.go`. Dropped the
+  fictional Option-C / shared-type-envtest sections; the `check-phase-enum-drift.sh`
+  + `check-printer-columns.sh` hooks were never implemented (now marked as such).
 
 ### 2026-05-29 — Documentation overhaul: `book/` site + `docs/features/` tree
 
@@ -286,7 +289,7 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 ### 2026-05-06 — Agent-tool worktree pool returns stale-base branches
 
 - The Claude Agent tool's `isolation: "worktree"` parameter creates worktrees from a pool/cache, NOT from current `main` HEAD. A Wave-1 dispatch on 2026-05-06 produced three worktrees branched from `2994872` — two commits before the API-group rename `ce2436e` (which collapsed `api/{transport,memory,tenancy,guardrail,…}/v1alpha1/` into `api/{keese,authz,policy}/v1alpha1/` and similarly for `internal/controller/`).
-- Symptom: every modified file in the worktree references the **old** path layout. Merge-back via `scripts/worktree-merge.sh` produces a 7000+/12000− diff because git sees the rename as "create the old paths, delete the new paths."
+- Symptom: every modified file in the worktree references the **old** path layout. Merge-back via `conductor/worktree-merge.sh` produces a 7000+/12000− diff because git sees the rename as "create the old paths, delete the new paths."
 - Workaround: cherry-pick **new files** from the worktree (paths the rename didn't touch), and **manually re-apply** in-place edits at the new file locations. Worked for TD-P1-08+P2-09+P2-17 (helmfile.yaml, manager.yaml, config/overlays/prod/* — all path-stable) and TD-P1-02 (cmd/keese-drain/, internal/runtime/spi/, internal/runtime/providers/goose/, tests/e2e/agentruntime-drain/ all clean; only workspacesession_controller.go preStop + workspace_events.go reasons needed in-place re-apply at the new `internal/controller/keese/` path).
 - Did NOT work for TD-P1-01 (OpenFGA SDK swap touched 22 *_rebac_openfga.go files, all in old paths) — abandoned.
 - **Recommendation for next session:** dispatch agents inline-sequentially without `isolation: "worktree"` (work on `main` directly), or pre-create a fresh worktree from current HEAD via `git worktree add <path> main` and pass that path to the agent's prompt.

@@ -183,10 +183,10 @@ From `docs/plans/rubric.md` (template, 100 pts). `SHIP ≥ 85` · `REVISE 65–8
 - **Sonnet** (implementation + scoped work): `implementer`, `test-engineer`, `controller-author`, `infra-bootstrap`, `guardrail-author`, `olm-author`, `plan-scorer`, `security-reviewer` (when reviewing), `debugger` (when fixing).
 - **Haiku** (narrow lookup): `explorer`, `debugger` (during initial investigation only).
 
-Each agent's frontmatter carries `model:` + `isolation:` + `tools:` + `allowed_paths:` exactly. `scripts/agent-dispatch.sh` reads model from frontmatter and sets `CLAUDE_CODE_SUBAGENT_MODEL` accordingly.
+Each agent's frontmatter carries `model:` + `isolation:` + `tools:` + `allowed_paths:` exactly. `conductor/agent-dispatch.sh` reads model from frontmatter and sets `CLAUDE_CODE_SUBAGENT_MODEL` accordingly.
 
 ### Copy verbatim from template
-All 7 agents, 3 commands, 3 hooks, 4 rules, 6 skills; scripts (`agent-dispatch.sh`, `worktree-merge.sh`, `scripts/lib/{log,env,paths,signals}.sh`).
+All 7 agents, 3 commands, 3 hooks, 4 rules, 6 skills; scripts (`conductor/agent-dispatch.sh`, `conductor/worktree-merge.sh`, `scripts/lib/{log,env,paths,signals}.sh`).
 
 ### Per-agent keese deltas (append before copying)
 - **explorer** — `rg` scoped to `api/ internal/ config/ docs/ deploy/`; never read `.env.local` or `kubeconfig*`.

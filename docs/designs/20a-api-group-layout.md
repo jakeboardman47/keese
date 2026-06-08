@@ -15,27 +15,14 @@ rollback: Revert to prior commit; no migration plan required at v1alpha1 because
 
 # 20a — API Group Layout: Groups, Kinds, Shared Types, Versioning
 
-> **Errata (2026-06-08): API groups consolidated 10 → 3.** The 10-subgroup
-> `*.operator.keese.ai` layout this doc was originally written against was
-> replaced by a **3-group** layout under TD-P1-03 (2026-05-06): `keese.ai`
-> (core workload primitives), `authz.keese.ai` (access control), and
-> `policy.keese.ai` (quantitative constraints). The `.operator.` segment and
-> the separate `api/core/v1alpha1` shared-types package were removed — shared
-> types now live in the core group package `api/keese/v1alpha1`. The Decision,
-> Context, group table, and PROJECT sections below are updated to the 3-group
-> names; the **Shared-Types Package Layout** and cross-group **import-rule**
-> prose still describe the retired `api/core` package and need an architect
-> re-pass to restate the import contract under the consolidated layout.
-> Authoritative current rule:
-> [`.claude/rules/04-kubernetes.md`](../../.claude/rules/04-kubernetes.md) § API surface.
-
 **Decision:** keese's kinds are split across **3 API groups**, all at
 `v1alpha1`: `keese.ai` (core workload primitives), `authz.keese.ai` (access
-control), and `policy.keese.ai` (quantitative constraints). Shared cross-group
-primitives live in the core group package
-`github.com/keese-ai/keese/api/keese/v1alpha1`. Promotion to `v1beta1` requires
-a rubric score ≥ 90, 90-day customer-production soak, and architect sign-off via
-a migration plan doc. (D26, 2026-04-20: added `keese.ai/Tenant` — the one
+control), and `policy.keese.ai` (quantitative constraints). Each group is a
+self-contained Go package (`api/{keese,authz,policy}/v1alpha1`) with no
+cross-group imports; the only shared types are intra-`keese.ai` helpers in
+`api/keese/v1alpha1/common_types.go`. Promotion to `v1beta1` requires a rubric
+score ≥ 90, a 90-day customer-production soak, and architect sign-off via a
+migration plan doc. (D26, 2026-04-20: added `keese.ai/Tenant` — the one
 cluster-scoped core kind. See `docs/designs/24-tenant-crd.md`.)
 
 ## Context
@@ -45,8 +32,8 @@ workflows on pluggable runtimes. Three API groups (`keese.ai`,
 `authz.keese.ai`, `policy.keese.ai`) host all kinds, all at `v1alpha1`. Three
 concerns drive this design:
 (1) group boundaries that map cleanly to controller ownership and RBAC,
-(2) a shared-types package that prevents duplication of conditions and status
-patterns while keeping cross-group imports unidirectional, and
+(2) a per-kind status convention (no shared base struct) that keeps
+`observedGeneration` + `conditions` + a `phase` enum uniform across kinds, and
 (3) a versioning policy that is conservative enough to avoid premature v1beta1
 promotion and the conversion webhook overhead that comes with it.
 
@@ -74,68 +61,61 @@ Additional cluster-scoped kinds require an ADR in `docs/designs/`. (RAG kinds �
 D28's `KnowledgeBase` family — also live in `keese.ai`; see
 `docs/designs/28-rag-ingestion.md`.)
 
-## Shared-Types Package Layout
+## Status Convention & Shared Types
 
-**Decision:** A shared package at `github.com/keese-ai/keese/api/core/v1alpha1`
-holds cross-group primitives. All ten group packages import it; it imports nothing
-from the group packages (unidirectional).
+There is **no shared "core" types package**. Each group package
+(`api/{keese,authz,policy}/v1alpha1`) is self-contained and imports no other
+group package — cross-group coordination happens in the controller layer, not in
+the API types layer. Shared types are deliberately minimal and scoped to a single
+group:
 
-The package name `core` is intentional. It does not collide with `k8s.io/api/core/v1`
-because the Go import path is fully qualified; callers use a distinct alias, e.g.
-`keesecore "github.com/keese-ai/keese/api/core/v1alpha1"`, to eliminate ambiguity.
+| Type | Package | Purpose |
+|---|---|---|
+| `LocalObjectReference` (`{ Name string }`) | `api/keese/v1alpha1` (`common_types.go`) | Same-namespace, name-only refs reused across `keese.ai` kinds. |
+| `ConcurrencyPolicy` (`Allow` / `Forbid` / `Replace`) | `api/keese/v1alpha1` (`common_types.go`) | Workflow concurrency vocabulary. |
 
-| Type | Rationale |
-|---|---|
-| `Condition` (re-export wrapping `metav1.Condition`) | Uniform condition type/reason/message vocabulary across all 16 kinds. |
-| `Phase` (string type + 5 consts: `PhasePending`, `PhaseProvisioning`, `PhaseReady`, `PhaseDegraded`, `PhaseTerminating`) | Shared phase vocabulary; kind-specific extensions declared as additional consts in the kind's own `_types.go`. |
-| `ResourceRef` (`{ Name, Namespace, Group, Kind string }`) | Cross-group references (e.g., `Workspace.spec.runtimeRef`, `GuardrailBinding.spec.workspaceRef`). |
-| `StatusBase` (`ObservedGeneration int64`, `Conditions []metav1.Condition`, `Phase Phase`) | Embedded in every kind's `*Status` struct — enforces rule 04.4 (`observedGeneration` on every status). |
-| `ReBAC` marker type alias (string constant) | Anchor for `// +keese:rebac-tuple=<relation>` markers; not a Go type used at runtime, but keeps the constant definition canonical. |
+**Status pattern (convention, not a base struct).** Every kind's `*Status`
+declares its fields inline — there is no embedded `StatusBase`:
 
-Import rule: group packages may import `api/core/v1alpha1`. No group package
-imports another group package directly. Cross-group coordination goes through
-the controller layer, not the API types layer.
+- `ObservedGeneration int64` (rule 04.4),
+- `Conditions []metav1.Condition` (`patchStrategy:"merge"`, list-map keyed on `type`),
+- `Phase <Kind>Phase` — a per-kind string enum (below).
 
-### Phase Enum Strategy — Option C (Hybrid)
+ReBAC tuples are not a Go type: authz-affecting fields carry a
+`// +keese:rebac-tuple=<relation>` marker (rule 04.14), enforced by
+`scripts/check-rebac-markers.sh`.
 
-`api/core/v1alpha1` defines the canonical `Phase` type and 5 consts. Each kind's
-`_types.go` **also** declares a `+kubebuilder:validation:Enum` marker on the
-`StatusBase.Phase` field listing the 5 core values plus any kind-specific
-extensions. This gives admission-time enforcement that the bare string type alone
-cannot provide.
+### Phase Enums (per-kind)
 
-Example for `Workspace`:
+There is no canonical cross-kind `Phase` type. Each kind defines its own phase
+enum sized to its lifecycle, with a `+kubebuilder:validation:Enum` marker for
+admission-time enforcement.
+
+Example — `Workspace` (`api/keese/v1alpha1/workspace_types.go`):
 
 ```go
-// WorkspaceStatus defines the observed state of Workspace.
-type WorkspaceStatus struct {
-    keesecore.StatusBase `json:",inline"`
+// +kubebuilder:validation:Enum=Pending;Provisioning;Running;Idle;Evicted;Terminating
+type WorkspacePhase string
 
-    // Phase is the current lifecycle phase of the Workspace.
-    // +kubebuilder:validation:Enum=Pending;Provisioning;Ready;Degraded;Terminating;Idle;Evicting
-    Phase keesecore.Phase `json:"phase,omitempty"`
+type WorkspaceStatus struct {
+    ObservedGeneration int64              `json:"observedGeneration,omitempty"`
+    Phase              WorkspacePhase     `json:"phase,omitempty"`
+    Conditions         []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+    // … kind-specific fields
 }
 ```
 
-The `StatusBase` embedding provides `ObservedGeneration` and `Conditions`; the
-per-kind `Phase` field re-declares the field to attach the enum marker. For kinds
-with no extensions the enum lists the 5 core values only.
+Other kinds follow the same shape with their own enum — e.g. `BindingPhase`
+(`GuardrailBinding`), `TokenBudgetPhase` (`TokenBudget`). The
+`check-phase-enum-drift.sh` hook proposed in earlier iterations was **not**
+implemented; phase vocabularies are reviewed per-kind in the owning spec.
 
-Pre-commit hook `scripts/check-phase-enum-drift.sh` (P3) diffs every kind's enum
-marker against the 5 core const values and fails if a kind's marker omits any
-core value. Hook is not implemented until the design gate opens.
+### Status testing
 
-### Shared-Type Envtest Assertions
-
-| Test name | Assertion |
-|---|---|
-| `TestCoreCondition_RoundTrip` | `core.Condition` survives serialize/deserialize with JSON and YAML without field loss. |
-| `TestCorePhase_EnumValidation` | For each of the 16 kinds, creates a CR with each core `Phase` value and asserts admission accepts; creates a CR with an invalid phase (e.g., `"Exploding"`) and asserts admission rejects. |
-| `TestCoreResourceRef_ValidateCrossGroup` | Asserts `core.ResourceRef` with `Group == ""` is rejected by the Workspace VAP; group must be specified for cross-group refs. |
-| `TestCoreStatusBase_ObservedGenerationMonotonic` | Asserts `StatusBase.ObservedGeneration` is never set to a value less than `metadata.generation` across any reconcile of any of the 13 controllers. |
-
-These tests live in `internal/controller/suite_test.go` (one file per group) and
-run against an envtest API server with CRDs loaded from `config/crd/bases/`.
+Per rule 04.16, every reconciler ships a `suite_test.go` that loads CRDs from
+`config/crd/bases/` and asserts reconcile idempotency over ≥ 3 passes with no
+spec change. Invalid-phase rejection is covered by each kind's own envtest.
+There is no shared-types test suite — there is no shared-types package.
 
 ## Versioning and Promotion Policy (v1alpha1 → v1beta1)
 
@@ -149,7 +129,7 @@ gates are cleared:
 | **Architect sign-off** | An architect-signed commit adds `docs/plans/migration-<group>.md` scoring ≥ 90. |
 | **Conversion webhook** | A Hub-spoke conversion webhook is implemented and covered by envtest round-trip tests before the `v1beta1` CRD ships. |
 
-No group promotes before all 16 kinds are deployed at `v1alpha1` and the P8 design
+No group promotes before its kinds are deployed at `v1alpha1` and the P8 design
 gate is open.
 
 At `v1alpha1` there are **no conversion webhooks** (rule 04.13). The only admission
@@ -202,8 +182,9 @@ roles into every tenant namespace automatically (D-01.2).
 The PROJECT file uses `multigroup: true`, `domain: keese.ai`. Core kinds use an
 empty `--group=""` (group `keese.ai`); access-control kinds use `--group=authz`
 (`authz.keese.ai`) and quantitative-constraint kinds use `--group=policy`
-(`policy.keese.ai`). Shared cross-group primitives live in `api/keese/v1alpha1`
-alongside the core kinds (the retired `api/core/v1alpha1` package — see Errata).
+(`policy.keese.ai`). Each of the 3 group packages carries its own SchemeBuilder;
+the shared helpers in `common_types.go` live inside `api/keese/v1alpha1` (there is
+no separate shared package).
 
 After a group's `v1alpha1` is published, new kinds are added at the same version
 (`operator-sdk create api --group=<g> --version=v1alpha1 --kind=<K>`). API

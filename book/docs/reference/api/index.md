@@ -235,8 +235,9 @@ The CEL rule pattern is:
 
 ## Common status phases
 
-The shared `api/core/v1alpha1` package defines five canonical phase constants used across
-most kinds. Individual kinds extend this set with kind-specific values:
+There is no shared phase package. Each kind declares its own `<Kind>Phase` string enum in
+its `_types.go` (with a `+kubebuilder:validation:Enum` marker). These values recur across
+most kinds:
 
 | Phase | Meaning |
 |---|---|
@@ -246,9 +247,9 @@ most kinds. Individual kinds extend this set with kind-specific values:
 | `Degraded` | At least one resource is unhealthy; controller is retrying |
 | `Terminating` | Finalizer cleanup in progress |
 
-Kind-specific extensions (e.g. `Workspace` adds `Running`, `Idle`, `Evicted`;
-`WorkspaceSession` adds `Attaching`, `Active`, `Draining`, `Completed`) are declared in
-the kind's own `_types.go`.
+The exact set varies per kind — e.g. `Workspace` (`WorkspacePhase`) uses `Running`/`Idle`/
+`Evicted` instead of `Ready`; `WorkspaceSession` adds `Attaching`/`Active`/`Draining`/
+`Completed`. Always check the kind's own `_types.go` enum.
 
 ---
 

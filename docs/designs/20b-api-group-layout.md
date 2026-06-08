@@ -18,14 +18,6 @@ rollback: See 20a rollback field. No conversion webhooks at v1alpha1 makes CRD
 
 Continuation of [20a-api-group-layout.md](20a-api-group-layout.md).
 
-> **Errata (2026-06-08):** the API-group layout consolidated from 10
-> `*.operator.keese.ai` subgroups to **3 groups** (`keese.ai`, `authz.keese.ai`,
-> `policy.keese.ai`) under TD-P1-03 (2026-05-06), and the `api/core/v1alpha1`
-> shared-types package was folded into `api/keese/v1alpha1`. Trade-off,
-> failure-mode, and observability rows below that still name `operator.keese.ai`
-> or `api/core/v1alpha1` describe the pre-migration design — see the
-> [20a Errata](20a-api-group-layout.md) for the authoritative current layout.
-
 ## Printer Column Validation
 
 `make manifests generate` runs controller-gen with `crd:maxDescLen=0`.
@@ -33,8 +25,8 @@ Controller-gen validates that every `+kubebuilder:printcolumn` JSONPath
 expression resolves against the generated OpenAPI schema — a malformed
 JSONPath causes `make manifests` to fail before any artifact is written.
 
-Pre-commit hook `scripts/check-printer-columns.sh` (P3, not implemented until
-design gate opens) performs a second-pass check after `make manifests generate`
+A proposed pre-commit hook `scripts/check-printer-columns.sh` (P3, **not yet
+implemented**) would perform a second-pass check after `make manifests generate`
 completes clean:
 
 1. Runs `kubectl create --validate=strict --dry-run=server` against each CRD's
@@ -74,22 +66,22 @@ When `v1beta1` is introduced for a kind:
 |---|---|---|
 | All kinds in one group | No | Single-group RBAC is all-or-nothing for tenants; the 3 groups (`keese.ai` / `authz.keese.ai` / `policy.keese.ai`) let access-control and policy kinds carry RBAC bindings distinct from core workload kinds. |
 | Per-kind top-level groups (`workspace.keese.ai`, etc.) | No | Too broad for future expansion without collision; concerns are separated by the 3 fixed groups instead. |
-| Shared types in each group package | No | Leads to duplication and drift. Unidirectional `api/core/v1alpha1` import enforces consistency. |
+| A shared `api/core` types package | No | Would force every group package to import `core`. Sharing is instead minimal — `LocalObjectReference` + `ConcurrencyPolicy` in `api/keese/v1alpha1`; each kind declares its own status fields. |
 | Promote groups to v1beta1 on first stable release | No | Conversion webhooks before 90-day customer soak add premature complexity; conservative gate prevents thrash. |
 | New kind triggers new version | No | API versions attach to kinds in K8s; adding a kind to an existing version is safe and preferred (D23). |
-| Phase as bare string (no enum marker) | No | Admission cannot reject unknown phase values; hybrid Option C gives type sharing and validation. |
-| Phase enum in shared package only | No | controller-gen reads markers on the concrete struct field, not on the embedded type; per-kind markers are required. |
+| Phase as bare string (no enum marker) | No | Admission cannot reject unknown phase values; each kind declares a typed `<Kind>Phase` with a `+kubebuilder:validation:Enum` marker. |
+| A single shared `Phase` enum for all kinds | No | Lifecycles differ per kind (`WorkspacePhase` has `Idle`/`Evicted`; `TokenBudgetPhase` does not); per-kind enums avoid a lowest-common-denominator vocabulary. |
 
 ## Failure Modes
 
 | Failure | Detection | Mitigation |
 |---|---|---|
-| Cross-group import cycle | `go build` fails | Enforced by unidirectional import rule; `golangci-lint` `depguard` rule blocks `api/<g>/v1alpha1 → api/<g2>/v1alpha1`. |
-| Phase enum drift (kind marker omits core value) | `scripts/check-phase-enum-drift.sh` (P3) | Single const set in `api/core/v1alpha1`; hook diffs per-kind marker against core consts. |
+| Cross-group import coupling | `go build` / review | Group packages are self-contained and import no other `api/<g>/v1alpha1`; cross-group coordination stays in the controller layer. |
+| Phase enum marker drifts from its consts | Owning-spec review + envtest | A kind's `+kubebuilder:validation:Enum` marker and its `<Kind>Phase` consts live in the same `_types.go`; the proposed `check-phase-enum-drift.sh` hook was not built. |
 | Printer columns missing or `<unknown>` | `scripts/check-printer-columns.sh` (P3) | Hook runs dry-run server-validate after `make manifests generate`. |
 | Premature v1beta1 promotion (no conversion webhook) | `scripts/check-design-gate.sh` checks migration plan | Gate blocks merge if `docs/plans/migration-<group>.md` absent or score < 90. |
 | New kind bypasses CRD checklist | Design-gate CI check | `check-design-gate.sh` confirms owning design doc is `status: current`. |
-| OLM CSV `owned[]` missing a served version | `bundle validate` + e2e OLM install test | `e2e.yaml` installs bundle on kind cluster and asserts all 14 CRDs served. |
+| OLM CSV `owned[]` missing a served version | `bundle validate` + e2e OLM install test | `e2e.yaml` installs bundle on kind cluster and asserts all 20 CRDs served. |
 
 ## Upgrade / Rollback
 
@@ -103,9 +95,9 @@ Must include: conversion webhook removal steps, storage version downgrade
 (requires `kubectl storage-version-migrator` or manual re-apply), OLM
 `replaces` chain patching. Architect sign-off required.
 
-**Cross-group type rollback**: revert the `api/core/v1alpha1` commit; bump
-`go.mod` accordingly; `make manifests generate` must be re-run and verified
-clean before merging.
+**Shared-helper rollback**: revert the `api/keese/v1alpha1/common_types.go`
+change; `make manifests generate` must be re-run and verified clean before
+merging.
 
 ## Observability
 
@@ -115,7 +107,7 @@ that own each group do. This design establishes naming conventions:
 - OTEL service name: `keese-operator` (single binary; group encoded in span attrs).
 - Span attribute `k8s.crd.group` = full API group (e.g. `keese.ai`).
 - Span attribute `k8s.crd.kind` = kind name.
-- Prometheus metric label `crd_group` = full API group (8 values; within budget).
+- Prometheus metric label `crd_group` = full API group (3 values; within budget).
 - Kubernetes Events reason constants defined per kind in
   `internal/controller/<group>/<kind>/events.go` (rule 04.11).
 
