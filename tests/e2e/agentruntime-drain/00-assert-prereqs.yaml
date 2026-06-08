@@ -6,10 +6,10 @@
 #
 # This step is an assertion-only step (no apply) — it verifies the cluster
 # was bootstrapped by the preceding kuttl suite steps.
-apiVersion: workspace.operator.keese.ai/v1alpha1
+apiVersion: keese.ai/v1alpha1
 kind: Workspace
 metadata:
   name: drain-test-ws
   namespace: drain-test
 status:
-  phase: Active
+  phase: Running
