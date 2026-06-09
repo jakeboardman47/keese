@@ -1,11 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 #
-# kuttl step 01 (apply): start a test pod that writes a marker file to the
-# session PVC. This simulates a goose session writing state before drain.
+# kuttl step 01 (apply): seed the pre-drain session state on the PVC.
 #
-# The pod runs keese-drain directly (the binary bundled in the runtime image)
-# so we test the actual drain code path, not a simulation.
+# This stands in for a goose session having written its SQLite DB before
+# drain. It is infra-independent (no goose-runtime image needed) because its
+# only job is to put a durable file on the PVC that step 03 asserts SURVIVES
+# the real keese-drain + pod-replacement cycle. The REAL drain binary runs in
+# step 02; this step is deliberately a plain seed so the survival assertion is
+# unambiguous.
+#
+# Paths mirror the real layout exercised by workspace-progression's resume
+# test: goose keeps its session DB under
+# /var/run/keese/session/home/.local/share/goose/sessions/sessions.db, and
+# keese-drain writes its checkpoint marker under
+# /var/run/keese/session/sessions/<uid>/draining.
 apiVersion: v1
 kind: Pod
 metadata:
@@ -32,19 +41,32 @@ spec:
         sizeLimit: 256Mi
   containers:
     - name: writer
-      # Use busybox to simulate the pre-drain write without requiring the full
-      # goose image. The drain binary test (step 02) uses the real keese-drain.
       image: busybox:1.36
       imagePullPolicy: IfNotPresent
+      env:
+        # KEESE_SESSION_ID is the workspace/session UID keese-drain keys its
+        # checkpoint dir on. We pin a stable value so steps 02/03 agree.
+        - name: KEESE_SESSION_ID
+          value: "drain-test-uid"
       command: ["/bin/sh", "-c"]
       args:
         - |
           set -e
-          SESSION_DIR=/var/run/keese/session/sessions/drain-test-uid
+          PVC_ROOT=/var/run/keese/session
+
+          # Goose's real session DB location (mirrors the resume test).
+          GOOSE_DB_DIR="${PVC_ROOT}/home/.local/share/goose/sessions"
+          mkdir -p "${GOOSE_DB_DIR}"
+          echo '{"last_step":"step-001","state":"pre-drain"}' > "${GOOSE_DB_DIR}/sessions.db"
+
+          # Also place the session SQLite where keese-drain references it via
+          # sqlite_ref (sessions/<uid>/session.sqlite) so the checkpoint marker
+          # written in step 02 points at a real, surviving file.
+          SESSION_DIR="${PVC_ROOT}/sessions/${KEESE_SESSION_ID}"
           mkdir -p "${SESSION_DIR}"
-          # Simulate goose writing its SQLite DB (we write a plain file as a stand-in).
           echo '{"last_step":"step-001","state":"pre-drain"}' > "${SESSION_DIR}/session.sqlite"
-          echo "Memory written to PVC; drain-writer complete."
+
+          echo "Seeded pre-drain session state on PVC; drain-writer complete."
       securityContext:
         readOnlyRootFilesystem: true
         allowPrivilegeEscalation: false

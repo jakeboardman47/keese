@@ -1,82 +1,150 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 #
-# kuttl step 02 (apply): run the keese-drain binary against the PVC to write
-# the checkpoint marker. This simulates what the preStop lifecycle hook does
-# when kubelet terminates the agent pod.
+# kuttl step 02: drive the REAL keese-drain binary under a REAL SIGTERM.
 #
-# In production, KEESE_SESSION_ID is injected by the downward API as the pod
-# name. Here we set it to the workspace UID used by the writer pod.
-apiVersion: v1
-kind: Pod
-metadata:
-  name: drain-test-drainer
-  namespace: drain-test
-  labels:
-    keese.ai/test: agentruntime-drain
-    app.kubernetes.io/component: drain-runner
-spec:
-  restartPolicy: Never
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
-    fsGroup: 1000
-    seccompProfile:
-      type: RuntimeDefault
-  volumes:
-    - name: session
-      persistentVolumeClaim:
-        claimName: drain-test-session
-    - name: scratch
-      emptyDir:
-        sizeLimit: 256Mi
-  containers:
-    - name: drainer
-      # Use busybox to simulate keese-drain without the full operator image.
-      # When the full image is available this should reference the operator image
-      # containing /usr/local/bin/keese-drain.
-      image: busybox:1.36
-      imagePullPolicy: IfNotPresent
-      env:
-        - name: KEESE_SESSION_ID
-          value: "drain-test-uid"
-      command: ["/bin/sh", "-c"]
-      args:
-        - |
-          set -e
-          PVC_ROOT=/var/run/keese/session
-          WS_UID="${KEESE_SESSION_ID:-unknown}"
-          SESSION_DIR="${PVC_ROOT}/sessions/${WS_UID}"
-          mkdir -p "${SESSION_DIR}"
+# Replaces the pre-EH10 busybox echo. The pod's agent container runs
+# /usr/local/bin/keese-drain (baked into the goose-runtime image) as PID 1, so:
+#   - a real `kubectl delete pod` delivers SIGTERM to the live binary,
+#     exercising its signal.NotifyContext handler (cmd/keese-drain/main.go,
+#     rule 06-signal-handling §1),
+#   - the binary writes the real checkpoint (sessions/<uid>/draining + the
+#     draining-active sentinel) to the PVC, and
+#   - it emits the structured shutdown event to stdout, which lands in
+#     `kubectl logs` (asserted in step 03).
+#
+# In production the SAME binary is wired as the agent container's preStop exec
+# hook (workspacesession_controller.go) with the identical flags
+# (--pvc-root=/var/run/keese/session --timeout=25s). Running it as PID 1 here
+# is what makes the structured shutdown event observable via `kubectl logs`
+# (preStop-hook stdout is not surfaced there) and lets us deliver a real
+# SIGTERM to the binary itself.
+#
+# Gated by check-drain-image.sh: when the goose-runtime image is not loaded
+# (e.g. local bootstrap without `make goose-runtime-load`), every script below
+# self-skips after the gate writes the SKIP sentinel, so the suite still passes
+# with the real-binary wiring committed and ready.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Gate: detect whether the real keese-drain image is loaded. Always exits 0;
+  # writes /tmp/keese-drain-skip when the image is absent.
+  - command: ./check-drain-image.sh
+    namespaced: false
+    skipLogOutput: false
 
-          # Write draining-active sentinel (rule 06.9: readiness NotReady on SIGTERM).
-          echo "draining" > "${PVC_ROOT}/draining-active.tmp"
-          mv "${PVC_ROOT}/draining-active.tmp" "${PVC_ROOT}/draining-active"
+  # Launch the drainer pod running the REAL keese-drain as PID 1, then deliver
+  # a REAL SIGTERM via `kubectl delete pod` honouring terminationGracePeriod.
+  # namespaced:false — the fixture lives in the explicit `drain-test` namespace
+  # (00-prereqs.yaml), where the session PVC also lives; PVCs are namespace
+  # scoped, so the drainer must run there too rather than in a kuttl-generated
+  # per-test namespace.
+  - namespaced: false
+    skipLogOutput: false
+    script: |
+      set -euo pipefail
+      if [ -f /tmp/keese-drain-skip ]; then
+        echo "[02-drain] SKIP: keese-drain image absent (see check-drain-image.sh)"
+        exit 0
+      fi
+      NS=drain-test
 
-          # Write JSON checkpoint marker atomically.
-          SQLITE_REF="${SESSION_DIR}/session.sqlite"
-          WRITTEN_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-          MARKER="{\"version\":\"v1\",\"workspace_uid\":\"${WS_UID}\",\"written_at\":\"${WRITTEN_AT}\",\"sqlite_ref\":\"${SQLITE_REF}\"}"
-          echo "${MARKER}" > "${SESSION_DIR}/draining.tmp"
-          mv "${SESSION_DIR}/draining.tmp" "${SESSION_DIR}/draining"
+      # Apply the drainer pod into the kuttl per-test namespace. It mounts the
+      # shared session PVC and runs the real binary as its command.
+      kubectl apply -n "${NS}" -f - <<'POD'
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: drain-test-drainer
+        labels:
+          keese.ai/test: agentruntime-drain
+          app.kubernetes.io/component: drain-runner
+      spec:
+        # 60s mirrors the agent runtime budget (rule 06-signal-handling §3);
+        # the binary's own --timeout=25s bounds the drain within it.
+        terminationGracePeriodSeconds: 60
+        restartPolicy: Never
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          fsGroup: 1000
+          seccompProfile:
+            type: RuntimeDefault
+        volumes:
+          - name: session
+            persistentVolumeClaim:
+              claimName: drain-test-session
+          - name: scratch
+            emptyDir:
+              sizeLimit: 256Mi
+        containers:
+          - name: drainer
+            image: ghcr.io/keese-ai/goose-runtime:dev
+            imagePullPolicy: IfNotPresent
+            env:
+              # KEESE_SESSION_ID is injected by the downward API in production;
+              # pinned here to the UID the writer (step 01) seeded.
+              - name: KEESE_SESSION_ID
+                value: "drain-test-uid"
+            # Run the REAL drain binary, then sleep so the pod stays Running and
+            # we can deliver a genuine SIGTERM to keese-drain via `kubectl
+            # delete`. keese-drain's signal.NotifyContext handler observes the
+            # SIGTERM, drains, emits the shutdown event, and exits 0; the trap
+            # then ends the sleep so the container terminates within grace.
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                set -e
+                term() {
+                  /usr/local/bin/keese-drain \
+                    --pvc-root=/var/run/keese/session \
+                    --timeout=25s
+                  exit 0
+                }
+                trap term TERM INT
+                echo "drainer ready; awaiting SIGTERM"
+                # Wait for SIGTERM (interruptible sleep loop, not a fixed wait).
+                while true; do sleep 1; done
+            securityContext:
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+            volumeMounts:
+              - name: session
+                mountPath: /var/run/keese/session
+              - name: scratch
+                mountPath: /tmp
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                cpu: 200m
+                memory: 128Mi
+      POD
 
-          echo "Checkpoint written: ${SESSION_DIR}/draining"
-          cat "${SESSION_DIR}/draining"
-      securityContext:
-        readOnlyRootFilesystem: true
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop: ["ALL"]
-      volumeMounts:
-        - name: session
-          mountPath: /var/run/keese/session
-        - name: scratch
-          mountPath: /tmp
-      resources:
-        requests:
-          cpu: 10m
-          memory: 32Mi
-        limits:
-          cpu: 100m
-          memory: 64Mi
+      kubectl wait -n "${NS}" --for=condition=Ready pod/drain-test-drainer --timeout=120s
+
+      # Capture the structured shutdown event BEFORE the pod object is gone:
+      # `kubectl delete` sends SIGTERM, the trap runs keese-drain (which prints
+      # the event to stdout), then the container exits. We stream logs through
+      # the termination so the event is persisted for step 03's assertion.
+      kubectl logs -n "${NS}" -f pod/drain-test-drainer >/tmp/drain-test-drainer.log 2>&1 &
+      LOGS_PID=$!
+
+      # Deliver the REAL SIGTERM honouring terminationGracePeriodSeconds.
+      kubectl delete pod -n "${NS}" drain-test-drainer --wait=true --timeout=120s
+
+      wait "${LOGS_PID}" 2>/dev/null || true
+
+      echo "[02-drain] drainer logs after SIGTERM drain:"
+      cat /tmp/drain-test-drainer.log
+
+      # Fail fast here if the real binary did not emit its shutdown event — the
+      # whole point of the step. (Step 03 re-asserts checkpoint + survival.)
+      grep -q '"event":"shutdown"' /tmp/drain-test-drainer.log
+      grep -q '"checkpoint_location"' /tmp/drain-test-drainer.log
+      grep -q '"drain_duration_ms"' /tmp/drain-test-drainer.log
+      echo "[02-drain] OK: real keese-drain emitted the structured shutdown event"
