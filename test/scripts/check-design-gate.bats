@@ -7,22 +7,22 @@ setup() {
   SCRIPT="${REPO_ROOT}/scripts/check-design-gate.sh"
   TMPDIR="$(mktemp -d)"
   # Create a minimal skeleton inside TMPDIR mirroring the real layout.
-  mkdir -p "${TMPDIR}"/{api/workspace/v1alpha1,internal/controller/workspace,docs/{designs,specs,plans}}
+  mkdir -p "${TMPDIR}"/{api/keese/v1alpha1,internal/controller/keese,docs/{designs,specs,plans}}
   pushd "${TMPDIR}" >/dev/null
   git init -q
   git config user.email test@keese.ai
   git config user.name test
 
   # Stub types + controller (has the sentinel + ≤20 LOC -> stub).
-  cat >api/workspace/v1alpha1/workspace_types.go <<'EOF'
+  cat >api/keese/v1alpha1/workspace_types.go <<'EOF'
 package v1alpha1
 // TODO(design-gate): schema defined elsewhere
 type WorkspaceSpec struct{}
 type WorkspaceStatus struct{}
 EOF
 
-  cat >internal/controller/workspace/workspace_controller.go <<'EOF'
-package workspace
+  cat >internal/controller/keese/workspace_controller.go <<'EOF'
+package keese
 // TODO(design-gate): see docs/designs
 func Reconcile() error { return nil }
 EOF
@@ -48,8 +48,8 @@ teardown() {
 
 @test "non-stub controller without supporting design fails gate" {
   # Replace controller with a fat body lacking the sentinel.
-  cat >internal/controller/workspace/workspace_controller.go <<'EOF'
-package workspace
+  cat >internal/controller/keese/workspace_controller.go <<'EOF'
+package keese
 
 import (
 	"context"
