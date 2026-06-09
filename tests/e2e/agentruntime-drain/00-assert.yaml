@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 00 (assert): the fixture provisioned in 00-prereqs.yaml converges.
+#
+# This is the EH10 orphan fix: the Workspace drain-test-ws is now CREATED by
+# this suite (00-prereqs.yaml), so asserting it reaches Running is sound — no
+# longer a dangling assert against a resource nothing makes.
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: drain-test-ws
+  namespace: drain-test
+status:
+  phase: Running

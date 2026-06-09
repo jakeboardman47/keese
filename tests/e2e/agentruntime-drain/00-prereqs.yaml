@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# kuttl step 00 (apply): provision the SELF-CONTAINED drain fixture.
+#
+# Prior to EH10 this suite asserted a Workspace `drain-test-ws` that nothing
+# created (an orphan prereq). This step now creates the full ownership chain
+# — Tenant → AgentRuntime → Workspace → WorkspaceSession — plus the namespace
+# and session PVC, so the suite stands on its own with no dependency on a
+# preceding suite having bootstrapped `drain-test-ws`.
+#
+# The AgentRuntime points at the goose-runtime image that bakes
+# /usr/local/bin/keese-drain (Dockerfile.goose-runtime). Steps 02+ invoke that
+# real binary; this step only declares the desired world.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: drain-test
+  labels:
+    keese.ai/managed: "true"
+---
+# ── Tenant ───────────────────────────────────────────────────────────
+apiVersion: keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: drain-test
+spec:
+  adminSubjects:
+    - kind: User
+      name: drain-admin@example.com
+---
+# ── AgentRuntime (cluster-scoped) ────────────────────────────────────
+# goose-runtime:dev = upstream block/goose with keese-drain baked in at
+# /usr/local/bin/keese-drain (see Dockerfile.goose-runtime; build + load
+# with `make goose-runtime-load`).
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  name: drain-test-runtime
+spec:
+  implementation:
+    goose:
+      image: ghcr.io/keese-ai/goose-runtime:dev
+---
+# ── Workspace (the formerly-orphaned drain-test-ws) ──────────────────
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: drain-test-ws
+  namespace: drain-test
+spec:
+  runtimeRef:
+    name: drain-test-runtime
+  tenantRef:
+    name: drain-test
+  interactive: true
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow
+  egress:
+    allowedTools:
+      - anthropic.messages
+---
+# ── WorkspaceSession (per-user) ──────────────────────────────────────
+apiVersion: keese.ai/v1alpha1
+kind: WorkspaceSession
+metadata:
+  name: drain-test-session
+  namespace: drain-test
+spec:
+  workspaceRef: drain-test-ws
+  attachSubject: "user:drain-admin@example.com"
+  sessionName: default
+  mode: per-user
+---
+# ── Session PVC ──────────────────────────────────────────────────────
+# Stands in for the workspace session PVC the controller mounts at
+# /var/run/keese/session. Steps 01-03 mount this same claim so the real
+# keese-drain checkpoint and the goose SQLite survive pod replacement.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: drain-test-session
+  namespace: drain-test
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
