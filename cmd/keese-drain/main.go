@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -50,24 +51,35 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
-	// Add the absolute timeout on top of SIGTERM cancellation.
-	drainCtx, drainCancel := context.WithTimeout(ctx, timeout)
-	defer drainCancel()
-
 	wsUID := os.Getenv("KEESE_SESSION_ID")
 	if wsUID == "" {
 		// Fall back to an opaque marker when env is not set (e.g. during tests).
 		wsUID = "unknown"
 	}
 
+	run(ctx, pvcRoot, wsUID, timeout, os.Stdout, os.Stderr)
+}
+
+// run executes one drain cycle against pvcRoot for session wsUID, bounded by the
+// SIGTERM-cancellable ctx plus an absolute timeout. It writes the checkpoint
+// marker, then emits the structured shutdown event (rule 06-signal-handling §4)
+// to out. Drain errors are non-fatal (logged to errOut) because the kubelet
+// treats preStop exit codes as advisory. Extracted from main() so tests can
+// drive the real drain + shutdown-event path without spawning a process and so
+// the SIGTERM-via-signal.NotifyContext path is observable end to end.
+func run(ctx context.Context, pvcRoot, wsUID string, timeout time.Duration, out, errOut io.Writer) {
+	// Add the absolute timeout on top of SIGTERM cancellation.
+	drainCtx, drainCancel := context.WithTimeout(ctx, timeout)
+	defer drainCancel()
+
 	start := time.Now()
 	if err := drain(drainCtx, pvcRoot, wsUID); err != nil {
 		// Log but do not exit non-zero — kubelet ignores preStop exit codes.
-		fmt.Fprintf(os.Stderr, "keese-drain: drain error (non-fatal, pod terminating): %v\n", err)
+		fmt.Fprintf(errOut, "keese-drain: drain error (non-fatal, pod terminating): %v\n", err)
 	}
 
 	// Rule 06-signal-handling §4: structured shutdown event.
-	fmt.Printf(`{"event":"shutdown","reason":"preStop","drain_duration_ms":%d,"checkpoint_location":"%s"}`+"\n",
+	fmt.Fprintf(out, `{"event":"shutdown","reason":"preStop","drain_duration_ms":%d,"checkpoint_location":"%s"}`+"\n",
 		time.Since(start).Milliseconds(),
 		filepath.Join(pvcRoot, "sessions", wsUID, "draining"),
 	)
