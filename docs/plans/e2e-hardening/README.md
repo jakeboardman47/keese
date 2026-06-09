@@ -49,7 +49,7 @@ conductor waves ([ADR 29](../../designs/29-conductor-orchestration.md)).
 
 | Phase | Title | Agent | Dispatch | Depends on | Status |
 |---|---|---|---|---|---|
-| EH1 | e2e harness reliability + CI wiring | infra-bootstrap | manual | EH2, EH3 | planned |
+| EH1 | e2e harness reliability + CI wiring | infra-bootstrap | manual | EH2, EH3 | in-progress |
 | EH2 | Coverage enforcement infra | test-engineer | wave | — | complete |
 | EH3 | SIGTERM-drain test wiring | test-engineer | wave | — | planned |
 | EH4 | Live ReBAC allow/deny e2e (keystone) | test-engineer | wave | — | complete |

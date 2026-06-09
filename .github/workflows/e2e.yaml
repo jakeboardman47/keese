@@ -43,6 +43,21 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: install kuttl
+        if: steps.cfg.outputs.present == 'true'
+        env:
+          KUTTL_VERSION: '0.15.0'
+        run: |
+          # `make test-e2e` guards on `command -v kuttl` but invokes
+          # `kubectl-kuttl`; install the release binary as both (symlink) so the
+          # bare ubuntu runner has kuttl on PATH (flake.nix supplies it locally).
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/kubectl-kuttl" \
+            "https://github.com/kudobuilder/kuttl/releases/download/v${KUTTL_VERSION}/kubectl-kuttl_${KUTTL_VERSION}_linux_x86_64"
+          chmod +x "$HOME/.local/bin/kubectl-kuttl"
+          ln -sf "$HOME/.local/bin/kubectl-kuttl" "$HOME/.local/bin/kuttl"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          kubectl-kuttl version
       - name: bootstrap infra + run e2e
         if: steps.cfg.outputs.present == 'true'
         run: make bootstrap-infra test-e2e
