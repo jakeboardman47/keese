@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH7 steps 2-4 — ENFORCEMENT through the gateway. Like EH4, the decision is
+# enforced by Envoy at request time (a rate-limit ceiling, not a CRD status
+# field), so it can't be observed via `kubectl get` alone. enforce.sh sources
+# EH4's request-firing helper and:
+#   - step 2 (always): in-budget request → HTTP 200.
+#   - step 3 (metering-gated): over-budget → HTTP 429 + status Exhausted.
+#   - step 4 (metering-gated): window reset → windowStart advances + 200.
+#
+# Steps 3-4 SKIP cleanly when check-metering.sh reports the token-cost
+# pipeline absent (local bootstrap) — revisit_when_token_metering_live.
+#
+# `namespaced: false` — targets alpha / keese-system by name (the session
+# pod + gateway), not kuttl's per-test namespace. kuttl runs `command:` from
+# THIS step's directory, hence the relative path.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: ./enforce.sh
+    namespaced: false
+    skipLogOutput: false

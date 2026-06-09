@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# The TokenBudget under test for the EH7 enforcement suite.
+#
+# Workspace-scoped (namespace alpha, workspace my-ws) with a small total cap
+# for model claude-opus-4-7 — the model EH4's fire_request helper targets at
+# /anthropic/v1/messages. Small cap + short window so the metering-gated
+# over-budget and window-reset steps are exercisable when the pipeline is
+# live, without the default 720h (30-day) window.
+#
+# Fields validated against config/crd/bases/policy.keese.ai_tokenbudgets.yaml:
+#   - scope: exactly one of tenant/workspace (CEL XValidation) → workspace.
+#   - limits: minItems 1; each entry sets >=1 of input/output/totalTokens.
+#   - windowDuration: ^[0-9]+(h|d|m)$ → "1h".
+#   - exhaustionMode: enum hard|soft|disabled → hard (429 on crossover).
+apiVersion: policy.keese.ai/v1alpha1
+kind: TokenBudget
+metadata:
+  name: my-ws-budget
+  namespace: alpha
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/part-of: keese
+spec:
+  scope:
+    workspace:
+      name: my-ws
+  exhaustionMode: hard
+  windowDuration: 1h
+  limits:
+    - model: claude-opus-4-7
+      totalTokens: 256

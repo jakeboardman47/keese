@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH7 step 1 — PROJECTION. The artifact ratelimit.go/ratelimit_client.go
+# writes (a BackendTrafficPolicy on the Envoy AI Gateway) is not a TokenBudget
+# status field, so it can't be asserted with a native kuttl TestAssert keyed
+# on the budget. assert-projection.sh resolves the runtime TokenBudget UID,
+# locates `keese-tb-<uid>-<model>`, and asserts its annotations + LocalRateLimit
+# rule reflect this budget's scope, model, and cap.
+#
+# `namespaced: false` — the script targets alpha by name (not kuttl's
+# per-test namespace) and resolves the gateway-namespace policy itself.
+# kuttl runs `command:` from THIS step's directory, hence the relative path.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: ./assert-projection.sh
+    namespaced: false
+    skipLogOutput: false

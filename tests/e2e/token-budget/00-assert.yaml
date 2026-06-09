@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH7 — readiness gate for the TokenBudget enforcement suite.
+#
+# Prereq-gated first (OpenFGA + OpenBao seeded, gateway ext_authz up) so the
+# suite skips cleanly against placeholder infra, then waits for:
+#   - the ALLOW workspace my-ws Ready (its SA + egress route must exist for
+#     the in-budget request to flow), and
+#   - the TokenBudget to reach Ready with an initialised accounting window
+#     (status.windowStart/windowEnd set by the controller's initWindow).
+#
+# Reaching Ready proves the controller reconciled the budget — the
+# projection assertion (BackendTrafficPolicy reflects the cap) is made by
+# 01-projection.yaml, which needs the runtime TokenBudget UID.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 240
+commands:
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+  - command: ../lib/check-extauth.sh
+    namespaced: false
+  - command: kubectl wait --for=condition=Ready workspace/my-ws -n alpha --timeout=180s
+  - command: kubectl wait --for=condition=Ready tokenbudget/my-ws-budget -n alpha --timeout=180s
+---
+# Native kuttl status assertion: the controller must have initialised the
+# accounting window and settled the phase to Ready.
+apiVersion: policy.keese.ai/v1alpha1
+kind: TokenBudget
+metadata:
+  name: my-ws-budget
+  namespace: alpha
+status:
+  phase: Ready

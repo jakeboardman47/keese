@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH7 — TokenBudget enforcement e2e: apply the budget under test.
+#
+# Scopes a small-cap TokenBudget to the ALLOW workspace `my-ws` (provisioned
+# by dev/demo/hello-keese.yaml / the workspace-progression suite) for the
+# same model EH4 fires at (claude-opus-4-7). The reconciler
+# (internal/controller/policy/tokenbudget_controller.go) projects this onto
+# the Envoy AI Gateway as a BackendTrafficPolicy
+# (`keese-tb-<tokenbudget-uid>-<model>`, see ratelimit_client.go) whose
+# LocalRateLimit ceiling tracks RemainingTokens.
+#
+# `limits[].totalTokens` is intentionally small so that, ONCE the token-cost
+# metering pipeline is live (check-metering.sh), a short request loop drives
+# consumed past the cap → RemainingTokens 0 → gateway 429. With metering
+# absent (local bootstrap) consumed stays 0, RemainingTokens stays at the
+# cap, and the in-budget 200 path is what we assert (the over-budget step
+# skips — revisit_when_token_metering_live).
+#
+# windowDuration is short (1h, the schema minimum) so the window-reset step
+# can observe windowStart/windowEnd advance without a 30-day wait.
+#
+# exhaustionMode: hard → crossover projects a 0-rps ceiling (HTTP 429),
+# which is the enforcement behavior step 3 asserts under live metering.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+apply:
+  - budget.yaml
