@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH8 step 2 — DISABLE. Re-apply the gate with spec.override=false. This
+# bumps metadata.generation; the FeatureGateReconciler must re-project
+# cosign-installplan-verify=false and re-settle the CR status.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+apply:
+  - featuregate-disabled.yaml

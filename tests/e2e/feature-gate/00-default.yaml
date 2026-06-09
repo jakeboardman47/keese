@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH8 step 0 — DOCUMENTED DEFAULT (no CR applied).
+#
+# Design 27b catalog: cosign-installplan-verify is stage=alpha → default
+# OFF. api/policy/v1alpha1.DefaultEffective(alpha)=false. This step runs
+# BEFORE the suite applies any FeatureGate for the gate, and asserts the
+# default holds as an OBSERVABLE controller fact, not a doc claim:
+#
+#   - the gate name does NOT appear with value `true` in the projected
+#     keese-system/keese-features ConfigMap, so every consumer that reads
+#     the projection (and falls back to its compiled-in alpha default)
+#     evaluates the gate OFF.
+#
+# `namespaced: false` — the projection ConfigMap lives in keese-system,
+# resolved by the script itself, not kuttl's per-test namespace.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: ./assert-default.sh
+    namespaced: false
+    skipLogOutput: false

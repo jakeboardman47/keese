@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH8 step 2 — the same gate flipped OFF. spec.override=false pins the
+# effective value to false (rather than nil → alpha default, which is also
+# false but for a different reason). Re-applying mutates the existing CR
+# (bumps metadata.generation), so the reconciler must re-project
+# cosign-installplan-verify=false and advance status.observedGeneration.
+apiVersion: policy.keese.ai/v1alpha1
+kind: FeatureGate
+metadata:
+  name: cosign-installplan-verify
+  labels:
+    app.kubernetes.io/part-of: keese
+    keese.ai/owner: keese-cosign-webhook
+    keese.ai/e2e-suite: feature-gate
+spec:
+  description: |
+    Pre-install ValidatingWebhook on OLM InstallPlans verifies cosign
+    keyless OIDC signatures on every keese-published image. Off →
+    handler short-circuits with admission.Allowed.
+  stage: alpha
+  # Flip OFF: pin the effective value to false.
+  override: false
+  owners:
+    - keese-cosign-webhook
+  restartRequired: false

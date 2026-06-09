@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH8 — the gate under test: cosign-installplan-verify (the SHIPPED
+# alpha gate consumed by keese-cosign-webhook; design 27b catalog).
+#
+# Stage alpha → DefaultEffective(alpha) = false. We set spec.override=true
+# to flip the projected effective value ON, which is the observable
+# controller behavior this suite asserts: the FeatureGateReconciler
+# (internal/controller/policy/featuregate_controller.go) recomputes the
+# canonical projection and SSA-writes keese-system/keese-features so the
+# gate name maps to `true`. Step 03 patches override=false to flip it back
+# OFF and proves the projection follows.
+#
+# This CR matches the seed in config/featuregates/cosign-installplan-verify.yaml
+# (same name + stage + owner) so the suite exercises the real shipped gate,
+# not a synthetic one. It is cluster-scoped (scope=Cluster) — no namespace.
+apiVersion: policy.keese.ai/v1alpha1
+kind: FeatureGate
+metadata:
+  name: cosign-installplan-verify
+  labels:
+    app.kubernetes.io/part-of: keese
+    keese.ai/owner: keese-cosign-webhook
+    # Tag so the suite's teardown can find + delete only what it created.
+    keese.ai/e2e-suite: feature-gate
+spec:
+  description: |
+    Pre-install ValidatingWebhook on OLM InstallPlans verifies cosign
+    keyless OIDC signatures on every keese-published image. Off →
+    handler short-circuits with admission.Allowed.
+  stage: alpha
+  # Flip the alpha default (off) to ON. The reconciler must project
+  # cosign-installplan-verify=true into keese-system/keese-features.
+  override: true
+  owners:
+    - keese-cosign-webhook
+  restartRequired: false

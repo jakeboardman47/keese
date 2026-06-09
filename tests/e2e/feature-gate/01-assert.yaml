@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH8 step 1 assert — the gate is ENABLED end-to-end.
+#
+# Three assertions:
+#   1. (commands) wait for the FeatureGate Ready condition, then run
+#      assert-status.sh: status.effective=true AND status.observedGeneration
+#      == metadata.generation (observedGeneration is dynamic so it can't be
+#      a native literal). Cluster-scoped → namespaced: false.
+#   2. (commands) assert-projection.sh: the controller projected
+#      cosign-installplan-verify=true into keese-system/keese-features —
+#      the OBSERVABLE behavior (a real ConfigMap key, not CR status).
+#   3. (native) the FeatureGate's projected status fields settle:
+#      effective=true and a Ready=True/Projected condition.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+commands:
+  - command: kubectl wait --for=condition=Ready featuregate/cosign-installplan-verify --timeout=90s
+    namespaced: false
+  - command: ./assert-status.sh cosign-installplan-verify true
+    namespaced: false
+  - command: ./assert-projection.sh cosign-installplan-verify true
+    namespaced: false
+---
+# Native kuttl status assertion (subset match): spec.override=true →
+# status.effective=true. The Ready=True/Projected condition + the
+# observedGeneration==generation invariant are covered by the `kubectl wait`
+# above + assert-status.sh; we keep the native block to a single stable
+# scalar so kuttl's matcher isn't sensitive to dynamic condition timestamps.
+apiVersion: policy.keese.ai/v1alpha1
+kind: FeatureGate
+metadata:
+  name: cosign-installplan-verify
+status:
+  effective: true

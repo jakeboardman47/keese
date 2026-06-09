@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH8 step 2 assert — the gate is DISABLED end-to-end (the off side of the
+# flip). Mirrors 01-assert but for effective=false / projection=false.
+# Proves the observable behavior FOLLOWS the spec edit (not a one-way set):
+# the projection ConfigMap value changes true → false and status tracks it.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+commands:
+  - command: kubectl wait --for=condition=Ready featuregate/cosign-installplan-verify --timeout=90s
+    namespaced: false
+  - command: ./assert-status.sh cosign-installplan-verify false
+    namespaced: false
+  - command: ./assert-projection.sh cosign-installplan-verify false
+    namespaced: false
+---
+# Native kuttl status assertion (subset match): spec.override=false →
+# status.effective=false. Ready + observedGeneration covered by `kubectl wait`
+# + assert-status.sh (see 01-assert.yaml rationale).
+apiVersion: policy.keese.ai/v1alpha1
+kind: FeatureGate
+metadata:
+  name: cosign-installplan-verify
+status:
+  effective: false

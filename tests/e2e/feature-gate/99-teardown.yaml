@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH8 teardown — delete the FeatureGate the suite created so a rerun's
+# step-0 default assertion (no override CR present) holds, and the
+# projection ConfigMap returns to the documented alpha=off default.
+#
+# kuttl deletes by GVK + name. The reconcile triggered by the delete
+# re-projects the full gate list without this gate, so the projection
+# self-heals — no manual ConfigMap edit needed.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+  - apiVersion: policy.keese.ai/v1alpha1
+    kind: FeatureGate
+    name: cosign-installplan-verify

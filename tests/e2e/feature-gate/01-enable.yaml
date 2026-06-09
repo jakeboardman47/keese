@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH8 step 1 — ENABLE. Apply the FeatureGate for cosign-installplan-verify
+# with spec.override=true. This flips the alpha default (off) ON; the
+# FeatureGateReconciler must project the new effective value into
+# keese-system/keese-features and settle the CR status.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+apply:
+  - featuregate.yaml

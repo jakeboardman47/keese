@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH8 step 3 — DOWNSTREAM BEHAVIOR FLIP (stub; metering-style gate).
+#
+# The deepest observable effect of cosign-installplan-verify is the
+# admission OUTCOME of the keese-cosign-webhook on an OLM InstallPlan:
+#   gate ON  → an InstallPlan referencing an unsigned keese image is DENIED
+#              (handler runs cosign verify; fail-closed → Result.Reason
+#              BundleUnsigned / BundleNotDigestPinned).
+#   gate OFF → the same InstallPlan is ADMITTED with Result.Reason
+#              AllowedFeatureGateOff (handler short-circuits at the top of
+#              Handle()).
+#
+# That flip is NOT observable in the local bootstrap: neither OLM
+# (operators.coreos.com/v1alpha1 InstallPlan CRD) nor the keese-cosign-webhook
+# Deployment + ValidatingWebhookConfiguration (config/cosign-webhook/) is
+# stood up by `make bootstrap-infra`. assert-admission-flip.sh detects the
+# absence and SKIPS cleanly (exit 0) — revisit_when_featuregate_effect_observable.
+#
+# Steps 0-2 already prove the gate flips an observable CLUSTER artifact (the
+# projection ConfigMap the webhook consumes), so the suite asserts a real
+# behavior flip today; this step is the end-to-end admission proof for when
+# the webhook + OLM are deployed.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: ./assert-admission-flip.sh
+    namespaced: false
+    skipLogOutput: false
