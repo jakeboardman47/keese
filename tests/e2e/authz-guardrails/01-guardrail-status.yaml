@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH5 authz-guardrails suite — step 1: GuardrailBinding status / events /
+# default-inherit (deliverables 1 + 3).
+#
+# kuttl wrapper around test-authz-guardrails.sh. These assertions are over
+# the GuardrailBinding status subresource + its event stream, so they are
+# observable via `kubectl get` — but the default-inherit / effectivePolicy
+# union assertion needs jsonpath logic over a nested array that a plain
+# kuttl TestAssert can't express, hence the script.
+#
+# `namespaced: false` — the script targets the `alpha` namespace by name
+# (matching the fixtures), not kuttl's per-test namespace. kuttl runs
+# `command:` from THIS step's directory, hence the relative path.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+    skipLogOutput: false
+  - command: ./test-authz-guardrails.sh
+    namespaced: false
+    skipLogOutput: false

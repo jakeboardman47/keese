@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH5 — namespaced WorkspaceTool that ties the CRD layer to the live
+# ext_authz allow/deny decision (deliverable 2).
+#
+# EH4 already covers the CLUSTER-scoped ToolBinding allow/deny path
+# (`tool:anthropic.messages`). EH5 deliberately drives the OTHER kind —
+# the namespaced, tenant-owned WorkspaceTool — so the suite exercises a
+# path EH4 does not.
+#
+# Resolution chain (internal/authz/extauth/resolver.go composeTool):
+#   request  GET /eh5-search  from a my-ws session pod
+#     -> WorkspaceTool eh5-search (namespace alpha, workspaceRef my-ws)
+#     -> final OpenFGA object `tool:alpha.eh5-search`  (namespace-prefixed)
+#
+# Authorization (the allow tuple) is written by the WORKSPACE controller
+# from spec.egress.allowedTools, NOT by a WorkspaceTool reconciler (there
+# is none — see SUMMARY). The test script grants by adding
+# `alpha.eh5-search` to my-ws.spec.egress.allowedTools, which makes the
+# Workspace controller write:
+#     tool:alpha.eh5-search#allowed_in@workspace:my-ws
+# ext_authz Check then passes -> HTTP 200. Removing it deletes the tuple
+# -> Check fails closed -> HTTP 403. That allow->deny flip, driven by a
+# binding, is the deliverable-2 assertion.
+apiVersion: authz.keese.ai/v1alpha1
+kind: WorkspaceTool
+metadata:
+  name: eh5-search
+  namespace: alpha
+  labels:
+    keese.ai/managed: "true"
+spec:
+  match:
+    paths:
+      - type: PathPrefix
+        value: /eh5-search
+    methods: [GET, POST]
+  toolName: eh5-search
+  workspaceRef:
+    name: my-ws
+  subjectFrom: ServiceAccountSubject
+  workspaceFrom: ServiceAccountName

@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH5 authz-guardrails suite — readiness gate.
+#
+# Prereq-gated first (check-prereqs = OpenFGA store + OpenBao key seeded;
+# check-extauth = the keese-authz ext_authz Deployment is Available). Both
+# skip cleanly when there is no kubectl context and fail-closed against
+# placeholder infra — so the suite never silently passes against the
+# Noop/fake fallbacks.
+#
+# Then wait for the GuardrailBinding controller to drive both bindings to
+# Ready. my-ws is the workspace whose SA / allow tuple the tool allow-deny
+# step uses, so we also wait for it. The deeper status assertions
+# (observedGeneration, effectivePolicy, event reasons, default-inherit)
+# live in 01-guardrail-status.yaml -> test-authz-guardrails.sh.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 240
+commands:
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+  - command: ../lib/check-extauth.sh
+    namespaced: false
+  - command: kubectl wait --for=condition=Ready guardrailbinding/eh5-tenant -n alpha --timeout=180s
+  - command: kubectl wait --for=condition=Ready guardrailbinding/eh5-workspace -n alpha --timeout=180s
+  - command: kubectl wait --for=condition=Ready workspace/my-ws -n alpha --timeout=180s

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH5 authz-guardrails suite — step 0: provision fixtures.
+#
+# Reuses tenant `alpha` + workspace `my-ws` from dev/demo/hello-keese.yaml
+# (the bootstrap precondition / workspace-progression suite). This step
+# adds the GuardrailBinding scope chain (tenant + workspace, default-inherit)
+# and the namespaced WorkspaceTool whose tuple the allow/deny test drives.
+#
+# Apply order: hello-keese.yaml must already be applied (it provisions
+# tenant alpha, AgentRuntime goose-default, my-ws + its session). The
+# cluster-default GuardrailBinding `keese-default` in keese-system is part
+# of the operator bootstrap (config/default/bootstrap/), so the
+# default-inherit assertion has its parent present.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+apply:
+  - guardrails.yaml
+  - workspacetool.yaml

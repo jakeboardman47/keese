@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH5 authz-guardrails suite — step 2: WorkspaceTool tuple -> live
+# allow/deny (deliverable 2).
+#
+# kuttl wrapper around test-tool-allow-deny.sh. Like the EH4 ReBAC suite,
+# the decision is enforced by Envoy ext_authz at request time (not a CRD
+# status field), so we can't observe it via `kubectl get` — the script
+# fires real curl requests through the gateway from inside a my-ws session
+# pod and asserts the grant->allow(200) / revoke->deny(403) flip driven by
+# the WorkspaceTool-derived `tool:alpha.eh5-search#allowed_in` tuple. The
+# gateway-side guardrail ext_proc case is skipped unless GUARDRAIL_EXTPROC=1
+# (shipped-with-stubs; revisit_when_guardrail_extproc_live).
+#
+# Both ext_authz prereqs re-gate here so this step skips cleanly against
+# placeholder infra even if run in isolation. `namespaced: false` — the
+# script targets `alpha` / keese-system by name.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+    skipLogOutput: false
+  - command: ../lib/check-extauth.sh
+    namespaced: false
+    skipLogOutput: false
+  - command: ./test-tool-allow-deny.sh
+    namespaced: false
+    skipLogOutput: false

@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH5 — GuardrailBinding fixtures for the authz-guardrails e2e suite.
+#
+# The GuardrailBinding controller (internal/controller/authz/
+# guardrailbinding_controller.go) only reconciles objects carrying the
+# managed predicate label `keese.ai/managed: "true"` (see constants.go
+# managedLabel + SetupWithManager's predicate filter). Every binding here
+# carries it, otherwise the controller silently ignores the object and the
+# Ready / observedGeneration assertions would never settle.
+#
+# Two bindings exercise the design-06 scope chain + default-inherit:
+#
+#   1. eh5-tenant   (scope: Tenant)    — a tenant-scoped binding that adds
+#      a tool restriction atop the cluster default. It declares NO
+#      spec.inherit; the cluster-default `keese-default` binding in
+#      keese-system is inherited implicitly through the merge lattice, and
+#      the controller emits DefaultBindingMissing (warning) only when the
+#      cluster default is absent. With the bootstrap default present, the
+#      tenant binding reaches Ready and its effectivePolicy reflects the
+#      merged (default ∪ tenant) deny set — the default-inherit invariant.
+#
+#   2. eh5-workspace (scope: Workspace) — a workspace-scoped binding that
+#      EXPLICITLY inherits eh5-tenant via spec.inherit. This drives the
+#      ParentReadable condition + the guardrail.inherits ReBAC tuple, and
+#      proves the strictest-wins chain default → tenant → workspace.
+#
+# Both reach Ready=True / Phase=Ready with status.observedGeneration ==
+# metadata.generation and a non-nil status.effectivePolicy.
+---
+apiVersion: authz.keese.ai/v1alpha1
+kind: GuardrailBinding
+metadata:
+  name: eh5-tenant
+  namespace: alpha
+  labels:
+    keese.ai/managed: "true"
+    keese.ai/binding-scope: Tenant
+spec:
+  scope:
+    type: Tenant
+    tenantRef:
+      name: alpha
+      namespace: alpha
+  tools:
+    # Adds a restriction atop the cluster default's deny baseline. The
+    # merged effectivePolicy.deny is the UNION (design 06 strictest-wins).
+    deny:
+      - net.raw
+    rateLimit:
+      requests: 0
+      window: "1m"
+      scope: sa
+  tokenBudget:
+    input: 0
+    output: 0
+    total: 0
+---
+apiVersion: authz.keese.ai/v1alpha1
+kind: GuardrailBinding
+metadata:
+  name: eh5-workspace
+  namespace: alpha
+  labels:
+    keese.ai/managed: "true"
+    keese.ai/binding-scope: Workspace
+spec:
+  scope:
+    type: Workspace
+    workspaceRef:
+      name: my-ws
+      namespace: alpha
+  # Explicit inheritance of the tenant binding — drives ParentReadable +
+  # the guardrail.inherits tuple, and the default → tenant → workspace
+  # merge chain.
+  inherit:
+    - name: eh5-tenant
+      namespace: alpha
+  tools:
+    deny:
+      - browser.navigate
+    rateLimit:
+      requests: 0
+      window: "1m"
+      scope: sa
+  tokenBudget:
+    input: 0
+    output: 0
+    total: 0
