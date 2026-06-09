@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Per-package minimum line-coverage thresholds — the coverage RATCHET.
+#
+# Schema
+# ------
+#   targets:                  # map: import-path -> minimum line-coverage %
+#     <go-import-path>: <float 0-100>
+#
+# Consumed by scripts/coverage-check.sh (invoked via `make coverage-check`,
+# part of `make verify`). The script runs `go test -short -coverprofile`,
+# computes statement-weighted line coverage per package via `go tool cover
+# -func`, and exits non-zero for any package whose measured coverage is below
+# its target here. A package present in the build but ABSENT from this map is
+# reported informationally (warn), never a failure.
+#
+# Rules of the ratchet
+# --------------------
+#   * Thresholds are seeded from a REAL measured `go test -short
+#     -coverprofile=<tmp> ./...` run (2026-06-09, CGO_ENABLED=0) and set at or
+#     just below the measured floor — NEVER above. This is a ratchet, not a
+#     wish: raising a threshold is a normal coverage-uplift diff; LOWERING one
+#     is a deliberate, rubric-scored change requiring a justification in the
+#     plan iteration log (rule 06-testing §Coverage).
+#   * Floors are rounded DOWN from the measured value to absorb minor
+#     measurement jitter (e.g. measured 79.31 -> 79.0).
+#
+# Packages at ~0% (`-short` produces no meaningful unit coverage today): the
+# cmd/ entrypoints, the api/ generated DeepCopy code, and the runtime
+# providers adkgo / adkpython plus runtime/podexec and wflauncher are stubs or
+# integration-only. Their floor is pinned at 0.0 so the gate stays green; phase
+# EH13 authors real tests and raises them. Do NOT delete these entries — a
+# present 0.0 floor documents the intentional debt; an absent entry would
+# silently downgrade a future regression to a warn.
+#
+# Measurement note: the controller packages carry their behavioural tests
+# behind the `integration` build tag (envtest); under `-short` only their pure
+# helpers are exercised, hence the low-but-nonzero floors below.
+
+targets:
+  # --- Well-covered units (real floors) ---------------------------------
+  github.com/keese-ai/keese/internal/admission/cosign: 91.0
+  github.com/keese-ai/keese/internal/authz/extauth: 75.0
+  github.com/keese-ai/keese/internal/featuregate: 79.0
+  github.com/keese-ai/keese/internal/rebac: 79.0
+  github.com/keese-ai/keese/internal/runtime/providers/goose: 74.0
+  github.com/keese-ai/keese/internal/runtime/spi/v1alpha1: 100.0
+
+  # --- Controllers: integration-tagged; -short hits helpers only --------
+  github.com/keese-ai/keese/internal/controller/authz: 20.0
+  github.com/keese-ai/keese/internal/controller/keese: 10.0
+  github.com/keese-ai/keese/internal/controller/policy: 16.0
+
+  # --- Intentional 0% debt — raised by EH13 -----------------------------
+  # Runtime providers / exec / launcher with no -short unit coverage yet.
+  github.com/keese-ai/keese/internal/runtime/podexec: 0.0
+  github.com/keese-ai/keese/internal/runtime/providers/adkgo: 0.0
+  github.com/keese-ai/keese/internal/runtime/providers/adkpython: 0.0
+  github.com/keese-ai/keese/internal/wflauncher: 0.0
