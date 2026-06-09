@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH4 ReBAC decision suite — readiness gate for the DENY workspace.
+#
+# Both the ALLOW workspace (`my-ws`, provisioned by hello-keese.yaml /
+# the workspace-progression suite) and the new DENY workspace must reach
+# Ready before we fire requests, so their SAs + ReBAC tuples are settled.
+# Prereq-gated first so the suite skips cleanly against placeholder infra.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 240
+commands:
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+  - command: ../lib/check-extauth.sh
+    namespaced: false
+  - command: kubectl wait --for=condition=Ready workspace/my-ws -n alpha --timeout=180s
+  - command: kubectl wait --for=condition=Ready workspace/deny-ws -n alpha --timeout=180s

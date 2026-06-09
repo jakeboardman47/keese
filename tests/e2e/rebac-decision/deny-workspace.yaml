@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# The DENY workspace for the EH4 ReBAC decision suite.
+#
+# `deny-ws` is identical in shape to `my-ws` (dev/demo/hello-keese.yaml)
+# EXCEPT that spec.egress.allowedTools is empty. The Workspace controller
+# writes one `tool:<name>#allowed_in@workspace:<wsuid>` ReBAC tuple per
+# allowedTools element — so with an empty list, NO authorizing tuple is
+# written and OpenFGA's `tool:anthropic.messages#can_call@<deny-ws-sa>`
+# Check evaluates to false. ext_authz then returns HTTP 403 (fail-closed).
+#
+# Reuses tenant `alpha` + cluster AgentRuntime `goose-default` already
+# provisioned by hello-keese.yaml. The WorkspaceSession exists so the
+# controller mints the `ksa-<uid>` ServiceAccount whose projected token
+# the suite uses to fire the deny request.
+
+# ── Workspace (no granted tools) ─────────────────────────────────────
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: deny-ws
+  namespace: alpha
+spec:
+  runtimeRef:
+    name: goose-default
+  tenantRef:
+    name: alpha
+  interactive: true
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow
+  # Empty allowlist on purpose: no tool tuple is written, so every
+  # ext_authz Check for this workspace fails closed.
+  egress:
+    allowedTools: []
+---
+# ── WorkspaceSession ─────────────────────────────────────────────────
+# Present so the controller provisions the workspace SA (`ksa-<uid>`).
+apiVersion: keese.ai/v1alpha1
+kind: WorkspaceSession
+metadata:
+  name: deny-session
+  namespace: alpha
+spec:
+  workspaceRef: deny-ws
+  attachSubject: "user:alice@example.com"
+  sessionName: default
+  mode: per-user

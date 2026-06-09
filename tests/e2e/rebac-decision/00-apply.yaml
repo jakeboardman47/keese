@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH4 — live ReBAC allow/deny e2e: provision the DENY workspace.
+#
+# The ALLOW side reuses `my-ws` from dev/demo/hello-keese.yaml (granted
+# `anthropic.messages` via spec.egress.allowedTools — see hello-keese).
+# This step adds `deny-ws`: an otherwise-identical Workspace under the
+# same tenant `alpha`, but with an EMPTY egress.allowedTools. The
+# Workspace controller therefore writes NO
+# `tool:anthropic.messages#allowed_in@workspace:<deny-ws-uid>` tuple, so
+# OpenFGA's `can_call` Check denies for this workspace's SA — the
+# fail-closed deny path the suite asserts.
+#
+# Apply order: hello-keese.yaml (workspace-progression suite, or the
+# bootstrap precondition) provisions tenant `alpha`, the cluster-scoped
+# `goose-default` AgentRuntime, and `my-ws`. This file only adds the
+# deny workspace + its session so the controller mints `ksa-<uid>`.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+apply:
+  - deny-workspace.yaml

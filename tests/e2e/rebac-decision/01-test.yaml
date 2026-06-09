@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH4 ReBAC decision suite — the live allow/deny/revocation assertions.
+#
+# kuttl wrapper around test-rebac-decision.sh. Like aigw-defense, the
+# decision is enforced by Envoy ext_authz at request time (not by a CRD
+# status field), so we can't observe it via `kubectl get`. The script
+# fires real curl requests through the gateway from inside a workspace
+# session pod (mounted CA + projected SA token, same as a real agent)
+# and asserts:
+#   - allow workspace (my-ws, granted) → HTTP 200
+#   - deny workspace (deny-ws, no tuple) → HTTP 403 (fail-closed)
+#   - the ext_authz deny audit line carries (tuple,SA,host,decision)
+#     with no token/body (rule 05.10)
+#   - revoking the allow grant flips the decision allow→deny within the
+#     ext_authz cache TTL
+#
+# `namespaced: false` — the script targets alpha / keese-system by name,
+# not via kuttl's per-test namespace. kuttl runs `command:` from THIS
+# step's directory, hence the relative paths.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  # Real-path-or-fail prereqs gate: refuses to run when OpenFGA / OpenBao
+  # aren't seeded with real values, so the suite never silently passes
+  # against fake-fallback paths.
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+    skipLogOutput: false
+  - command: ../lib/check-extauth.sh
+    namespaced: false
+    skipLogOutput: false
+  - command: ./test-rebac-decision.sh
+    namespaced: false
+    skipLogOutput: false
