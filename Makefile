@@ -163,6 +163,10 @@ test-e2e-olm-upgrade:  ## kuttl OLM upgrade suite: install v1, upgrade to v2, as
 	echo "Running OLM upgrade kuttl suite (tests/e2e/olm-upgrade)..."; \
 	$${KUTTL} test tests/e2e/olm-upgrade --config tests/e2e/kuttl-config.yaml
 
+.PHONY: coverage-check
+coverage-check:  ## Per-package coverage gate vs test/coverage-targets.yaml (rule 06) (CI)
+	@$(SCRIPTS_DIR)/coverage-check.sh
+
 .PHONY: test
 test: test-unit test-integration  ## Composed: unit + integration
 
@@ -171,7 +175,7 @@ conductor-test:  ## Conductor orchestrator unit tests (scheduler/parity/registry
 	@bash conductor/tests/run.sh
 
 .PHONY: verify
-verify: fmt vet lint test bundle-validate  ## fmt+vet+lint+test+bundle-validate aggregator
+verify: fmt vet lint test coverage-check bundle-validate  ## fmt+vet+lint+test+coverage-check+bundle-validate aggregator
 
 # ==== Manifest + bundle generation (delegated) ==========================
 
