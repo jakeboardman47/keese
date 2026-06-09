@@ -167,6 +167,11 @@ test-e2e-olm-upgrade:  ## kuttl OLM upgrade suite: install v1, upgrade to v2, as
 coverage-check:  ## Per-package coverage gate vs test/coverage-targets.yaml (rule 06) (CI)
 	@$(SCRIPTS_DIR)/coverage-check.sh
 
+.PHONY: sigterm-drain-test
+sigterm-drain-test:  ## SIGTERM drain contract for each long-running cmd/** pod (rule 06 §10); skips cleanly if no pod
+	@$(GUARD_CONTEXT)
+	@$(SCRIPTS_DIR)/dev/sigterm-drain-test.sh $(SIGTERM_TARGETS)
+
 .PHONY: test
 test: test-unit test-integration  ## Composed: unit + integration
 
