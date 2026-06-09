@@ -11,8 +11,9 @@ depends:
   - ../../../internal/controller/policy/featuregate_controller.go
   - ../../../internal/featuregate
 related_skills: [plan-management]
-status: planned
+status: shipped-with-stubs
 last_verified: 2026-06-09
+revisit_when_featuregate_effect_observable: true
 phase: EH8
 model_tier: sonnet
 depends_on: []

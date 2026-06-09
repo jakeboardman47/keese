@@ -61,6 +61,22 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   5. Bootstrap default GuardrailBinding ships `keese-default` but the controller's
      `defaultBindingName` const is `keese.ai-default` → non-fatal `DefaultBindingMissing`.
 
+### 2026-06-09 — e2e-hardening wave 3 (EH8–EH10): featuregate/workflow/real-drain
+
+- Suites (all `shipped-with-stubs`): `tests/e2e/feature-gate/` (EH8 — gate flip via
+  the `keese-features` projection ConfigMap), `workflow/` (EH9 — real Workflow/
+  WorkflowRun → live Argo `argosay` → Succeeded + concurrency + cascade GC), and the
+  reworked `agentruntime-drain/` (EH10 — real `keese-drain` under SIGTERM, orphan
+  prereq fixed, self-contained fixture).
+- **More controller/spec follow-ups surfaced:**
+  - `Workflow.status.runCount` is defined + printed but **never written** by the
+    reconciler (EH9 skips the increment assert; `revisit_when_workflow_run_count_live`).
+  - **Fixed** the Workflow finalizer spec drift: `keese.ai-v1alpha1-workflow.md` now
+    reads `finalizers.workflow.keese.ai/cascade` (matching the controller), not
+    `workflowtemplate-gc`.
+  - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
+    wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
+
 ### 2026-06-08 — Conductor: parallel-build orchestrator adopted
 
 - Ported the `conductor/` wave orchestrator (scheduler · footprint-coloring ·

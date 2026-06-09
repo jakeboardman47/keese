@@ -11,8 +11,10 @@ depends:
   - ../../../internal/controller/keese/workflow_controller.go
   - ../../../internal/controller/keese/workflowrun_controller.go
 related_skills: [plan-management]
-status: planned
+status: shipped-with-stubs
 last_verified: 2026-06-09
+revisit_when_workflow_run_count_live: true
+revisit_when_workflow_triggers_live: true
 phase: EH9
 model_tier: sonnet
 depends_on: []

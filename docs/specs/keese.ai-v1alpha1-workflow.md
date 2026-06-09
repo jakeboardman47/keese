@@ -129,7 +129,7 @@ type WorkflowStatus struct {
 ```go
 // +kubebuilder:rbac:groups=keese.ai,resources=workflows,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=argoproj.io,resources=workflowtemplates,verbs=get;list;watch;create;update;patch;delete
-// Finalizer: finalizers.workflow.keese.ai/workflowtemplate-gc
+// Finalizer: finalizers.workflow.keese.ai/cascade
 ```
 
 ### Acceptance tests — Workflow (≥ 4)

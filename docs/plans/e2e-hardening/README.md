@@ -56,9 +56,9 @@ conductor waves ([ADR 29](../../designs/29-conductor-orchestration.md)).
 | EH5 | GuardrailBinding + ToolBinding + WorkspaceTool e2e | test-engineer | wave | EH4 | shipped-with-stubs |
 | EH6 | CrossTenantAgreement + OIDCProvider e2e | test-engineer | wave | EH4 | shipped-with-stubs |
 | EH7 | TokenBudget enforcement e2e | test-engineer | wave | — | shipped-with-stubs |
-| EH8 | FeatureGate behavior e2e | test-engineer | wave | — | planned |
-| EH9 | Workflow + WorkflowRun e2e | test-engineer | wave | — | planned |
-| EH10 | Real drain/SIGTERM e2e (replace stand-ins) | test-engineer | wave | EH3 | planned |
+| EH8 | FeatureGate behavior e2e | test-engineer | wave | — | shipped-with-stubs |
+| EH9 | Workflow + WorkflowRun e2e | test-engineer | wave | — | shipped-with-stubs |
+| EH10 | Real drain/SIGTERM e2e (replace stand-ins) | test-engineer | wave | EH3 | shipped-with-stubs |
 | EH11 | RecipeSource + RuntimeExtension e2e | test-engineer | wave | — | planned |
 | EH12 | Retire/replace scaffold `test/e2e/` | test-engineer | wave | — | planned |
 | EH13 | Runtime SPI unit tests (adkgo/adkpython/podexec) | test-engineer | wave | — | planned |

@@ -10,8 +10,9 @@ depends:
   - ../../../cmd/keese-drain/main.go
   - ../../../tests/e2e/agentruntime-drain
 related_skills: [plan-management]
-status: planned
+status: shipped-with-stubs
 last_verified: 2026-06-09
+revisit_when_drain_image_live: true
 phase: EH10
 model_tier: sonnet
 depends_on: [EH3]

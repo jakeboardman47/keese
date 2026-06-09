@@ -53,13 +53,15 @@ more numbered TestStep YAMLs that are executed in order.
 |---|---|---|
 | `aigw-defense/` | AI Gateway ext_authz strips hostile auth headers; four shapes must return HTTP 200 with BSP-injected credential. | TD-P1-07 |
 | `workspace-progression/` | Tenant → Workspace → WorkspaceSession lifecycle reaches Active/Ready. | TD-P1-07 |
-| `agentruntime-drain/` | Drain → pod-delete → Resume round-trip; checkpoint survives across pod restart. | TD-P1-02 |
+| `agentruntime-drain/` | Real `keese-drain` under SIGTERM → 3-field shutdown event + checkpoint/SQLite survival; self-contained fixture. (in-cluster drain run gated on goose-runtime image.) | TD-P1-02 · EH10 |
 | `multi-tenant/` | Two concurrent tenants Active; cross-tenant egress blocked by NetworkPolicy (probe exits Failed). | TD-P3-07 |
 | `chaos-network/` | Deny-all NetworkPolicy triggers EgressUnavailable within 30s; restore clears it; controller restart leaves session pod running. | TD-P3-08 |
 | `rebac-decision/` | Live ext_authz CRD-driven decision: granted tool → HTTP 200, ungranted → 403 (fail-closed), token-free deny audit (rule 05.10), allow→deny revoke flip within cache TTL. | EH4 |
 | `authz-guardrails/` | GuardrailBinding default-inherit deny-union + finite event reasons; WorkspaceTool tool allow→200 / revoke→403. (guardrail ext_proc gated.) | EH5 |
 | `cross-tenant/` | CrossTenantAgreement trust-tuple write + expiry-driven removal; OIDCProvider Ready. (cross-tenant request decision gated.) | EH6 |
 | `token-budget/` | TokenBudget Ready + BackendTrafficPolicy rate-limit projection + in-budget→200. (over-budget 429 gated on metering.) | EH7 |
+| `feature-gate/` | FeatureGate flip observable via the `keese-features` projection ConfigMap (enable→true/disable→false) + status. (cosign admission-outcome flip gated on OLM/webhook.) | EH8 |
+| `workflow/` | Workflow→Argo `WorkflowTemplate`/`CronJob`; WorkflowRun→Argo→Succeeded (live argosay); `concurrencyPolicy=Forbid`; finalizer-cascade GC. (runCount gated.) | EH9 |
 
 ## Adding a case
 
