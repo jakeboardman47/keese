@@ -56,6 +56,7 @@ more numbered TestStep YAMLs that are executed in order.
 | `agentruntime-drain/` | Drain → pod-delete → Resume round-trip; checkpoint survives across pod restart. | TD-P1-02 |
 | `multi-tenant/` | Two concurrent tenants Active; cross-tenant egress blocked by NetworkPolicy (probe exits Failed). | TD-P3-07 |
 | `chaos-network/` | Deny-all NetworkPolicy triggers EgressUnavailable within 30s; restore clears it; controller restart leaves session pod running. | TD-P3-08 |
+| `rebac-decision/` | Live ext_authz CRD-driven decision: granted tool → HTTP 200, ungranted → 403 (fail-closed), token-free deny audit (rule 05.10), allow→deny revoke flip within cache TTL. | EH4 |
 
 ## Adding a case
 

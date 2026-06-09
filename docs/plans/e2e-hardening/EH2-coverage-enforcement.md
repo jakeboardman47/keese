@@ -9,7 +9,7 @@ depends:
   - ../../../.claude/rules/06-testing.md
   - ../../../Makefile
 related_skills: [plan-management, makefile-authoring]
-status: planned
+status: complete
 last_verified: 2026-06-09
 phase: EH2
 model_tier: sonnet

@@ -12,6 +12,25 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
+### 2026-06-09 — e2e-hardening track: wave 1 (EH2, EH4)
+
+- Plan [e2e-hardening/README.md](docs/plans/e2e-hardening/README.md) (EH1–EH14,
+  conductor waves) closes the 2026-06-08 e2e/coverage-gap analysis. Wave 1 merged.
+- **EH2 coverage ratchet:** per-package floors in `test/coverage-targets.yaml`;
+  `make coverage-check` (in `verify`) fails below floor — lowering one is a
+  reviewable diff. Controller floors are low because their behavioural tests are
+  `integration`-tagged (`-short` only hits helpers); `podexec`/`adkgo`/`adkpython`/
+  `wflauncher` pinned at 0.0 (EH13 raises). CI wiring pending in EH1.
+- **EH4 live ReBAC e2e** ([tests/e2e/rebac-decision/](tests/e2e/rebac-decision/)):
+  ext_authz allow→200, deny→403 (empty `egress.allowedTools` = fail-closed),
+  token-free deny audit (rule 05.10), allow→deny revoke flip within cache TTL.
+- **Local-only gotcha:** macOS Go 1.26 + nix `make test` fails to link CGO
+  controller test binaries (`_SecTrustCopyCertificateChain`) — use `CGO_ENABLED=0`
+  locally; Linux CI unaffected. Go `test/e2e` BeforeSuite needs docker buildx.
+- **Conductor gotcha:** Agent-tool worktrees surfaced ~62 spurious `make`-regen
+  uncommitted files (pool seeding); committed diffs were clean, so
+  `git checkout -- .` in the worktree before `worktree-merge.sh --no-verify-green`.
+
 ### 2026-06-08 — Conductor: parallel-build orchestrator adopted
 
 - Ported the `conductor/` wave orchestrator (scheduler · footprint-coloring ·

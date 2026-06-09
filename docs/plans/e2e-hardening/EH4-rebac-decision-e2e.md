@@ -10,7 +10,7 @@ depends:
   - ../../../internal/authz/extauth/check.go
   - ../../../tests/e2e/lib/check-prereqs.sh
 related_skills: [plan-management]
-status: planned
+status: complete
 last_verified: 2026-06-09
 phase: EH4
 model_tier: sonnet
