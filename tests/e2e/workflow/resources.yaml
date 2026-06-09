@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 fixtures applied by 01-workflow.yaml: the Workflow CR under test.
+# Kept in a separate file (kuttl `apply:` references it) so the same CR is
+# re-applied idempotently if the step retries.
+apiVersion: keese.ai/v1alpha1
+kind: Workflow
+metadata:
+  name: wf-demo
+  namespace: wf-e2e
+spec:
+  workspaceRef:
+    name: wf-ws
+  entrypoint: main
+  concurrencyPolicy: Forbid
+  templates:
+    # One container step. argosay:v2 prints its args and exits 0 quickly —
+    # the live Argo workflow-controller runs it to Succeeded, which the
+    # WorkflowRunReconciler back-projects to phase=Succeeded (03-assert).
+    - name: echo
+      image: argoproj/argosay:v2
+      command:
+        - /argosay
+      args:
+        - echo
+        - "keese-wf-e2e"
+  triggers:
+    # Cron trigger -> batch/v1 CronJob projection. suspend:true so the
+    # CronJob is created (projection asserted) but never fires on the shared
+    # cluster.
+    - type: Cron
+      cron:
+        schedule: "0 0 31 2 *"
+        suspend: true

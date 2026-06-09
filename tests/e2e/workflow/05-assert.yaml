@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 05 (assert): the second run is FORBIDDEN.
+#
+# Deliverable #3, part 1 (concurrencyPolicy behavior on a 2nd run). With
+# ConcurrencyPolicy=Forbid and wfr-block-a active, wfr-block-b must:
+#   - stay phase=Pending (not Provisioning/Running),
+#   - carry Ready=False with reason=ConcurrentRunForbidden
+#     (checkConcurrency §223),
+#   - and NOT get an Argo Workflow projected — the gate returns before
+#     projectArgoWorkflow, so status.argoWorkflowName stays empty and no
+#     argoproj.io Workflow keese-wfr-wfr-block-b exists.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+---
+apiVersion: keese.ai/v1alpha1
+kind: WorkflowRun
+metadata:
+  name: wfr-block-b
+  namespace: wf-e2e
+status:
+  phase: Pending
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: ConcurrentRunForbidden
+---
+# Fail-closed: no Argo Workflow was projected for the forbidden run. kuttl's
+# `errors:` block fails the step if a matching object EXISTS.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+errors:
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Workflow
+    metadata:
+      name: keese-wfr-wfr-block-b
+      namespace: wf-e2e

@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 00 (apply): provision the self-contained fixtures the
+# Workflow / WorkflowRun controllers reconcile against.
+#
+# Names are deliberately distinct from every other suite (tenant `wfe2e`,
+# namespace `wf-e2e`, workspace `wf-ws`) so this suite never collides with
+# the shared kind-keese cluster state another tests/e2e/* case owns (kuttl
+# runs ALL cases against the SAME cluster).
+#
+# Why a real Tenant + Workspace + AgentRuntime and not just bare CRs:
+#   - WorkflowRunReconciler.resolveTenantUID() walks Workspace -> Tenant to
+#     name the per-run NATS stream (workflowrun_controller.go §307). A real
+#     Workspace exercises that lookup instead of the UID fallback.
+#   - It keeps the fixtures realistic without depending on the demo manifest
+#     another suite (workspace-progression) already owns and asserts on.
+#
+# Prereq: a bootstrapped kind-keese cluster with Argo Workflows live
+#   (dev/bootstrap/helmfile.yaml `argo-workflows` release, cluster-scoped
+#   workflow-controller). Do NOT run with `make test-e2e` without a live
+#   cluster + Argo.
+apiVersion: keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: wfe2e
+spec:
+  adminSubjects:
+    - kind: User
+      name: ada@workflow.example
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wf-e2e
+  labels:
+    keese.ai/tenant: wfe2e
+---
+# Cluster-scoped AgentRuntime the Workspace's runtimeRef points at. The
+# Workflow itself never starts this runtime; it only needs to exist so the
+# Workspace admits and reconciles.
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  name: wf-runtime
+spec:
+  implementation:
+    goose:
+      image: ghcr.io/keese-ai/goose-runtime:dev
+---
+# Non-interactive Workspace — WorkflowRuns are rejected on interactive
+# workspaces (workflowrun VAP, spec §125), so this MUST be interactive:false.
+apiVersion: keese.ai/v1alpha1
+kind: Workspace
+metadata:
+  name: wf-ws
+  namespace: wf-e2e
+spec:
+  runtimeRef:
+    name: wf-runtime
+  tenantRef:
+    name: wfe2e
+  interactive: false
+  sessionMode: OnDemand
+  concurrencyPolicy: Allow

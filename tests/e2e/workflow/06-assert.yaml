@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 06 (assert): the cascade finalizer is installed on wf-demo.
+#
+# Deliverable #3, part 2 (finalizers.workflow.keese.ai/cascade): the
+# WorkflowReconciler adds this finalizer on first reconcile (workflowFinalizer
+# = "finalizers.workflow.keese.ai/cascade", workflow_controller.go §28, added
+# §90). Its presence is what makes the controller-driven cascade cleanup in
+# step 07 run on delete (reconcileDelete §161) rather than a bare GC.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+commands:
+  # jsonpath over the finalizers list; greps for the exact cascade finalizer.
+  - command: |
+      kubectl get workflow/wf-demo -n wf-e2e \
+        -o jsonpath='{.metadata.finalizers}' | grep -q 'finalizers.workflow.keese.ai/cascade'

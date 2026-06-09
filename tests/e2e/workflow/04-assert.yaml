@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 04 (assert): the first run of wf-block is ACTIVE (non-
+# terminal), so step 05's second run will hit the Forbid gate.
+#
+# We wait for status.argoWorkflowName to be set: at that point the run is at
+# least Provisioning (workflowrun_controller.go §146), which the concurrency
+# gate treats as active (only Succeeded/Failed/Error are skipped, §211). We
+# additionally wait for the Argo Workflow to start running so the window is
+# wide and not racing the sleep's startup.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 180
+commands:
+  - command: |
+      kubectl wait --for=jsonpath='{.status.argoWorkflowName}'=keese-wfr-wfr-block-a \
+        workflowrun/wfr-block-a -n wf-e2e --timeout=120s
+  # Argo Workflow object exists and is progressing (Running keeps the
+  # concurrency window open for step 05).
+  - command: |
+      kubectl wait --for=jsonpath='{.status.phase}'=Running \
+        workflow.argoproj.io/keese-wfr-wfr-block-a -n wf-e2e --timeout=150s

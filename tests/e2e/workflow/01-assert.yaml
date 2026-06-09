@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 01 (assert): the Workflow reconciled.
+#
+# Deliverable #1 (Workflow projection): the Workflow reaches Ready and
+# projects its Argo artifact + the Cron-trigger CronJob.
+#
+#   - Workflow Ready=True / phase=Ready: the controller only sets these
+#     AFTER ProjectWorkflowTemplate returns (workflow_controller.go §147),
+#     so a Ready Workflow already proves the Argo template SSA was attempted;
+#     the native argoproj.io assert below confirms it actually landed.
+#   - status.workflowTemplateRef records the projected name (§108).
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+commands:
+  - command: kubectl wait --for=condition=Ready workflow/wf-demo -n wf-e2e --timeout=90s
+---
+apiVersion: keese.ai/v1alpha1
+kind: Workflow
+metadata:
+  name: wf-demo
+  namespace: wf-e2e
+status:
+  phase: Ready
+  # ProjectWorkflowTemplate returns argoTemplateName(wf) = "argo-wft-" + name
+  # (workflow_argo_client.go §131), written back to status §108.
+  workflowTemplateRef: argo-wft-wf-demo
+---
+# The projected Argo WorkflowTemplate exists in the same namespace, labelled
+# by the controller (buildArgoWorkflowTemplate §148) and owner-ref'd to the
+# Workflow so cascade GC works (asserted in 05).
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: argo-wft-wf-demo
+  namespace: wf-e2e
+  labels:
+    keese.ai/managed: "true"
+    keese.ai/workflow: wf-demo
+---
+# The Cron trigger projected a batch/v1 CronJob (reconcileCronTrigger §246).
+# Name = cronJobName(wf) = "keese-wf-" + name + "-cron" (§475).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: keese-wf-wf-demo-cron
+  namespace: wf-e2e
+  labels:
+    keese.ai/managed: "true"
+    keese.ai/workflow: wf-demo
+spec:
+  schedule: "0 0 31 2 *"
+  suspend: true

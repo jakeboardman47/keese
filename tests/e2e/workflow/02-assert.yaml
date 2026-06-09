@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 02 (assert): the WorkflowRun projected an Argo Workflow.
+#
+# Deliverable #2, part 1 (WorkflowRun -> Argo Workflow): the controller
+# assigns status.argoWorkflowName once ProjectWorkflow returns
+# (workflowrun_controller.go §144) and a real argoproj.io/v1alpha1 Workflow
+# of that name exists in the namespace.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+commands:
+  # status.argoWorkflowName is set on first successful projection; wait for
+  # it rather than racing the 15s reconcile requeue.
+  - command: |
+      kubectl wait --for=jsonpath='{.status.argoWorkflowName}'=keese-wfr-wfr-demo \
+        workflowrun/wfr-demo -n wf-e2e --timeout=90s
+---
+# The projected Argo Workflow exists. Name = "keese-wfr-" + run name
+# (projectArgoWorkflow §344); labels set in §353.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: keese-wfr-wfr-demo
+  namespace: wf-e2e
+  labels:
+    keese.ai/managed: "true"
+    keese.ai/workflow-run: wfr-demo
+    keese.ai/workflow: wf-demo

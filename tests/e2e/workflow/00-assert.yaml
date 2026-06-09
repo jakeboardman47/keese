@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 00 (assert): the fixtures exist. We gate on the Tenant
+# reaching Active and the Workspace object existing — NOT on Workspace
+# Ready. The Workflow controller projects its Argo WorkflowTemplate from
+# the Workflow CR alone (workflow_controller.go §99); it does not require a
+# Ready Workspace. Gating on Workspace Ready here would couple this suite to
+# the full runtime/PVC/NetworkPolicy bring-up that workspace-progression
+# already owns, for no added coverage of the Workflow controller.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+commands:
+  - command: kubectl wait --for=jsonpath='{.status.phase}'=Active tenant.keese.ai/wfe2e --timeout=90s
+  - command: kubectl get workspace/wf-ws -n wf-e2e

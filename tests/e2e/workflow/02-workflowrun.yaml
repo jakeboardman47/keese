@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 02 (apply): create the first WorkflowRun against wf-demo.
+#
+# The WorkflowRunReconciler (workflowrun_controller.go §66) fetches the
+# owning Workflow, runs the concurrency + CTA gates, provisions a NATS
+# stream, then projects an Argo Workflow that references the WorkflowTemplate
+# wf-demo projected in step 01. Argo's live workflow-controller then runs the
+# argosay container to completion.
+apiVersion: keese.ai/v1alpha1
+kind: WorkflowRun
+metadata:
+  name: wfr-demo
+  namespace: wf-e2e
+spec:
+  workspaceRef:
+    name: wf-ws
+  workflowRef:
+    name: wf-demo
+  retryBudget: 3
+  parameters:
+    - name: greeting
+      value: hello

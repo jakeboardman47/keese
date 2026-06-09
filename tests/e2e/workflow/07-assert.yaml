@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 07 (assert): cascade cleanup completed.
+#
+# Deliverable #3, part 2 (cascade GC): after the Workflow delete, the
+# cascade finalizer ran reconcileDelete to completion, so:
+#   - the Workflow wf-demo is gone (finalizer released, not wedged in
+#     Terminating),
+#   - the WorkflowRun wfr-demo is gone (its cleanup finalizer released),
+#   - the owner-ref'd Argo WorkflowTemplate argo-wft-wf-demo is garbage-
+#     collected (DeleteWorkflowTemplate + owner-ref cascade).
+#
+# kuttl's `errors:` block fails the step if ANY of these still EXIST. A
+# finalizer stuck open would leave the object Terminating and trip this.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 150
+errors:
+  - apiVersion: keese.ai/v1alpha1
+    kind: Workflow
+    metadata:
+      name: wf-demo
+      namespace: wf-e2e
+  - apiVersion: keese.ai/v1alpha1
+    kind: WorkflowRun
+    metadata:
+      name: wfr-demo
+      namespace: wf-e2e
+  - apiVersion: argoproj.io/v1alpha1
+    kind: WorkflowTemplate
+    metadata:
+      name: argo-wft-wf-demo
+      namespace: wf-e2e

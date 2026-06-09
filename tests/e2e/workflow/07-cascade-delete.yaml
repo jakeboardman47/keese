@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 07 (delete): exercise the cascade-cleanup-on-delete path.
+#
+# wfr-demo is already terminal (Succeeded, step 03), so the Workflow's
+# reconcileDelete (workflow_controller.go §161) sees zero ACTIVE runs and
+# proceeds: it deletes the Argo WorkflowTemplate (DeleteWorkflowTemplate
+# §193) and releases finalizers.workflow.keese.ai/cascade (§203), letting
+# Kubernetes garbage-collect the Workflow.
+#
+# We delete the run first (its own finalizer cleanup §469 runs the NATS
+# teardown + Argo Workflow delete) then the Workflow. Both deletes block on
+# their finalizers completing, so a clean return is itself the finalizer
+# assertion; 07-assert.yaml confirms the objects (and the cascaded Argo
+# WorkflowTemplate) are gone.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: |
+      kubectl delete workflowrun/wfr-demo -n wf-e2e --timeout=120s --ignore-not-found
+    skipLogOutput: false
+  - command: |
+      kubectl delete workflow/wf-demo -n wf-e2e --timeout=120s --ignore-not-found
+    skipLogOutput: false

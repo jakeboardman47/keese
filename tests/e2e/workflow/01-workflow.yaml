@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 01 (apply): the Workflow CR the WorkflowReconciler projects
+# into an Argo WorkflowTemplate + a Cron-trigger CronJob.
+#
+# - `entrypoint: main` + one template `echo` → the controller builds an Argo
+#   WorkflowTemplate with a `main` steps template chaining `echo`
+#   (keeseStepsToArgoTemplates, workflow_argo_client.go §216).
+# - The `echo` step image is argosay:v2 — Argo's canonical example image
+#   that exits 0 in seconds, so the WorkflowRun projected from this Workflow
+#   later (02/03) actually reaches Argo phase Succeeded under the live
+#   workflow-controller. No status patching needed.
+# - One Cron trigger → the controller SSA-projects a batch/v1 CronJob named
+#   `keese-wf-wf-demo-cron` (reconcileCronTrigger, workflow_controller.go
+#   §246). suspend:true keeps it from actually firing extra runs on the
+#   shared cluster while still exercising the projection path.
+# - concurrencyPolicy:Forbid is read by the WorkflowRunReconciler's
+#   concurrency gate (checkConcurrency §188); step 04 asserts it.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+apply:
+  - resources.yaml

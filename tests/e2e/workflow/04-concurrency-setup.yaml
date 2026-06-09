@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 04 (apply): a SECOND, long-running Workflow + its first run,
+# used to exercise the ConcurrencyPolicy=Forbid gate in step 05.
+#
+# Why a separate Workflow and run (not reuse wf-demo/wfr-demo): by step 03
+# wfr-demo is already terminal (Succeeded), and the concurrency gate only
+# blocks on NON-terminal runs (checkConcurrency §211 skips
+# Succeeded/Failed/Error). To deterministically hold an active run we need a
+# long-running step. wf-block's argosay sleeps ~120s so its first run stays
+# Running while step 05's second run is admitted and rejected.
+apiVersion: keese.ai/v1alpha1
+kind: Workflow
+metadata:
+  name: wf-block
+  namespace: wf-e2e
+spec:
+  workspaceRef:
+    name: wf-ws
+  entrypoint: main
+  concurrencyPolicy: Forbid
+  templates:
+    - name: sleep
+      image: argoproj/argosay:v2
+      command:
+        - /argosay
+      args:
+        - sleep
+        - "120"
+---
+apiVersion: keese.ai/v1alpha1
+kind: WorkflowRun
+metadata:
+  name: wfr-block-a
+  namespace: wf-e2e
+spec:
+  workspaceRef:
+    name: wf-ws
+  workflowRef:
+    name: wf-block
+  retryBudget: 3

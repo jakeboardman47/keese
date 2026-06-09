@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 08 (delete): tear down the concurrency fixtures so the suite
+# leaves the shared kind-keese cluster clean and is re-runnable.
+#
+# Order matters: delete the WorkflowRuns first so wf-block has zero active
+# runs, otherwise the Workflow cascade finalizer (reconcileDelete §183)
+# would block the wf-block delete while wfr-block-a is still Running.
+# Deleting wfr-block-a triggers the run's own Argo Workflow delete (§458),
+# which terminates the long sleep early.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: |
+      kubectl delete workflowrun/wfr-block-b -n wf-e2e --timeout=120s --ignore-not-found
+    skipLogOutput: false
+  - command: |
+      kubectl delete workflowrun/wfr-block-a -n wf-e2e --timeout=120s --ignore-not-found
+    skipLogOutput: false
+  - command: |
+      kubectl delete workflow/wf-block -n wf-e2e --timeout=120s --ignore-not-found
+    skipLogOutput: false

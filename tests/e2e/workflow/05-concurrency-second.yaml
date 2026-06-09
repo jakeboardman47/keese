@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH9 kuttl step 05 (apply): a SECOND run of wf-block while wfr-block-a is
+# still active. wf-block.spec.concurrencyPolicy=Forbid, so the
+# WorkflowRunReconciler must hold this run in Pending and emit
+# ConcurrentRunForbidden (checkConcurrency §218) instead of projecting an
+# Argo Workflow.
+apiVersion: keese.ai/v1alpha1
+kind: WorkflowRun
+metadata:
+  name: wfr-block-b
+  namespace: wf-e2e
+spec:
+  workspaceRef:
+    name: wf-ws
+  workflowRef:
+    name: wf-block
+  retryBudget: 3
