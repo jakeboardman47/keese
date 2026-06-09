@@ -2,15 +2,31 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 #
-# Signal-handling smoke test — sends SIGTERM to the keese operator pod and
-# asserts:
-#   (a) Pod exits with code 0 within terminationGracePeriodSeconds (default 60s)
-#   (b) Leader lease is released before exit
-#   (c) A structured 'shutdown' log line is emitted
+# Signal-handling smoke test — enforces rule 06-signal-handling §10 across every
+# long-running keese cmd/** binary that ships a Pod. For each target it sends
+# SIGTERM (via `kubectl delete pod --grace-period`) and asserts:
+#   (a) the Pod exits within its terminationGracePeriodSeconds,
+#   (b) for the operator, the leader lease is released before exit, and
+#   (c) a structured 'shutdown' log line is emitted carrying
+#       (reason, drain_duration_ms, checkpoint_location) (rule 06 §4).
 #
-# Skips gracefully if no operator pod is running.
+# Targets are described in the TARGETS table below; each row names the Pod via a
+# label selector + namespace, its grace budget, and whether it holds a leader
+# lease. A target whose Pod is absent is SKIPPED (not failed), so the harness is
+# safe to run against a partially-bootstrapped cluster or from CI smoke jobs.
 #
-# Usage: scripts/dev/sigterm-drain-test.sh
+# Binaries covered (rule 06 §10):
+#   - operator             (cmd/main.go)              — leader lease + reconcile drain
+#   - keese-cosign-webhook (cmd/keese-cosign-webhook) — controller-runtime drain
+#   - agent-runtime        (keese-drain preStop)      — session SQLite checkpoint
+#   - keese-authz          (cmd/keese-authz)          — gRPC GracefulStop
+#
+# keese-wf-launcher (cmd/keese-wf-launcher) is a short-lived launcher Job, not a
+# long-running Pod; its SIGTERM path is covered by the Go test in
+# cmd/keese-wf-launcher and is intentionally not probed here.
+#
+# Usage: scripts/dev/sigterm-drain-test.sh [target-name ...]
+#   With no args, every target is probed. Names match the TARGETS table keys.
 #
 # Refs: docs/designs/18-process-lifecycle.md
 #       .claude/rules/06-signal-handling.md
@@ -25,101 +41,157 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${REPO_ROOT}/scripts/lib/log.sh"
 
 CONTEXT="${KUBECTL_CONTEXT:-kind-keese-dev}"
-NAMESPACE="keese-system"
-LABEL_SELECTOR="control-plane=controller-manager"
-GRACE_PERIOD=60
-LEASE_NAMESPACE="keese-system"
-LEASE_NAME="keese-operator-leader" # FIXME(design-gate): verify lease name from operator config
 
-# ── Preflight: check for operator pod ─────────────────────────────────────────
+# ── Target table ──────────────────────────────────────────────────────────────
+# Each target is "name|namespace|label-selector|grace-seconds|leader-lease-name"
+# A blank leader-lease-name means the target does not hold a lease.
+TARGETS=(
+  "operator|keese-system|control-plane=controller-manager|90|keese-operator-leader"
+  "keese-cosign-webhook|keese-system|app.kubernetes.io/name=keese-cosign-webhook|30|"
+  "keese-authz|keese-system|app.kubernetes.io/name=keese-authz|30|"
+  "agent-runtime|keese-system|app.kubernetes.io/component=agent-runtime|120|"
+)
 
-log::info "sigterm-drain-test: looking for operator pod in ${NAMESPACE}"
+# ── Per-target drain assertion ────────────────────────────────────────────────
 
-POD_NAME=$(kubectl --context="${CONTEXT}" get pods \
-  -n "${NAMESPACE}" \
-  -l "${LABEL_SELECTOR}" \
-  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+# probe_target NAME NAMESPACE SELECTOR GRACE LEASE
+# Returns 0 on pass or graceful skip; non-zero only on a hard contract failure.
+probe_target() {
+  local name="$1" namespace="$2" selector="$3" grace="$4" lease="$5"
 
-if [[ -z "${POD_NAME}" ]]; then
-  log::warn "sigterm-drain-test: no operator pod found — skipping test."
-  log::warn "Deploy the operator first: make tilt-up"
-  exit 0
-fi
+  log::info "[${name}] looking for pod (-n ${namespace} -l ${selector})"
+  local pod_name
+  pod_name=$(kubectl --context="${CONTEXT}" get pods \
+    -n "${namespace}" \
+    -l "${selector}" \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
 
-log::info "sigterm-drain-test: found pod ${POD_NAME}"
-
-# ── Step 1: Capture leader lease holder before SIGTERM ────────────────────────
-
-log::info "sigterm-drain-test: checking leader lease before SIGTERM"
-lease_holder_before=$(kubectl --context="${CONTEXT}" get lease "${LEASE_NAME}" \
-  -n "${LEASE_NAMESPACE}" \
-  -o jsonpath='{.spec.holderIdentity}' 2>/dev/null || echo "none")
-log::info "sigterm-drain-test: lease holder before: ${lease_holder_before}"
-
-# ── Step 2: Send SIGTERM (kubectl delete pod triggers graceful shutdown) ────────
-
-log::info "sigterm-drain-test: deleting pod ${POD_NAME} (triggers SIGTERM)"
-kubectl --context="${CONTEXT}" delete pod "${POD_NAME}" \
-  -n "${NAMESPACE}" \
-  --grace-period="${GRACE_PERIOD}" &
-
-DELETE_PID=$!
-
-# ── Step 3: Wait for pod to exit within grace period ─────────────────────────
-
-log::info "sigterm-drain-test: waiting for pod to terminate (max ${GRACE_PERIOD}s)"
-deadline=$(($(date +%s) + GRACE_PERIOD))
-pod_gone=false
-
-while [[ $(date +%s) -lt ${deadline} ]]; do
-  status=$(kubectl --context="${CONTEXT}" get pod "${POD_NAME}" \
-    -n "${NAMESPACE}" \
-    -o jsonpath='{.status.phase}' 2>/dev/null || echo "gone")
-  if [[ "${status}" == "gone" ]] || [[ "${status}" == "" ]]; then
-    pod_gone=true
-    break
+  if [[ -z "${pod_name}" ]]; then
+    log::warn "[${name}] no pod found — skipping (deploy via 'make tilt-up' to cover)."
+    return 0
   fi
-  sleep 2
-done
+  log::info "[${name}] found pod ${pod_name}"
 
-wait "${DELETE_PID}" 2>/dev/null || true
+  # Capture leader-lease holder before SIGTERM (operator only).
+  local lease_before="none"
+  if [[ -n "${lease}" ]]; then
+    lease_before=$(kubectl --context="${CONTEXT}" get lease "${lease}" \
+      -n "${namespace}" \
+      -o jsonpath='{.spec.holderIdentity}' 2>/dev/null || echo "none")
+    log::info "[${name}] lease ${lease} holder before: ${lease_before}"
+  fi
 
-if [[ "${pod_gone}" != "true" ]]; then
-  log::err "sigterm-drain-test: FAILED — pod did not terminate within ${GRACE_PERIOD}s"
-  exit 1
-fi
+  # Send SIGTERM via graceful pod delete.
+  log::info "[${name}] deleting pod ${pod_name} (grace ${grace}s, triggers SIGTERM)"
+  kubectl --context="${CONTEXT}" delete pod "${pod_name}" \
+    -n "${namespace}" \
+    --grace-period="${grace}" &
+  local delete_pid=$!
 
-log::ok "sigterm-drain-test: pod terminated within grace period"
+  # Wait for the pod to leave within the grace budget.
+  local deadline=$(($(date +%s) + grace))
+  local pod_gone=false
+  while [[ $(date +%s) -lt ${deadline} ]]; do
+    local status
+    status=$(kubectl --context="${CONTEXT}" get pod "${pod_name}" \
+      -n "${namespace}" \
+      -o jsonpath='{.status.phase}' 2>/dev/null || echo "gone")
+    if [[ "${status}" == "gone" || -z "${status}" ]]; then
+      pod_gone=true
+      break
+    fi
+    sleep 2
+  done
+  wait "${delete_pid}" 2>/dev/null || true
 
-# ── Step 4: Assert leader lease was released ──────────────────────────────────
+  if [[ "${pod_gone}" != "true" ]]; then
+    log::err "[${name}] FAILED — pod did not terminate within ${grace}s grace budget"
+    return 1
+  fi
+  log::ok "[${name}] pod terminated within grace budget"
 
-log::info "sigterm-drain-test: checking leader lease after pod exit"
-lease_holder_after=$(kubectl --context="${CONTEXT}" get lease "${LEASE_NAME}" \
-  -n "${LEASE_NAMESPACE}" \
-  -o jsonpath='{.spec.holderIdentity}' 2>/dev/null || echo "released")
+  # Assert leader lease released (operator).
+  if [[ -n "${lease}" ]]; then
+    local lease_after
+    lease_after=$(kubectl --context="${CONTEXT}" get lease "${lease}" \
+      -n "${namespace}" \
+      -o jsonpath='{.spec.holderIdentity}' 2>/dev/null || echo "released")
+    if [[ "${lease_after}" == "${lease_before}" && "${lease_before}" != "none" ]]; then
+      log::err "[${name}] FAILED — leader lease still held by '${lease_after}' after exit (rule 06 §2)"
+      return 1
+    fi
+    log::ok "[${name}] leader lease released (before=${lease_before}, after=${lease_after})"
+  fi
 
-if [[ "${lease_holder_after}" == "${lease_holder_before}" && "${lease_holder_before}" != "none" ]]; then
-  log::warn "sigterm-drain-test: leader lease still held by '${lease_holder_after}' — may not have released cleanly."
-  log::warn "Lease will expire automatically; asserting non-blocking for pre-gate."
-else
-  log::ok "sigterm-drain-test: leader lease released (before=${lease_holder_before}, after=${lease_holder_after})"
-fi
+  # Assert structured shutdown event (rule 06 §4). Read the --previous stream
+  # once and reuse it for both the line check and the field checks.
+  local stream
+  stream=$(kubectl --context="${CONTEXT}" logs "${pod_name}" \
+    -n "${namespace}" --previous --all-containers 2>/dev/null || echo "")
 
-# ── Step 5: Check for structured 'shutdown' log line ─────────────────────────
+  local shutdown_line
+  shutdown_line=$(grep -E '"event"[[:space:]]*:[[:space:]]*"shutdown"|"msg"[[:space:]]*:[[:space:]]*"shutdown"|shutdown' \
+    <<<"${stream}" | head -n1 || echo "")
+  if [[ -z "${shutdown_line}" ]]; then
+    log::err "[${name}] FAILED — no structured 'shutdown' log line found (rule 06 §4)"
+    return 1
+  fi
 
-log::info "sigterm-drain-test: checking pod logs for shutdown event"
-# Pod may be gone; use --previous to read last logs if available.
-shutdown_line=$(kubectl --context="${CONTEXT}" logs "${POD_NAME}" \
-  -n "${NAMESPACE}" \
-  --previous 2>/dev/null \
-  | grep -i '"msg".*"shutdown"\|"event".*"shutdown"\|shutdown' \
-  | head -n1 || echo "")
+  # Verify the three mandated fields are present (reason, drain_duration_ms,
+  # checkpoint_location). controller-runtime binaries may split these across
+  # adjacent log lines, so search the full --previous stream for each key.
+  local missing=()
+  local field
+  for field in reason drain_duration_ms checkpoint_location; do
+    if ! grep -q "${field}" <<<"${stream}"; then
+      missing+=("${field}")
+    fi
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    log::err "[${name}] FAILED — shutdown event missing fields: ${missing[*]} (rule 06 §4)"
+    return 1
+  fi
 
-if [[ -n "${shutdown_line}" ]]; then
-  log::ok "sigterm-drain-test: found shutdown log: ${shutdown_line}"
-else
-  log::warn "sigterm-drain-test: no structured 'shutdown' log found — controllers are stubs pre-gate."
-  log::warn "Add a shutdown log in the operator main.go SIGTERM handler (rules/06-signal-handling.md)."
-fi
+  log::ok "[${name}] structured shutdown event present with reason/drain_duration_ms/checkpoint_location"
+  return 0
+}
 
-log::ok "sigterm-drain-test: PASSED (pre-gate: apply + pod exit assertions met)"
+# ── Driver ────────────────────────────────────────────────────────────────────
+
+main() {
+  local -a wanted=("$@")
+  local failures=0
+  local probed=0
+
+  local row name namespace selector grace lease
+  for row in "${TARGETS[@]}"; do
+    IFS='|' read -r name namespace selector grace lease <<<"${row}"
+
+    # If explicit target names were passed, only probe those.
+    if [[ ${#wanted[@]} -gt 0 ]]; then
+      local match=false w
+      for w in "${wanted[@]}"; do
+        [[ "${w}" == "${name}" ]] && match=true
+      done
+      [[ "${match}" == "true" ]] || continue
+    fi
+
+    probed=$((probed + 1))
+    if ! probe_target "${name}" "${namespace}" "${selector}" "${grace}" "${lease}"; then
+      failures=$((failures + 1))
+    fi
+  done
+
+  if [[ ${probed} -eq 0 ]]; then
+    log::warn "sigterm-drain-test: no matching targets — nothing probed."
+    return 0
+  fi
+  if [[ ${failures} -gt 0 ]]; then
+    log::err "sigterm-drain-test: FAILED — ${failures} target(s) violated the drain contract."
+    return 1
+  fi
+  log::ok "sigterm-drain-test: PASSED — all reachable targets drained cleanly."
+  return 0
+}
+
+main "$@"
