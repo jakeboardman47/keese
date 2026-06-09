@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH6 kuttl step 03 (revoke via expiry): assert the CrossTenantAgreement
+# transitions Approved → Expired once its expiresAt lapses.
+#
+# This is the SHIPPED revocation path: the controller's expiry check
+# (Reconcile §103 → transitionToExpired §333) calls Rebac.Delete on the
+# allows_messaging trust tuple and sets phase=Expired / Ready=False. The
+# controller requeues every requeueAfterExpiryCheck (1m) so the transition
+# is observed within ~1 requeue of expiry; the apply-cta.sh window plus
+# this timeout covers it without sleeping (kuttl polls the assert).
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 240
+commands:
+  # Ready flips to False with reason=Expired once the window lapses.
+  - command: kubectl wait --for=condition=Ready=false crosstenantagreement/beta2-to-alpha2 --timeout=210s
+    namespaced: false
+---
+# Native status assert: the controller reached the Expired terminal phase.
+apiVersion: authz.keese.ai/v1alpha1
+kind: CrossTenantAgreement
+metadata:
+  name: beta2-to-alpha2
+status:
+  phase: Expired

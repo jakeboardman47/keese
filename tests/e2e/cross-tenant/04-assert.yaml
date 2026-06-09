@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH6 kuttl step 04 (assert): the cross-tenant trust tuple was REMOVED from
+# the live OpenFGA store on revocation (expiry).
+#
+# This is the deny-flip the plan calls for, asserted at the tuple layer:
+# transitionToExpired called Rebac.Delete on
+#   tenant:alpha2#allows_messaging@tenant:beta2
+# so check-cta-tuple.sh MODE=absent must now read it as gone. (The
+# request-path allow→deny flip through ext_authz is stubbed — the gateway
+# resolver does not yet consult messageable_from; see
+# check-cross-tenant-decision.sh + revisit_when_cross_tenant_live.)
+#
+# Skips cleanly if the store is unseeded — but in that case 03's native
+# phase=Expired assert already proved the controller ran the Delete path.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: env FROM_TENANT=beta2 TO_TENANT=alpha2 MODE=absent ../lib/check-cta-tuple.sh
+    namespaced: false
+    skipLogOutput: false

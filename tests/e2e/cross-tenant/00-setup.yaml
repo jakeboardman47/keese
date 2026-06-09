@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH6 kuttl step 00 (apply): provision the two tenants that will agree, and
+# the OIDCProvider CR whose live reconcile this suite asserts.
+#
+# Tenant names are alpha2 / beta2 — deliberately distinct from the
+# multi-tenant suite's alpha/beta and the EH4 suite's alpha, so this
+# self-contained suite never collides with cluster state another suite
+# owns (kuttl runs all tests/e2e/* against the SAME shared cluster).
+#
+# This is the POSITIVE complement to multi-tenant/'s NetworkPolicy deny:
+# multi-tenant explicitly deferred the CrossTenantAgreement happy-path
+# (needs live OpenFGA); EH6 covers it.
+#
+# Prereq: a bootstrapped kind-keese cluster with seeded OpenFGA + OpenBao
+#   make kind-up && make bootstrap-infra
+# Do NOT run with `make test-e2e` without a live cluster.
+apiVersion: keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: alpha2
+spec:
+  adminSubjects:
+    - kind: User
+      name: alice@cross-tenant.example
+---
+apiVersion: keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: beta2
+spec:
+  adminSubjects:
+    - kind: User
+      name: bob@cross-tenant.example
+---
+# Namespaces for each tenant (pre-created so the suite is self-contained
+# against a minimal bootstrap; in production the Tenant controller projects
+# these via Capsule).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: alpha2
+  labels:
+    keese.ai/tenant: alpha2
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: beta2
+  labels:
+    keese.ai/tenant: beta2
+---
+# OIDCProvider CR — the live-CR complement to the FGA model unit test
+# (tests/openfga/oidc-provider.yaml). The controller validates the
+# templates against the restricted Sprig allow-list, advances to
+# Active/Ready, and probes JWKS reachability. We use a real public issuer
+# (Google) so OIDC discovery + JWKS resolve when the discovery path is
+# live; the JWKSReachable condition is asserted only when reachable
+# (00-assert.yaml gates Ready, which is template-driven and does not depend
+# on outbound network — see revisit_when_oidc_discovery_live).
+apiVersion: authz.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: cross-tenant-google
+spec:
+  issuer: https://accounts.google.com
+  audiences:
+    - keese-egress-*
+  subjectTemplate: "{{ .Claims.sub }}"
+  audienceTemplates:
+    - name: egress
+      template: "keese-egress-{{ .Claims.tenant }}"
+      expirationSeconds: 600

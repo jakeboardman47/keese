@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH6 kuttl step 01 (apply): create the CrossTenantAgreement (with a
+# dynamically-computed expiresAt — see apply-cta.sh), then drive both
+# tenants' signed approvals (one approval per reconcile — see
+# approve-cta.sh). After the second approval the controller transitions
+# Pending → Approved and writes the trust tuple.
+#
+# expiresAt is set so the controller's SHIPPED revocation path (expiry →
+# transitionToExpired → Rebac.Delete) fires later in the suite; that is the
+# tuple-removal path the controller actually implements (cleanup() on plain
+# delete only removes the NATS stream + finalizer).
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: ./apply-cta.sh
+    namespaced: false
+    skipLogOutput: false
+  # from-tenant (beta2) approves first…
+  - command: env CRA=beta2-to-alpha2 TENANT=beta2 APPROVER=user:bob@cross-tenant.example ./approve-cta.sh
+    namespaced: false
+    skipLogOutput: false
+  # …then to-tenant (alpha2). The controller records both, then transitions.
+  - command: env CRA=beta2-to-alpha2 TENANT=alpha2 APPROVER=user:alice@cross-tenant.example ./approve-cta.sh
+    namespaced: false
+    skipLogOutput: false

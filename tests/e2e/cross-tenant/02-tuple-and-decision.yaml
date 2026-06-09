@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH6 kuttl step 02: assert the cross-tenant trust tuple landed in the LIVE
+# OpenFGA store, then probe the cross-tenant ext_authz decision path.
+#
+#   1. check-cta-tuple.sh (MODE=present) — reads
+#      tenant:alpha2#allows_messaging@tenant:beta2 from the real store via a
+#      one-shot fga CLI pod. Skips cleanly if the store is unseeded (the
+#      CR-status layer in 01-assert.yaml still proves the controller wrote
+#      it). This is what proves we exercised the OpenFGA writer, not the
+#      NoopRebacWriter fallback.
+#
+#   2. check-cross-tenant-decision.sh — the request-path allow/deny probe
+#      (beta subject reaches the agreed alpha resource via ext_authz allow;
+#      non-agreed action denied). SHIPPED-WITH-STUBS: the gateway ext_authz
+#      resolver does not yet consult cross-tenant messageable_from tuples,
+#      so this SKIPS with revisit_when_cross_tenant_live. When that resolver
+#      branch ships, set CROSS_TENANT_DECISION_LIVE=1 and it reuses EH4's
+#      request helper (sourced, not copied).
+#
+# `namespaced: false` — both helpers target named namespaces (openfga /
+# keese-system / beta2), not kuttl's per-test namespace. Commands run from
+# THIS step's directory, hence the ../lib relative paths.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: env FROM_TENANT=beta2 TO_TENANT=alpha2 MODE=present ../lib/check-cta-tuple.sh
+    namespaced: false
+    skipLogOutput: false
+  - command: ../lib/check-cross-tenant-decision.sh
+    namespaced: false
+    skipLogOutput: false

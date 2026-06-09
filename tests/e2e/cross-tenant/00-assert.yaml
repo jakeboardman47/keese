@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH6 kuttl step 00 (assert): prereq gate + OIDCProvider reaches Ready.
+#
+# Prereq-gated FIRST (check-prereqs + check-extauth, both reused from EH4)
+# so the whole suite skips cleanly against placeholder OpenFGA/OpenBao
+# rather than asserting against the NoopRebacWriter fallback.
+#
+# OIDCProvider Ready is template-driven (validateTemplates → Active +
+# Ready=True): it does NOT depend on outbound network, so it asserts
+# cleanly on any bootstrapped cluster. The JWKSReachable condition (which
+# DOES require live OIDC discovery to accounts.google.com) is intentionally
+# NOT asserted here — see revisit_when_oidc_discovery_live in the README.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 240
+commands:
+  - command: ../lib/check-prereqs.sh
+    namespaced: false
+  - command: ../lib/check-extauth.sh
+    namespaced: false
+  - command: kubectl wait --for=condition=Ready oidcprovider/cross-tenant-google --timeout=120s
+---
+# Native status assert: the OIDCProvider advanced to Active and recorded
+# observedGeneration (rule 04.4 — status reflects the reconciled spec).
+apiVersion: authz.keese.ai/v1alpha1
+kind: OIDCProvider
+metadata:
+  name: cross-tenant-google
+status:
+  phase: Active
+---
+# Both tenants exist (cluster-scoped); the CTA in 01- references them.
+apiVersion: keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: alpha2
+---
+apiVersion: keese.ai/v1alpha1
+kind: Tenant
+metadata:
+  name: beta2

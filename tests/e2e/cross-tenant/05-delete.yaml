@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH6 kuttl step 05 (delete): delete the (Expired) CrossTenantAgreement and
+# assert the finalizer completes — the object is fully removed, not wedged.
+#
+# Deletion runs cleanup() (crosstenanagreement_controller.go §452): the
+# finalizers.crosstenanagreement.keese.ai/nats finalizer deletes the NATS
+# stream, then RemoveFinalizer lets Kubernetes garbage-collect the object.
+# A finalizer that never completes would leave the object Terminating and
+# hang this delete — so a clean removal IS the finalizer assertion.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: kubectl delete crosstenantagreement beta2-to-alpha2 --timeout=120s --ignore-not-found
+    namespaced: false
+    skipLogOutput: false

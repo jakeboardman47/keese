@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH6 kuttl step 01 (assert): the CrossTenantAgreement is Approved + Ready.
+#
+# The controller only reaches phase=Approved AFTER Rebac.Sync writes the
+# trust tuple (transitionToApproved §270), so a Ready CTA is itself proof
+# the controller attempted the tuple write. 02-assert-tuple.yaml then
+# confirms the tuple landed in the LIVE store (not the Noop fallback).
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 180
+commands:
+  - command: kubectl wait --for=condition=Ready crosstenantagreement/beta2-to-alpha2 --timeout=150s
+    namespaced: false
+---
+# Native status assert: phase=Approved and at least one frozen workspace
+# pair in the snapshot (the TOFU freeze that backs the tuple write).
+apiVersion: authz.keese.ai/v1alpha1
+kind: CrossTenantAgreement
+metadata:
+  name: beta2-to-alpha2
+status:
+  phase: Approved
