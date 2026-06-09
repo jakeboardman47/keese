@@ -12,7 +12,7 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 
 ## Decisions
 
-### 2026-06-09 — e2e-hardening track: wave 1 (EH2, EH4)
+### 2026-06-09 — e2e-hardening track: foundation (EH1–EH4)
 
 - Plan [e2e-hardening/README.md](docs/plans/e2e-hardening/README.md) (EH1–EH14,
   conductor waves) closes the 2026-06-08 e2e/coverage-gap analysis. Wave 1 merged.
@@ -30,6 +30,14 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 - **Conductor gotcha:** Agent-tool worktrees surfaced ~62 spurious `make`-regen
   uncommitted files (pool seeding); committed diffs were clean, so
   `git checkout -- .` in the worktree before `worktree-merge.sh --no-verify-green`.
+- **EH3 SIGTERM wiring:** `make sigterm-drain-test` enforces rule 06 §10 across the
+  long-running `cmd` pods; `keese-drain` got a Go SIGTERM test via a behavior-neutral
+  `run()` seam. Per-binary Go tests for the operator/authz/cosign-webhook/wf-launcher
+  are a follow-up (outside EH3's footprint).
+- **EH1 CI wiring (foundation done):** `e2e.yaml` installs kuttl (pinned v0.15.0 —
+  the nightly was silently broken on the bare runner) + runs `make sigterm-drain-test`;
+  `test.yaml` gates `make coverage-check` on PRs. Optional skip-hardening + PR-smoke
+  deferred.
 
 ### 2026-06-08 — Conductor: parallel-build orchestrator adopted
 

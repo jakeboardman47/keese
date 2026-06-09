@@ -9,7 +9,7 @@ depends:
   - ../../../.claude/rules/06-signal-handling.md
   - ../../../scripts/dev/sigterm-drain-test.sh
 related_skills: [plan-management, makefile-authoring]
-status: planned
+status: complete
 last_verified: 2026-06-09
 phase: EH3
 model_tier: sonnet

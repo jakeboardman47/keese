@@ -9,7 +9,7 @@ depends:
   - ../../../.github/workflows/e2e.yaml
   - ../../../.github/workflows/test.yaml
 related_skills: [plan-management]
-status: in-progress
+status: complete
 last_verified: 2026-06-09
 phase: EH1
 model_tier: sonnet
@@ -33,15 +33,16 @@ is a protected path (`worktree-merge.sh` rejects it), so this phase is
   guards on `command -v kuttl`, but the runner never installed it (job exited 1
   / silently broken). Added a pinned `kubectl-kuttl` v0.15.0 download + `kuttl`
   symlink + `$GITHUB_PATH`. The nightly + new `rebac-decision` suite now run.
-- [ ] **Gate `coverage-check` in `test.yaml`** — add a step running
-  `make coverage-check` (depends on EH2, merged) to the unit job.
-- [ ] **Wire the SIGTERM-drain job** — run `make sigterm-drain-test` against the
-  e2e kind cluster (depends on EH3).
-- [ ] **Harden the `config/`-absent skip** — `e2e.yaml` currently pass-by-skips
-  when `config/` is absent; make a genuinely-missing harness fail loudly rather
-  than green.
-- [ ] (optional) **PR smoke** — a label-gated or fast-subset kuttl run on PRs so
-  e2e is not purely nightly.
+- [x] **Gate `coverage-check` in `test.yaml`** — added a `coverage gate` step
+  running `make coverage-check` (EH2 ratchet) to the unit job, so PRs enforce the
+  per-package floors.
+- [x] **Wire the SIGTERM-drain job** — `e2e.yaml` runs `make sigterm-drain-test`
+  (EH3, rule 06 §10) after the kuttl suite; skips cleanly if a target pod is absent.
+- [ ] (deferred, optional) **Harden the `config/`-absent skip** — `e2e.yaml`
+  pass-by-skips when `config/` is absent; make a genuinely-missing harness fail
+  loudly. Low priority (`config/` always present today).
+- [ ] (deferred, optional) **PR smoke** — a label-gated / fast-subset kuttl run on
+  PRs so e2e is not purely nightly.
 
 ## Notes
 

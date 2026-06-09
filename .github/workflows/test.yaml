@@ -40,6 +40,9 @@ jobs:
       - name: make test-unit
         if: steps.gomod.outputs.present == 'true'
         run: make test-unit
+      - name: coverage gate
+        if: steps.gomod.outputs.present == 'true'
+        run: make coverage-check
       - name: skip (no go.mod)
         if: steps.gomod.outputs.present == 'false'
         run: echo "go.mod not present — skipping unit tests"
