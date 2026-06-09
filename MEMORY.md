@@ -47,15 +47,12 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   row `draft`→`current`; runtime spec gained `adkPython`/`adkGo` + 5-way CEL +
   `cmd/main.go`; `last_verified` bumped on plans/specs READMEs, memory + runtime
   specs. Fixed LICENSE copyright `Aviz Networks, Inc.`→`keese-ai` (rule 01).
-- Designs `20a`/`20b` rewritten to current implementation (3-group layout
-  `keese.ai`/`authz.keese.ai`/`policy.keese.ai`, packages
-  `api/{keese,authz,policy}/v1alpha1`). Verified against code that the designed
-  `api/core/v1alpha1` shared-types package was **never built**: no
-  `StatusBase`/canonical `Phase`; each kind declares status inline with its own
-  `<Kind>Phase` enum, and the only shared types are `LocalObjectReference` +
-  `ConcurrencyPolicy` in `api/keese/v1alpha1/common_types.go`. Dropped the
-  fictional Option-C / shared-type-envtest sections; the `check-phase-enum-drift.sh`
-  + `check-printer-columns.sh` hooks were never implemented (now marked as such).
+- Designs `20a`/`20b` describe the per-kind status convention as built: 3-group
+  layout (`keese.ai`/`authz.keese.ai`/`policy.keese.ai`, packages
+  `api/{keese,authz,policy}/v1alpha1`); each kind declares status inline with its
+  own `<Kind>Phase` enum (no shared status base); the only shared types are
+  `LocalObjectReference` + `ConcurrencyPolicy` in
+  `api/keese/v1alpha1/common_types.go`.
 
 ### 2026-05-29 — Documentation overhaul: `book/` site + `docs/features/` tree
 
@@ -248,7 +245,7 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
 - [Scaffolding plan + 26 decisions](docs/plans/scaffolding-plan.md) —
   license Apache-2.0; API groups `keese.ai` / `authz.keese.ai` / `policy.keese.ai`; Capsule opt-in;
   GuardrailBinding composition (not Constitution + Policy +
-  ToolAllowList); 14 kinds across 9 groups (D26 added keese `Tenant`
+  ToolAllowList); 17 kinds across 3 groups (D26 added keese `Tenant`
   CRD); Envoy AI Gateway + MCPRoute; Argo delegation; OpenTofu cloud;
   GoLand primary IDE; SIGTERM drain; SSA fieldOwner; durable agent
   identity (D24) + GUPP resume contract (D25) added 2026-04-20 after

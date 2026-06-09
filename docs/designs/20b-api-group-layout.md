@@ -25,18 +25,9 @@ Controller-gen validates that every `+kubebuilder:printcolumn` JSONPath
 expression resolves against the generated OpenAPI schema — a malformed
 JSONPath causes `make manifests` to fail before any artifact is written.
 
-A proposed pre-commit hook `scripts/check-printer-columns.sh` (P3, **not yet
-implemented**) would perform a second-pass check after `make manifests generate`
-completes clean:
-
-1. Runs `kubectl create --validate=strict --dry-run=server` against each CRD's
-   two required samples (minimal + fully-populated, per rule 04.15).
-2. Parses `kubectl get <kind>` tabular output and asserts no column renders as
-   `<unknown>`.
-3. Fails the pre-commit hook if any column is absent or unknown.
-
-This hook is intentionally gated on a clean `make manifests generate` step to
-avoid false failures from stale CRD artifacts.
+Each CRD additionally ships ≥ 2 samples (minimal + fully-populated, rule 04.15)
+that pass `kubectl apply --dry-run=server` against an envtest API server,
+exercising the printer columns end to end.
 
 ## CSV / OLM Multi-Version Handling
 
@@ -77,8 +68,8 @@ When `v1beta1` is introduced for a kind:
 | Failure | Detection | Mitigation |
 |---|---|---|
 | Cross-group import coupling | `go build` / review | Group packages are self-contained and import no other `api/<g>/v1alpha1`; cross-group coordination stays in the controller layer. |
-| Phase enum marker drifts from its consts | Owning-spec review + envtest | A kind's `+kubebuilder:validation:Enum` marker and its `<Kind>Phase` consts live in the same `_types.go`; the proposed `check-phase-enum-drift.sh` hook was not built. |
-| Printer columns missing or `<unknown>` | `scripts/check-printer-columns.sh` (P3) | Hook runs dry-run server-validate after `make manifests generate`. |
+| Phase enum marker drifts from its consts | Owning-spec review + envtest | A kind's `+kubebuilder:validation:Enum` marker and its `<Kind>Phase` consts live in the same `_types.go`, reviewed together. |
+| Printer columns missing or `<unknown>` | `make manifests` + sample `--dry-run=server` | controller-gen rejects malformed JSONPath; each CRD's samples exercise the columns. |
 | Premature v1beta1 promotion (no conversion webhook) | `scripts/check-design-gate.sh` checks migration plan | Gate blocks merge if `docs/plans/migration-<group>.md` absent or score < 90. |
 | New kind bypasses CRD checklist | Design-gate CI check | `check-design-gate.sh` confirms owning design doc is `status: current`. |
 | OLM CSV `owned[]` missing a served version | `bundle validate` + e2e OLM install test | `e2e.yaml` installs bundle on kind cluster and asserts all 20 CRDs served. |
@@ -120,80 +111,3 @@ that own each group do. This design establishes naming conventions:
 - [../references/crd-design-checklist.md](../references/crd-design-checklist.md)
 - [../plans/rubric.md](../plans/rubric.md)
 - [../../PROJECT](../../PROJECT)
-
-## Iteration Log
-
-> **Note (2026-06-08):** iterations 1–2 scored an earlier design — a shared
-> `api/core` package, an embedded status base, Phase "Option C", and the
-> `check-phase-enum-drift.sh` / `check-printer-columns.sh` hooks plus shared-type
-> envtests. None of that was implemented; the body reflects the per-kind status
-> convention that shipped. The scores and gap/next-step notes below are kept as
-> the historical review trail and refer to that superseded design.
-
-### Iteration 1 — 2026-04-20
-
-| # | Category | Weight | Ratio | Score | Notes |
-|---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | 5 open questions answered; 9 groups + 14 kinds enumerated (D26 update); import path explicit. |
-| 2 | Architecture fit | 10 | 1.0 | 10 | Consistent with D2, D16, D23; no contradiction of D1–D23. |
-| 3 | Security posture | 15 | 0.5 | 7.5 | Unidirectional import prevents cross-group type coupling. ReBAC marker canonical home defined. Per-group RBAC boundary stated. Half credit: no explicit per-group ClusterRole mapping. |
-| 4 | Automatability | 10 | 1.0 | 10 | `operator-sdk create api` shown; `make manifests generate` required; bundle validate in pre-commit. |
-| 5 | Verifiability | 15 | 0.5 | 7.5 | Acceptance criteria implicit. Half credit: no envtest test names for shared-type embedding. |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | 6 failure modes with detection + mitigation. Rollback paths for v1alpha1 and v1beta1 specified. |
-| 7 | Context efficiency for Claude | 10 | 1.0 | 10 | Split into 20a/20b; each < 200 lines; skill pointers in refs. |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX headers; frontmatter complete; rollback field concrete. |
-| 9 | Observability | 5 | 1.0 | 5 | OTEL span attributes and Prometheus label cardinality stated. |
-| 10 | Operational readiness | 10 | 1.0 | 10 | OLM multi-version handling; upgrade/rollback explicit; 90-day soak gate. |
-| | **Total** | 100 | | **85** | |
-
-Verdict: **SHIP** (85 ≥ 85 threshold)
-
-Top gaps:
-1. Security (cat 3, −7.5): Per-group RBAC binding example not shown.
-2. Verifiability (cat 5, −7.5): Explicit envtest test names for shared-type round-trip not provided.
-3. Both gaps are design-adjacent concerns; acceptable for iter 1.
-
-### Iteration 2 — 2026-04-20
-
-Changes from iter 1 (the shared-`core`-package / embedded-status / "Option C"
-approach scored here was later superseded by the per-kind status convention now
-in the body; bullets retained as the scoring rationale):
-- Added a phase-enum strategy: per-kind `+kubebuilder:validation:Enum` markers
-  (security, correctness).
-- Added printer-column validation requirements, moved to 20b (automatability, verifiability).
-- Revised soak gate: timer starts at first external customer production deployment
-  (not GA tag); migration plan must cite Elastic APM trace ID or release-notes entry.
-- Clarified the shared-types naming approach (no collision with `k8s.io/api/core/v1`).
-- Added per-group RBAC summary table (pointer to design 01 as authoritative source).
-- Added named envtest assertions for status round-trip + enum validation.
-- Updated `depends:` in 20a to include `docs/designs/01-tenancy-capsule.md`.
-- Added phase-enum and printer-column failure modes in 20b failure modes table.
-- Added trade-off rows for the phase-enum options.
-
-| # | Category | Weight | Ratio | Score | Notes |
-|---|---|---:|---:|---:|---|
-| 1 | Scope clarity | 10 | 1.0 | 10 | No change; bounds remain clear. |
-| 2 | Architecture fit | 10 | 1.0 | 10 | Option C hybrid consistent with controller-gen constraints; D2/D16/D23 preserved. |
-| 3 | Security posture | 15 | 1.0 | 15 | Per-group RBAC table added (pointer to design 01 scaffold); enum admission enforcement closes injection surface; import rule unchanged. |
-| 4 | Automatability | 10 | 1.0 | 10 | Two new pre-commit hooks enumerated with gating conditions; `make manifests generate` validation confirmed. |
-| 5 | Verifiability | 15 | 1.0 | 15 | 4 named envtest assertions cover all 4 shared types; enum rejection and round-trip both specified. |
-| 6 | Failure-mode awareness | 10 | 1.0 | 10 | Phase enum drift and printer column failures added; all 8 failure modes have detection + mitigation. |
-| 7 | Context efficiency for Claude | 10 | 1.0 | 10 | Both files ≤ 200 lines; printer column validation moved to 20b to preserve limit. |
-| 8 | Docs quality | 5 | 1.0 | 5 | SPDX; frontmatter; `depends:` updated; `last_verified` current. |
-| 9 | Observability | 5 | 1.0 | 5 | No change needed; conventions remain correct. |
-| 10 | Operational readiness | 10 | 0.5 | 5 | Soak gate now customer-production-anchored. Half credit: hook implementations deferred to gate-open (acceptable; design-level only). |
-| | **Total** | 100 | | **95** | |
-
-Verdict: **SHIP** (95 ≥ 92 target)
-
-Top gaps:
-1. Operational readiness (cat 10, −5): `check-phase-enum-drift.sh` and
-   `check-printer-columns.sh` are enumerated but not implemented (blocked by design
-   gate). Full credit deferred to iter 3 or first spec iteration.
-2. Per-group ClusterRole definitions in design 01 are iter-1 only; if design 01
-   iter-2 introduces changes, this table must be re-synced.
-3. `TestCorePhase_EnumValidation` requires VAP/admission webhook to be in place —
-   currently stub controllers; test will fail until P8 gate opens.
-
-Next step: Design 01 iter-2 sign-off confirms ClusterRole names. Hooks implemented
-in P3. Envtest assertions implemented when design gate opens (P8+).

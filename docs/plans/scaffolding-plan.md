@@ -61,17 +61,17 @@ Broken into **nine phases (P0–P8)**. Each scored against `docs/plans/rubric.md
 | D23 | **Compose over replicate** — drop `Tenant`, `AgentIdentity`, `Entitlement`, `EntitlementGrant`, `TelemetryPipeline`, `WorkflowTrigger`, `Constitution`, `GuardrailPolicy`, `ToolAllowList` as separate CRDs | Each has a superior existing primitive (Capsule / OpenFGA tuples / OTEL Collector CR / pluggable trigger field / GuardrailBinding). |
 | D24 | **Agent identity is durable; sessions are ephemeral.** Workspace is the persistent agent identity. Pod churn is expected; state survives via PVC (goose SQLite), NATS JetStream (in-flight), OpenFGA (relations), and `Memory` CRD backends (long-term). | Test obligation: SIGKILL mid-run → resume on a new pod with no duplicate side effects. Added 2026-04-20 after review of Steve Yegge's "Welcome to Gas Town"; prevents conflation of Workspace with agent pod. See `docs/designs/23-agent-supervision.md`. |
 | D25 | **GUPP contract for AgentRuntime SPI.** Every runtime exposes `Resume(ctx, workspace)`; the controller MUST invoke it on observing pending work with no active session. Timeout → event `AgentUnresponsive`; escalation ladder lives in `docs/designs/23-agent-supervision.md`. | "GUPP" = Yegge's *"if there is work on your hook, YOU MUST RUN IT."* Prevents agents sitting idle while work sits on the hook. Added 2026-04-20. |
-| D26 | **Keese `Tenant` CRD owns keese-specific tenancy config; delegates namespace aggregation to Capsule (Mode B) or derives from labels (Mode A).** New group `keese.ai/v1alpha1/Tenant`. Cluster-scoped. Spec: `guardrailBindings[]`, `tokenBudgetRef`, `credentialPoolRef`, `defaultQuota`, optional `capsuleTenantRef`. Does **not** reimplement namespace aggregation. Kind count 13 → 14 across 9 groups. | Partial amendment to D23 (Tenant was on the drop list). Rationale: tenants need a first-class K8s object for ReBAC backing, tenant-wide config (no ConfigMap sprawl), events, and finalizers. Capsule still owns namespace aggregation + quota in Mode B. Added 2026-04-20 after architectural review; migration plan: `docs/plans/migration-d23-tenant-crd.md` (to author). Detailed design: `docs/designs/24-tenant-crd.md`. |
+| D26 | **Keese `Tenant` CRD owns keese-specific tenancy config; delegates namespace aggregation to Capsule (Mode B) or derives from labels (Mode A).** New group `keese.ai/v1alpha1/Tenant`. Cluster-scoped. Spec: `guardrailBindings[]`, `tokenBudgetRef`, `credentialPoolRef`, `defaultQuota`, optional `capsuleTenantRef`. Does **not** reimplement namespace aggregation. Kind count 13 → 14. | Partial amendment to D23 (Tenant was on the drop list). Rationale: tenants need a first-class K8s object for ReBAC backing, tenant-wide config (no ConfigMap sprawl), events, and finalizers. Capsule still owns namespace aggregation + quota in Mode B. Added 2026-04-20 after architectural review; migration plan: `docs/plans/migration-d23-tenant-crd.md` (to author). Detailed design: `docs/designs/24-tenant-crd.md`. |
 | D27 | **`WorkspaceSession` CRD represents one active interactive attach session.** Namespaced, lives in the Workspace's namespace. Created by the operator on `kubectl-keese attach` when `Workspace.spec.interactive: true`, keyed by `(workspaceRef, attachSubject, sessionName)` — default session name is `default`; additional named sessions allowed via API. Owner-ref to parent Workspace; finalizer drives pod drain + PVC release + tuple cleanup. Kind count 14 → 15; group count unchanged (stays in `keese.ai`). | Kubectl-native delete + GitOps UX + independent RBAC + independent lifecycle from the template. `per-user`/`per-attach`/`shared` session modes handled by `(subject, sessionName)` uniqueness rules. Added 2026-04-21 after multi-session-per-user + interactive-vs-workflow-mutual-exclusion architectural review. Detailed spec: `docs/designs/02-workspace-model.md` iter-2 and `docs/designs/08b-goose-acp-stdio-k8s.md` iter-2. |
 | D28 | **`OIDCProvider` CRD carries per-issuer JWT-to-OpenFGA-subject transformation config.** New group `authz.keese.ai/v1alpha1/OIDCProvider`. Cluster-scoped. Spec: `issuer`, `audiences[]`, `subjectTemplate` (Go template over JWT claims), `jwksUri`, `normalization`. Operator bootstraps defaults for google / github-actions / azure-entra / okta / keycloak / gitlab; tenants opt-in via `Tenant.spec.oidc.allowedProviders[]`. Kind count 15 → 16; group count 9 → 10 (new `authz.keese.ai`). | Declarative + VAP-validated + GitOps-friendly. Not replicating OpenFGA primitives: OpenFGA sees only transformed subject strings; OIDCProvider is the config layer BEFORE OpenFGA. Agent SA subject form is `user:ksa-<workspace-uid>` (bare SA name; OpenFGA is per-cluster so no further domain disambiguation needed). Human subject form is `user:<email-or-sub@domain>` per provider template. Added 2026-04-21. Detailed spec: `docs/designs/04b-projected-sa-identity.md` iter-2. |
 | D29 | **`CrossTenantAgreement` CRD with cert-manager-style bilateral handshake gates cross-tenant a2a messaging.** New kind in `keese.ai/v1alpha1/CrossTenantAgreement`. Cluster-scoped (cross-tenant by definition). Spec: `from: {tenantRef, workspaceSelector}`, `to: {tenantRef, workspaceSelector}`, `scope: {natsSubjects[], a2aRoles[]}`, `expiresAt`. Status: `phase: Pending|Approved|Rejected|Expired`, `approvals[]: {tenant, approvedBy, approvedAt, signature}`. Controller writes `tenant:T_to#allows_messaging@tenant:T_from` + `workspace:W_to#messageable_from@workspace:W_from` ReBAC tuples ONLY after both-side approval. Manual tuple-writing supported (third-party authz workflows) — controller no-ops when tuple already exists out-of-band. Intra-tenant a2a is implicit via Workflow definition (NATS topic existence IS authz). Kind count 16 → 17; group count unchanged (stays in `keese.ai`). | Workspace-author UX requires a CRD (declarative, GitOps-friendly, kubectl-native). Cert-manager-style handshake (both tenants approve before tuple write) prevents unilateral cross-tenant escalation. Out-of-band tuple writing supported for third-party / out-of-cluster authz systems. Amends D23 (CrossTenantAgreement was on the drop list — now justified by the workspace-as-security-boundary reframe). Added 2026-04-21 after a2a/cross-tenant messaging architectural reframe. Detailed spec: `docs/designs/25-cross-tenant-agreement.md`. Drives 04a iter-5 (`tenant.allows_messaging` + `workspace.messageable_from` relations), 04b iter-3 (`audienceTemplates` including `workflowRun`), 09 iter-3 (a2a peer-auth modes reduced to 2 + scope field), 03 iter-3 (Workflow controller topic provisioning + cross-tenant admission check). |
 
 ---
 
-## Final kind list — **17 kinds** (+1 kind since D28)
+## Final kind list — **17 kinds**
 
-All kinds at `v1alpha1`. The original sub-domains below were consolidated into the
-3 `keese.ai` groups (`keese.ai` / `authz.keese.ai` / `policy.keese.ai`) by TD-P1-03:
+All kinds at `v1alpha1` across the 3 `keese.ai` groups (`keese.ai` /
+`authz.keese.ai` / `policy.keese.ai`):
 
 | Group | Kinds | Count |
 |---|---|---:|
@@ -437,16 +437,15 @@ operator-sdk init \
   --project-name=keese
 ```
 
-### `create api` sequence (13 kinds across 8 groups)
+### `create api` sequence
 ```
-workspace/v1alpha1:     Workspace, WorkspaceShare
-workflow/v1alpha1:      Workflow, WorkflowRun
-runtime/v1alpha1:       AgentRuntime, RuntimeExtension
-memory/v1alpha1:        Memory, SharedMemory
-recipe/v1alpha1:        Recipe, RecipeSource
-guardrail/v1alpha1:     GuardrailBinding
-observability/v1alpha1: TokenBudget
-transport/v1alpha1:     Transport
+--group=""     → keese.ai:        Workspace, WorkspaceShare, WorkspaceSession,
+                                  Workflow, WorkflowRun, AgentRuntime,
+                                  RuntimeExtension, Memory, SharedMemory,
+                                  Recipe, RecipeSource, Transport, Tenant
+--group=authz  → authz.keese.ai:  GuardrailBinding, OIDCProvider,
+                                  CrossTenantAgreement, ToolBinding, WorkspaceTool
+--group=policy → policy.keese.ai: TokenBudget
 ```
 Command per kind: `operator-sdk create api --group=<g> --version=v1alpha1 --kind=<K> --resource --controller`. Idempotent re-run guard `scripts/guard-create-api.sh`. PROJECT pre-set `multigroup: true`.
 

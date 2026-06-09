@@ -14,14 +14,13 @@ status: current
 last_verified: 2026-05-06
 ---
 
-# TD-P1-03 — ext_authz + API group consolidation (10 → 3)
+# TD-P1-03 — ext_authz + 3-group API layout
 
 ## Goal
 
-Land the OpenFGA `ext_authz` integration (TD-P1-03) on top of a
-consolidated API group layout. Today's 10 groups (1–3 kinds each)
-collapse to **3 groups mirroring Kubernetes' `core` / `rbac` /
-`policy` shape**:
+Land the OpenFGA `ext_authz` integration (TD-P1-03) on the 3-group API
+layout — **3 groups mirroring Kubernetes' `core` / `rbac` / `policy`
+shape**:
 
 | Group | Kinds | Mirrors |
 |---|---|---|

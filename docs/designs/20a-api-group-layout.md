@@ -74,8 +74,8 @@ group:
 | `LocalObjectReference` (`{ Name string }`) | `api/keese/v1alpha1` (`common_types.go`) | Same-namespace, name-only refs reused across `keese.ai` kinds. |
 | `ConcurrencyPolicy` (`Allow` / `Forbid` / `Replace`) | `api/keese/v1alpha1` (`common_types.go`) | Workflow concurrency vocabulary. |
 
-**Status pattern (convention, not a base struct).** Every kind's `*Status`
-declares its fields inline — there is no embedded `StatusBase`:
+**Status pattern.** Every kind's `*Status` declares its fields inline — no
+shared base struct:
 
 - `ObservedGeneration int64` (rule 04.4),
 - `Conditions []metav1.Condition` (`patchStrategy:"merge"`, list-map keyed on `type`),
@@ -106,9 +106,8 @@ type WorkspaceStatus struct {
 ```
 
 Other kinds follow the same shape with their own enum — e.g. `BindingPhase`
-(`GuardrailBinding`), `TokenBudgetPhase` (`TokenBudget`). The
-`check-phase-enum-drift.sh` hook proposed in earlier iterations was **not**
-implemented; phase vocabularies are reviewed per-kind in the owning spec.
+(`GuardrailBinding`), `TokenBudgetPhase` (`TokenBudget`). Phase vocabularies are
+reviewed per-kind in the owning spec.
 
 ### Status testing
 

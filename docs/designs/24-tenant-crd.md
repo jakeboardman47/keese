@@ -36,7 +36,7 @@ reimplement namespace aggregation — that delegates to Capsule (Mode B) or
 derives from `keese.ai/tenant=<name>` label selectors (Mode A). Purpose: give
 ReBAC `tenant:X` a K8s-object backing with finalizers, events, and status, and
 aggregate keese-specific tenant settings that previously had no canonical home.
-Go path: `api/tenancy/v1alpha1`. Identity key for OpenFGA: `Tenant.metadata.name`.
+Go path: `api/keese/v1alpha1`. Identity key for OpenFGA: `Tenant.metadata.name`.
 
 ## Spec Schema (Q1)
 
