@@ -57,6 +57,9 @@ more numbered TestStep YAMLs that are executed in order.
 | `multi-tenant/` | Two concurrent tenants Active; cross-tenant egress blocked by NetworkPolicy (probe exits Failed). | TD-P3-07 |
 | `chaos-network/` | Deny-all NetworkPolicy triggers EgressUnavailable within 30s; restore clears it; controller restart leaves session pod running. | TD-P3-08 |
 | `rebac-decision/` | Live ext_authz CRD-driven decision: granted tool → HTTP 200, ungranted → 403 (fail-closed), token-free deny audit (rule 05.10), allow→deny revoke flip within cache TTL. | EH4 |
+| `authz-guardrails/` | GuardrailBinding default-inherit deny-union + finite event reasons; WorkspaceTool tool allow→200 / revoke→403. (guardrail ext_proc gated.) | EH5 |
+| `cross-tenant/` | CrossTenantAgreement trust-tuple write + expiry-driven removal; OIDCProvider Ready. (cross-tenant request decision gated.) | EH6 |
+| `token-budget/` | TokenBudget Ready + BackendTrafficPolicy rate-limit projection + in-budget→200. (over-budget 429 gated on metering.) | EH7 |
 
 ## Adding a case
 

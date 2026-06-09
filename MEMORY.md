@@ -39,6 +39,28 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   `test.yaml` gates `make coverage-check` on PRs. Optional skip-hardening + PR-smoke
   deferred.
 
+### 2026-06-09 — e2e-hardening wave 2 (EH5–EH7): authz/policy e2e + impl gaps
+
+- Suites added, all **`shipped-with-stubs`** (live CRD/tuple/projection layers tested;
+  not-yet-wired paths gated behind env flags): `tests/e2e/authz-guardrails/` (EH5),
+  `cross-tenant/` (EH6), `token-budget/` (EH7). Request-firing primitives now live in
+  `tests/e2e/lib/fire-request.sh` (sourced, not copied; EH4's inline copy untouched).
+- **CTA revocation is expiry-driven, not delete-driven:** the controller removes the
+  trust tuple via `transitionToExpired`→`Rebac.Delete`; `cleanup()` on delete only
+  drops the NATS stream + finalizer. Tests drive revocation through expiry.
+- **Controller follow-ups these e2e tests surfaced** (impl gaps, NOT test defects):
+  1. `internal/authz/extauth/resolver.go` resolves `can_call` but not `messageable_from`
+     → cross-tenant request decisions not live (EH6 gate `CROSS_TENANT_DECISION_LIVE=1`).
+  2. No OTEL token-cost metering processor feeding consumed tokens back to the
+     rate-limiter → over-budget 429 can't fire (EH7; the rate-limit projection IS live).
+  3. Guardrail ext_proc (Presidio/LlamaGuard) absent from the bootstrap (EH5 gate
+     `GUARDRAIL_EXTPROC=1`).
+  4. Only `GuardrailBinding` has a reconciler; `ToolBinding`/`WorkspaceTool` are
+     request-time catalogue objects — the `tool#allowed_in@workspace` tuple is written
+     by the **Workspace** controller from `egress.allowedTools`.
+  5. Bootstrap default GuardrailBinding ships `keese-default` but the controller's
+     `defaultBindingName` const is `keese.ai-default` → non-fatal `DefaultBindingMissing`.
+
 ### 2026-06-08 — Conductor: parallel-build orchestrator adopted
 
 - Ported the `conductor/` wave orchestrator (scheduler · footprint-coloring ·

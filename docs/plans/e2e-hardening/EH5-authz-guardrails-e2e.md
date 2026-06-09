@@ -10,8 +10,9 @@ depends:
   - ../../specs/authz.keese.ai-v1alpha1-guardrail.md
   - ../../../internal/controller/authz/guardrailbinding_controller.go
 related_skills: [plan-management]
-status: planned
+status: shipped-with-stubs
 last_verified: 2026-06-09
+revisit_when_guardrail_extproc_live: true
 phase: EH5
 model_tier: sonnet
 depends_on: [EH4]

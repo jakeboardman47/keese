@@ -11,8 +11,10 @@ depends:
   - ../../../internal/controller/authz/crosstenanagreement_controller.go
   - ../../../internal/controller/authz/oidcprovider_controller.go
 related_skills: [plan-management]
-status: planned
+status: shipped-with-stubs
 last_verified: 2026-06-09
+revisit_when_cross_tenant_live: true
+revisit_when_oidc_discovery_live: true
 phase: EH6
 model_tier: sonnet
 depends_on: [EH4]

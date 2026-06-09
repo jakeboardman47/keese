@@ -10,8 +10,9 @@ depends:
   - ../../../internal/controller/policy/tokenbudget_controller.go
   - ../../../internal/controller/policy/ratelimit.go
 related_skills: [plan-management]
-status: planned
+status: shipped-with-stubs
 last_verified: 2026-06-09
+revisit_when_token_metering_live: true
 phase: EH7
 model_tier: sonnet
 depends_on: []

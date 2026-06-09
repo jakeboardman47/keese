@@ -53,9 +53,9 @@ conductor waves ([ADR 29](../../designs/29-conductor-orchestration.md)).
 | EH2 | Coverage enforcement infra | test-engineer | wave | — | complete |
 | EH3 | SIGTERM-drain test wiring | test-engineer | wave | — | complete |
 | EH4 | Live ReBAC allow/deny e2e (keystone) | test-engineer | wave | — | complete |
-| EH5 | GuardrailBinding + ToolBinding + WorkspaceTool e2e | test-engineer | wave | EH4 | planned |
-| EH6 | CrossTenantAgreement + OIDCProvider e2e | test-engineer | wave | EH4 | planned |
-| EH7 | TokenBudget enforcement e2e | test-engineer | wave | — | planned |
+| EH5 | GuardrailBinding + ToolBinding + WorkspaceTool e2e | test-engineer | wave | EH4 | shipped-with-stubs |
+| EH6 | CrossTenantAgreement + OIDCProvider e2e | test-engineer | wave | EH4 | shipped-with-stubs |
+| EH7 | TokenBudget enforcement e2e | test-engineer | wave | — | shipped-with-stubs |
 | EH8 | FeatureGate behavior e2e | test-engineer | wave | — | planned |
 | EH9 | Workflow + WorkflowRun e2e | test-engineer | wave | — | planned |
 | EH10 | Real drain/SIGTERM e2e (replace stand-ins) | test-engineer | wave | EH3 | planned |
