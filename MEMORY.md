@@ -77,6 +77,23 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-10 — controller-hardening CH5d: metering e2e (track complete)
+
+- `tests/e2e/token-budget/` (CH5d, shipped-with-stubs): the over-budget step drives real
+  tokens past `spec.limits` and asserts **429 + `x-keese-limit-source: token-budget`** (the
+  long-window TokenBudget signal, distinct from the gateway's short-window
+  `gateway-token-rate`) + `status.phase=Exhausted`, then polls `windowStart` advance →
+  back-to-200 recovery (no `sleep`-assert, rule 06). Header-dumping `fire_request_headers`
+  added locally (body discarded, rule 05.10); EH4's sourced helper untouched.
+- **`tests/e2e/lib/check-metering-fully-live.sh`** is the umbrella live-gate (meter
+  Deployment ready + ext_authz up + consumed series present); skips cleanly (exit 2) until
+  CH5b's two stubs land — the `:dev` meter image (`make token-meter-load`) and the collector
+  OTLP→`/ingest` shaping. Trigger `revisit_when_metering_fully_live` replaces EH7's old
+  `revisit_when_token_metering_live`; EH7 + CH5d both `shipped-with-stubs`.
+- **CH track done:** CH1–CH9 + CH5a–d all addressed. Remaining metering work is the two
+  CH5b cluster-only stubs (image build + OTLP→/ingest bridge) — no further controller/authz
+  gaps from the e2e sweep.
+
 ### 2026-06-10 — controller-hardening CH5c: TokenBudget enforcement loop
 
 - `internal/controller/policy/tokenbudget_controller.go` (CH5c, complete): the reconciler

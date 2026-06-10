@@ -10,8 +10,9 @@ depends:
   - CH5c-tokenbudget-reconciler.md
   - ../e2e-hardening/EH7-token-budget-e2e.md
 related_skills: [plan-management, testing]
-status: planned
+status: shipped-with-stubs
 last_verified: 2026-06-10
+revisit_when_metering_fully_live: true
 phase: CH5d
 model_tier: sonnet
 depends_on: [CH5c]
