@@ -77,6 +77,22 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-10 — controller-hardening CH5b: meter bootstrap wiring
+
+- `config/token-meter/` (CH5b, shipped-with-stubs): keese-token-meter Deployment +
+  Service + dev **Prometheus** (monitoring ns, `prometheus.monitoring.svc:9090` —
+  the exact endpoint `internal/controller/policy/prom_http.go` targets) + fail-closed
+  wildcard-free NetworkPolicies. The Tier-1 otel-collector (`dev/bootstrap/values/
+  otel-collector.yaml`) gets a `metrics/tokenusage` pipeline exporting to the meter's
+  `POST /ingest`; `make token-meter-load` (folded into `e2e-images-load`) loads the image.
+  kubeconform 11/11; SSA-applied in `bootstrap-infra`.
+- **Two stubs (live-cluster only):** (1) the `:dev` meter image must be built+`kind
+  load`ed (`revisit_when_meter_image_live`); (2) the collector's `otlphttp` exporter
+  emits OTLP `/v1/metrics`, but the meter `/ingest` wants CH5a's JSON shape — the
+  **runtime OTLP→/ingest translation** is the nightly-path stub
+  (`revisit_when_collector_ingest_shaping`). Structure is wired + validated; live data
+  flows once that bridge + image land. CH5c reads the Prom series regardless.
+
 ### 2026-06-10 — controller-hardening CH5a: keese-token-meter processor
 
 - `cmd/token-meter/` (CH5a, the first build phase of ADR 30): stateless processor that

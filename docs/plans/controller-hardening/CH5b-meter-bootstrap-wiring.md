@@ -9,8 +9,10 @@ depends:
   - ../../designs/30-token-metering-pipeline.md
   - CH5a-token-meter-processor.md
 related_skills: [plan-management, infra-bootstrap]
-status: planned
+status: shipped-with-stubs
 last_verified: 2026-06-10
+revisit_when_meter_image_live: true
+revisit_when_collector_ingest_shaping: true
 phase: CH5b
 model_tier: sonnet
 depends_on: [CH5a]
