@@ -342,7 +342,6 @@ var _ = Describe("RecipeSource Controller", func() {
 			}, timeout, interval).Should(Succeed())
 		})
 	})
-})
 
 	// Spec 6 (TD-P2-03): GitCloneSuccess — real go-git path populates revision + digest.
 	Context("Git source with public repo (fake cloner simulating success)", func() {
