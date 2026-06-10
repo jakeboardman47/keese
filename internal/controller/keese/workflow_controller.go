@@ -13,31 +13,37 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	eventingv1 "knative.dev/eventing/pkg/apis/eventing/v1"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
 )
 
 const (
-	workflowFinalizer           = "finalizers.workflow.keese.ai/cascade"
-	workflowFieldOwner          = "keese-workflow-controller"
-	conditionTypeReady          = "Ready"
-	conditionTypeProgressing    = "Progressing"
+	workflowFinalizer             = "finalizers.workflow.keese.ai/cascade"
+	workflowFieldOwner            = "keese-workflow-controller"
+	conditionTypeReady            = "Ready"
+	conditionTypeProgressing      = "Progressing"
 	conditionTypeTriggerProjected = "TriggerProjected"
 )
 
 // WorkflowReconciler reconciles a Workflow object.
 type WorkflowReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	Argo          ArgoProjector
-	Rebac         WorkflowRebacWriter
+	Scheme *runtime.Scheme
+	Argo   ArgoProjector
+	Rebac  WorkflowRebacWriter
 	// LauncherImage is the container image used in CronJob / HTTPRoute launcher pods.
 	// Defaults to "ghcr.io/keese-ai/keese:dev" when empty. In production, cmd/main.go
 	// should inject the operator's own image via the RELATED_IMAGE_WF_LAUNCHER env var.
@@ -65,7 +71,8 @@ type WorkflowReconciler struct {
 //  5. Project triggers (Cron / Knative / NATS / HTTP) via SSA.
 //  6. Project outputs via SSA.
 //  7. Write ReBAC tuples.
-//  8. Patch status.
+//  8. Derive status.runCount from the live WorkflowRuns.
+//  9. Patch status.
 func (r *WorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -140,7 +147,21 @@ func (r *WorkflowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		wf.Status.TupleCount = count
 	}
 
-	// 8. Status
+	// 8. Derive runCount from the live WorkflowRuns owned by this Workflow.
+	//    This is pure derived state (rule 04.4): it is recomputed from the
+	//    cluster on every reconcile and never read back to drive the next
+	//    reconcile decision. Semantics: count of WorkflowRuns currently
+	//    existing that reference this Workflow (see countWorkflowRuns).
+	runCount, countErr := r.countWorkflowRuns(ctx, &wf)
+	if countErr != nil {
+		// Non-fatal: a transient list error must not block projection/status
+		// convergence. Leave runCount unchanged and requeue.
+		log.Error(countErr, "failed to count WorkflowRuns for runCount")
+		return ctrl.Result{RequeueAfter: requeueAfterDuration}, nil
+	}
+	wf.Status.RunCount = runCount
+
+	// 9. Status
 	if wf.Status.Phase != keesev1alpha1.WorkflowPhaseDegraded {
 		wf.Status.Phase = keesev1alpha1.WorkflowPhaseReady
 	}
@@ -501,6 +522,35 @@ func ptrString(s string) *string {
 	return &s
 }
 
+// countWorkflowRuns returns the number of WorkflowRuns that reference wf via
+// spec.workflowRef. WorkflowRuns are linked to their Workflow by name within
+// the same namespace (the same linkage used by reconcileDelete's cascade check
+// and the WorkflowRun concurrency check), so the count is namespace-scoped.
+//
+// Semantics (rule 04.4 — derived state): this counts the WorkflowRuns that
+// currently exist for the Workflow. The owning type's RunCount field is
+// documented as "total number of WorkflowRuns created", but a monotonic
+// created-counter would require reading the prior status value to increment it
+// — that is exactly the spec/status coupling rule 04.4 forbids, and it could
+// not decrease when a run is garbage-collected. We therefore expose a purely
+// derived live count: it is recomputed from the cluster every reconcile and
+// updates both up (run created) and down (run deleted). The owner watch in
+// SetupWithManager keeps it fresh by requeueing the Workflow on WorkflowRun
+// create/delete.
+func (r *WorkflowReconciler) countWorkflowRuns(ctx context.Context, wf *keesev1alpha1.Workflow) (int64, error) {
+	var runList keesev1alpha1.WorkflowRunList
+	if err := r.List(ctx, &runList, client.InNamespace(wf.Namespace)); err != nil {
+		return 0, fmt.Errorf("list workflowruns: %w", err)
+	}
+	var count int64
+	for i := range runList.Items {
+		if runList.Items[i].Spec.WorkflowRef.Name == wf.Name {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // patchStatus applies a status-only SSA patch from orig → wf.
 func (r *WorkflowReconciler) patchStatus(ctx context.Context, wf *keesev1alpha1.Workflow, orig *keesev1alpha1.Workflow) error {
 	return r.Status().Patch(ctx, wf, client.MergeFrom(orig))
@@ -526,9 +576,45 @@ func (r *WorkflowReconciler) emitEvent(wf *keesev1alpha1.Workflow, eventtype, re
 }
 
 // SetupWithManager registers the controller and its watches.
+//
+// In addition to the primary Workflow watch, it watches WorkflowRuns so that
+// status.runCount stays fresh: a WorkflowRun create or delete requeues the
+// Workflow it references. The watch uses a create/delete-only predicate —
+// WorkflowRun spec/status updates do not change the count, so requeueing on
+// them would be wasted work. The primary Workflow watch keeps
+// GenerationChangedPredicate so status-only writes (including the runCount
+// patch itself) do not retrigger reconciliation (rule 04.4: status must not
+// feed the next reconcile).
 func (r *WorkflowReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// runOwnerMapper maps a WorkflowRun event to a reconcile request for the
+	// Workflow named in spec.workflowRef (same-namespace linkage).
+	runOwnerMapper := handler.EnqueueRequestsFromMapFunc(
+		func(_ context.Context, obj client.Object) []reconcile.Request {
+			run, ok := obj.(*keesev1alpha1.WorkflowRun)
+			if !ok || run.Spec.WorkflowRef.Name == "" {
+				return nil
+			}
+			return []reconcile.Request{{
+				NamespacedName: types.NamespacedName{
+					Namespace: run.Namespace,
+					Name:      run.Spec.WorkflowRef.Name,
+				},
+			}}
+		},
+	)
+
+	// createDeleteOnly fires only on WorkflowRun create/delete — the two events
+	// that actually change the count.
+	createDeleteOnly := predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return true },
+		DeleteFunc:  func(event.DeleteEvent) bool { return true },
+		UpdateFunc:  func(event.UpdateEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&keesev1alpha1.Workflow{}).
+		For(&keesev1alpha1.Workflow{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&keesev1alpha1.WorkflowRun{}, runOwnerMapper, builder.WithPredicates(createDeleteOnly)).
 		Named("workflow-workflow").
 		Complete(r)
 }

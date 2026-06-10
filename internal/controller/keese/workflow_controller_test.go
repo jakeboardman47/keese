@@ -314,6 +314,95 @@ var _ = Describe("Workflow Controller", func() {
 		})
 	})
 
+	Describe("RunCount derivation", func() {
+		// newRunForWorkflow builds a WorkflowRun linked to wfName via spec.workflowRef.
+		newRunForWorkflow := func(name, wfName string) *keesev1alpha1.WorkflowRun {
+			return &keesev1alpha1.WorkflowRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: testWorkflowNamespace,
+				},
+				Spec: keesev1alpha1.WorkflowRunSpec{
+					WorkspaceRef: keesev1alpha1.LocalObjectReference{Name: "ws-test"},
+					WorkflowRef:  keesev1alpha1.LocalObjectReference{Name: wfName},
+					RetryBudget:  3,
+				},
+			}
+		}
+
+		It("counts owned WorkflowRuns, updates on delete, and is idempotent over ≥3 reconciles", func() {
+			argo, _, _, rebac, _ := newFakes()
+			r := &WorkflowReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(), Argo: argo, Rebac: rebac}
+
+			wf := minimalWorkflow("wf-runcount")
+			Expect(k8sClient.Create(ctx, wf)).To(Succeed())
+			defer func() {
+				_ = k8sClient.Delete(ctx, &keesev1alpha1.Workflow{
+					ObjectMeta: metav1.ObjectMeta{Name: wf.Name, Namespace: wf.Namespace},
+				})
+			}()
+			key := types.NamespacedName{Name: wf.Name, Namespace: wf.Namespace}
+
+			// Reconcile 1: finalizer; Reconcile 2: project + initial runCount (0).
+			reconcileN(ctx, r, key, 2)
+
+			var fetched keesev1alpha1.Workflow
+			Expect(k8sClient.Get(ctx, key, &fetched)).To(Succeed())
+			Expect(fetched.Status.RunCount).To(Equal(int64(0)))
+
+			// Create N=3 WorkflowRuns under this Workflow.
+			const n = 3
+			runs := make([]*keesev1alpha1.WorkflowRun, 0, n)
+			for i := 0; i < n; i++ {
+				run := newRunForWorkflow(fmt.Sprintf("wf-runcount-run-%d", i), wf.Name)
+				Expect(k8sClient.Create(ctx, run)).To(Succeed())
+				runs = append(runs, run)
+			}
+			defer func() {
+				for _, run := range runs {
+					_ = k8sClient.Delete(ctx, run)
+				}
+			}()
+
+			// A WorkflowRun for a *different* Workflow must not be counted.
+			otherWf := minimalWorkflow("wf-runcount-other")
+			Expect(k8sClient.Create(ctx, otherWf)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, otherWf) }()
+			otherRun := newRunForWorkflow("wf-runcount-other-run", otherWf.Name)
+			Expect(k8sClient.Create(ctx, otherRun)).To(Succeed())
+			defer func() { _ = k8sClient.Delete(ctx, otherRun) }()
+
+			// Reconcile to pick up the new runs; runCount == N (excludes otherRun).
+			Eventually(func() int64 {
+				_, _ = r.Reconcile(ctx, requestFor(key))
+				var f keesev1alpha1.Workflow
+				if err := k8sClient.Get(ctx, key, &f); err != nil {
+					return -1
+				}
+				return f.Status.RunCount
+			}, pollTimeout, pollInterval).Should(Equal(int64(n)))
+
+			// Idempotency: ≥3 further reconciles with no run change keep runCount == N.
+			for i := 0; i < 3; i++ {
+				_, err := r.Reconcile(ctx, requestFor(key))
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(k8sClient.Get(ctx, key, &fetched)).To(Succeed())
+			Expect(fetched.Status.RunCount).To(Equal(int64(n)))
+
+			// Delete one run; runCount drops to N-1.
+			Expect(k8sClient.Delete(ctx, runs[0])).To(Succeed())
+			Eventually(func() int64 {
+				_, _ = r.Reconcile(ctx, requestFor(key))
+				var f keesev1alpha1.Workflow
+				if err := k8sClient.Get(ctx, key, &f); err != nil {
+					return -1
+				}
+				return f.Status.RunCount
+			}, pollTimeout, pollInterval).Should(Equal(int64(n - 1)))
+		})
+	})
+
 	Describe("Deletion cascades Argo WorkflowTemplate", func() {
 		It("calls DeleteWorkflowTemplate when WorkflowRuns are all terminal", func() {
 			argo, _, _, rebac, _ := newFakes()
