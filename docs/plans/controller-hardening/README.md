@@ -45,7 +45,7 @@ test-only e2e track, every phase gets a harder diff review, SSA-only writes
 | CH7 | Bootstrap overlays (OLM/cosign + goose-runtime) | infra-bootstrap | — | shipped-with-stubs |
 | CH4 | Cross-tenant messageable_from + OpenFGA model | rebac-modeler | — | complete |
 | CH5 | Token-cost metering pipeline (design ADR — ADR 30) | architect | — | complete |
-| CH5a | keese-token-meter OTEL processor (`cmd/token-meter/`) | implementer | — | planned |
+| CH5a | keese-token-meter OTEL processor (`cmd/token-meter/`) | implementer | — | complete |
 | CH5b | Wire the meter into the Tier-1 OTEL collector + bootstrap | infra-bootstrap | CH5a | planned |
 | CH5c | Un-stub the TokenBudget reconciler vs the live series | controller-author | CH5b | planned |
 | CH5d | Flip EH7's metering e2e (real tokens → 429) | test-engineer | CH5c | planned |

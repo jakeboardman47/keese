@@ -77,6 +77,19 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-10 — controller-hardening CH5a: keese-token-meter processor
+
+- `cmd/token-meter/` (CH5a, the first build phase of ADR 30): stateless processor that
+  relabels gateway token usage → `keese_token_budget_consumed_total{tenant,workspace,
+  model,direction}` (split input/output), dedups on Envoy `x-request-id` (final-only,
+  TTL map), rule-06 SIGTERM drain (readyz→503, flush queue, shutdown event, exit 0),
+  **fail-open** (never gates traffic). Distroless digest-pinned image. 8 tests `-race` green.
+- **CH5b wiring contract:** the meter ingests usage over **HTTP `POST /ingest`** (JSON:
+  `request_id,tenant,workspace,model,tokens_in,tokens_out,final`), NOT an in-process OTEL
+  collector plugin (ADR 30 allowed either). So CH5b must point the Tier-1 collector's
+  exporter at the meter's `/ingest`. `Meter.Process` is transport-agnostic if a true
+  plugin is preferred instead. (`prometheus/common` promoted indirect→direct in go.mod.)
+
 ### 2026-06-10 — controller-hardening CH5: ADR 30 token-metering pipeline (design)
 
 - [ADR 30](docs/designs/30-token-metering-pipeline.md) (draft, iter-1 95): the EH7
