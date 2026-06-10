@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -18,6 +19,39 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 )
+
+// syncBuffer is a bytes.Buffer guarded by a mutex so that the bytes a
+// caller reads back never race with a late write.
+//
+// remotecommand.StreamWithContext copies the remote stdout/stderr in
+// background goroutines. On a mid-stream context cancel/timeout it returns
+// the context error immediately, but a copy goroutine may still be blocked
+// in a Write and flush a final chunk after StreamWithContext has returned.
+// Exec then reads the buffer (Bytes) to honor its "return partial output +
+// the error" contract — concurrently with that late Write. Routing both the
+// background Write and Exec's read through the same mutex removes that data
+// race without changing what Exec returns.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+// Write satisfies io.Writer for the remotecommand copy goroutine.
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+// Bytes returns a copy of the accumulated bytes under the lock, safe to
+// read even while a background Write is still in flight.
+func (b *syncBuffer) Bytes() []byte {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make([]byte, b.buf.Len())
+	copy(out, b.buf.Bytes())
+	return out
+}
 
 // Executor wraps a kubernetes.Interface + REST config so it can
 // stream commands into pod containers.
@@ -57,7 +91,7 @@ func (e *Executor) Exec(ctx context.Context, namespace, podName, container strin
 	if err != nil {
 		return nil, nil, fmt.Errorf("podexec: spdy: %w", err)
 	}
-	var so, se bytes.Buffer
+	var so, se syncBuffer
 	if err := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdout: &so,
 		Stderr: &se,
