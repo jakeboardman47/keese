@@ -249,6 +249,11 @@ cosign-webhook-push:  ## push keese-cosign-webhook image — CI only
 	@echo "WARN: local push is unsigned — production must use image.yaml on tag push"
 	@docker push $(COSIGN_WEBHOOK_IMG)
 
+.PHONY: cosign-webhook-load
+cosign-webhook-load:  ## single-arch build + kind load keese-cosign-webhook into the dev cluster (EH8 admission-flip precondition)
+	@docker build -t $(COSIGN_WEBHOOK_IMG) -f Dockerfile.keese-cosign-webhook .
+	@kind load docker-image $(COSIGN_WEBHOOK_IMG) --name=$(KIND_CLUSTER)
+
 .PHONY: goose-runtime-build
 goose-runtime-build:  ## build goose-runtime image (block/goose + keese-drain) for local kind
 	@docker build -t $(GOOSE_RUNTIME_IMG) -f Dockerfile.goose-runtime .
@@ -256,6 +261,10 @@ goose-runtime-build:  ## build goose-runtime image (block/goose + keese-drain) f
 .PHONY: goose-runtime-load
 goose-runtime-load: goose-runtime-build  ## kind load the goose-runtime image into the dev cluster
 	@kind load docker-image $(GOOSE_RUNTIME_IMG) --name=$(KIND_CLUSTER)
+
+.PHONY: e2e-images-load
+e2e-images-load: goose-runtime-load cosign-webhook-load  ## build + kind-load the dev-only images the e2e gates need (EH8 cosign-webhook, EH10 goose-runtime)
+	@echo "==> e2e images loaded: goose-runtime (EH10 real drain) + cosign-webhook (EH8 admission flip)"
 
 # ==== Deploy / install (delegated) ======================================
 
@@ -302,6 +311,17 @@ bootstrap-infra:  ## helmfile sync dev/bootstrap/ + apply aigateway CRs
 	@echo "==> waiting for AIGatewayRoute Ready"
 	@kubectl wait --for=condition=Accepted aigatewayroute/anthropic \
 	  -n keese-system --timeout=180s || true
+	@echo "==> registering FeatureGate CRD (so seed CRs apply before Tilt)"
+	@kubectl apply --server-side --force-conflicts \
+	  -f $(REPO_ROOT)/config/crd/bases/policy.keese.ai_featuregates.yaml
+	@echo "==> applying cosign webhook + FeatureGate seeds (CH7; EH8 precondition)"
+	@kubectl apply --server-side --force-conflicts -k $(DEV_DIR)/bootstrap/cosign-webhook
+	@echo "==> waiting for cosign webhook serving cert + Deployment"
+	@kubectl wait --for=condition=Ready certificate/keese-cosign-webhook-tls \
+	  -n keese-system --timeout=120s || true
+	@kubectl wait --for=condition=Available deployment/keese-cosign-webhook \
+	  -n keese-system --timeout=120s || \
+	  echo "    (webhook not yet Available — run 'make cosign-webhook-load' to load the image; EH8 admission-flip stays gated until then)"
 	@echo "==> bootstrap-infra complete"
 
 .PHONY: tilt-up

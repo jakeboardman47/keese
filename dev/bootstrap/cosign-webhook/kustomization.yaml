@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Dev bootstrap overlay for the cosign InstallPlan ValidatingWebhook +
+# the seed FeatureGate CRs. Applied by `make bootstrap-infra` AFTER
+# helmfile sync (which provides cert-manager + kyverno — the webhook's
+# serving-cert issuer and the keese-features tamper-resistance policy).
+#
+# CH7: the operator overlay (config/default) does not pull
+# config/cosign-webhook/ into the local loop, so EH8's admission-flip
+# precondition (the keese-cosign-installplan ValidatingWebhookConfiguration
+# + the keese-cosign-webhook Deployment Available in keese-system) was
+# never met locally. This overlay deploys exactly those, plus the
+# cosign-installplan-verify FeatureGate seed that EH8's projection assert
+# reads.
+#
+# Ordering: cert-manager / kyverno CRDs (the webhook's serving-cert
+# issuer + the keese-features tamper-resistance policy) come from
+# helmfile and MUST exist before this overlay applies. The keese
+# FeatureGate CRD (policy.keese.ai/v1alpha1) backing the seeds below is
+# server-side applied by `make bootstrap-infra` immediately before this
+# overlay (it lives under config/crd/bases/, outside this overlay's
+# kustomize root, so it cannot be a `resources:` entry without relaxing
+# the load restrictor). Tilt later re-applies the same CRD via the full
+# operator overlay (config/overlays/dev) — a no-op under SSA.
+#
+# Images stay on the floating `:dev` tag (rule 05.12 — tags only in dev
+# overlays; prod pins by digest). The base already sets failurePolicy:
+# Fail (fail-closed, rule 05.12).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Deployment + ValidatingWebhookConfiguration + cert-manager Certificate
+  # + Service + RBAC + NetworkPolicies + keese-system Namespace.
+  - ../../../config/cosign-webhook
+  # Seed FeatureGate CRs (cosign-installplan-verify / -failclosed) + the
+  # kyverno ClusterPolicy guarding the keese-features projection ConfigMap.
+  - ../../../config/featuregates

@@ -134,6 +134,43 @@ kubectl apply -k dev/bootstrap/openfga/
 kubectl apply -k dev/bootstrap/nats/
 ```
 
+## Cosign webhook + FeatureGate seeds (CH7)
+
+`make bootstrap-infra` applies `dev/bootstrap/cosign-webhook/` after helmfile
+sync. The overlay bundles `config/cosign-webhook/` (Deployment + fail-closed
+`ValidatingWebhookConfiguration` + cert-manager serving cert) and
+`config/featuregates/` (the `cosign-installplan-verify` / `-failclosed` seed
+`FeatureGate` CRs + the kyverno ClusterPolicy guarding `keese-features`). The
+FeatureGate CRD is SSA-applied just before the overlay so the seeds land even
+before Tilt installs the operator overlay.
+
+This satisfies two of EH8's three admission-flip preconditions (webhook
+config + seed gate exist). The webhook **Deployment** only goes `Available`
+once its image is in the cluster — the `:dev` tag is never pushed (rule
+05.15), so load it locally; until then `bootstrap-infra` prints a non-fatal
+notice and EH8's admission step self-skips:
+
+```bash
+make cosign-webhook-load   # docker build + kind load keese-cosign-webhook:dev
+```
+
+> **OLM not in the local loop.** EH8's *full* proof (unsigned `InstallPlan` →
+> DENY → flip gate → ADMITTED) also needs the OLM `InstallPlan` CRD. The
+> bootstrap does not install OLM (too heavy) — a documented follow-up. EH8
+> steps 0–2 (CR-reconcile + projection flip) run today.
+
+## Goose-runtime image (EH10 real drain)
+
+The `agentruntime-drain` suite (EH10) runs the real `keese-drain` baked into
+`goose-runtime`; its `check-drain-image.sh` gate self-skips when the image is
+absent. `make test-e2e-extended` does **not** auto-build it — load it first
+(the other six suites skip the docker-build cost):
+
+```bash
+make goose-runtime-load    # docker build + kind load goose-runtime:dev
+make e2e-images-load       # or load both EH8 + EH10 images at once
+```
+
 ## Reseed everything
 
 ```bash
