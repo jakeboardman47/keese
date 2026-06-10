@@ -27,12 +27,17 @@
 #     measurement jitter (e.g. measured 79.31 -> 79.0).
 #
 # Packages at ~0% (`-short` produces no meaningful unit coverage today): the
-# cmd/ entrypoints, the api/ generated DeepCopy code, and the runtime
-# providers adkgo / adkpython plus runtime/podexec and wflauncher are stubs or
-# integration-only. Their floor is pinned at 0.0 so the gate stays green; phase
-# EH13 authors real tests and raises them. Do NOT delete these entries — a
-# present 0.0 floor documents the intentional debt; an absent entry would
-# silently downgrade a future regression to a warn.
+# cmd/ entrypoints, the api/ generated DeepCopy code, and wflauncher are stubs
+# or integration-only. Their floor is pinned at 0.0 so the gate stays green. Do
+# NOT delete these entries — a present 0.0 floor documents the intentional
+# debt; an absent entry would silently downgrade a future regression to a warn.
+#
+# EH13 (re-measured 2026-06-10, CGO_ENABLED=0) authored real unit tests for the
+# three runtime SPI packages below and ratcheted their floors off 0.0: adkgo /
+# adkpython are E0 skeletons fully covered by table-driven SPI-sentinel +
+# registration tests (measured 100.0); podexec is exercised against an owned
+# fake SPDY exec server covering success / non-zero-exit / stream-setup-failure
+# / timeout (measured 91.7, floor rounded down to 91.0).
 #
 # Measurement note: the controller packages carry their behavioural tests
 # behind the `integration` build tag (envtest); under `-short` only their pure
@@ -52,9 +57,11 @@ targets:
   github.com/keese-ai/keese/internal/controller/keese: 10.0
   github.com/keese-ai/keese/internal/controller/policy: 16.0
 
-  # --- Intentional 0% debt — raised by EH13 -----------------------------
-  # Runtime providers / exec / launcher with no -short unit coverage yet.
-  github.com/keese-ai/keese/internal/runtime/podexec: 0.0
-  github.com/keese-ai/keese/internal/runtime/providers/adkgo: 0.0
-  github.com/keese-ai/keese/internal/runtime/providers/adkpython: 0.0
+  # --- Runtime SPI units — floors ratcheted off 0.0 by EH13 -------------
+  github.com/keese-ai/keese/internal/runtime/podexec: 91.0
+  github.com/keese-ai/keese/internal/runtime/providers/adkgo: 100.0
+  github.com/keese-ai/keese/internal/runtime/providers/adkpython: 100.0
+
+  # --- Intentional 0% debt -----------------------------------------------
+  # Launcher with no -short unit coverage yet.
   github.com/keese-ai/keese/internal/wflauncher: 0.0
