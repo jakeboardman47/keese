@@ -217,9 +217,7 @@ var _ = Describe("TokenBudget Controller", func() {
 			fakeQuerier.Results = map[string]float64{}
 			fakeQuerier.DefaultValue = 12000.0
 			fakeQuerier.FailNext = false
-			fakeNats.Exceeded = map[string]bool{}
-			fakeNats.SetCalls = nil
-			fakeNats.ClearCalls = nil
+			fakeNats.Reset()
 
 			tb := newTokenBudget(resourceName, ns)
 			Expect(k8sClient.Create(ctx, tb)).To(Succeed())
@@ -240,9 +238,9 @@ var _ = Describe("TokenBudget Controller", func() {
 			}, 20*time.Second, 500*time.Millisecond).Should(BeTrue())
 
 			By("asserting NATS KV key is set")
-			Eventually(func() bool {
-				return len(fakeNats.SetCalls) > 0
-			}, 5*time.Second, 100*time.Millisecond).Should(BeTrue())
+			Eventually(func() int {
+				return fakeNats.SetCallCount()
+			}, 5*time.Second, 100*time.Millisecond).Should(BeNumerically(">", 0))
 
 			By("asserting phase=Exhausted")
 			Eventually(func() policyv1alpha1.TokenBudgetPhase {
@@ -299,9 +297,7 @@ var _ = Describe("TokenBudget Controller", func() {
 			fakeQuerier.Results = map[string]float64{}
 			fakeQuerier.DefaultValue = 5000.0
 			fakeQuerier.FailNext = false
-			fakeNats.Exceeded = map[string]bool{}
-			fakeNats.SetCalls = nil
-			fakeNats.ClearCalls = nil
+			fakeNats.Reset()
 
 			tb = newTokenBudget(resourceName, ns)
 			tb.Spec.WindowDuration = "1h"
@@ -346,9 +342,9 @@ var _ = Describe("TokenBudget Controller", func() {
 			}, 30*time.Second, 500*time.Millisecond).Should(BeTrue())
 
 			By("asserting NATS clear was called")
-			Eventually(func() bool {
-				return len(fakeNats.ClearCalls) > 0
-			}, 5*time.Second, 100*time.Millisecond).Should(BeTrue())
+			Eventually(func() int {
+				return fakeNats.ClearCallCount()
+			}, 5*time.Second, 100*time.Millisecond).Should(BeNumerically(">", 0))
 		})
 	})
 
@@ -484,18 +480,19 @@ var _ = Describe("TokenBudget Controller", func() {
 		It("should record set and clear calls", func() {
 			f := &FakeNatsSignaler{}
 			Expect(f.SetExceeded(context.Background(), "k1")).To(Succeed())
-			Expect(f.SetCalls).To(ContainElement("k1"))
-			Expect(f.Exceeded["k1"]).To(BeTrue())
+			Expect(f.SetCallsSnapshot()).To(ContainElement("k1"))
+			Expect(f.IsExceeded("k1")).To(BeTrue())
 
 			Expect(f.ClearExceeded(context.Background(), "k1")).To(Succeed())
-			Expect(f.ClearCalls).To(ContainElement("k1"))
-			Expect(f.Exceeded["k1"]).To(BeFalse())
+			Expect(f.ClearCallsSnapshot()).To(ContainElement("k1"))
+			Expect(f.IsExceeded("k1")).To(BeFalse())
 		})
 
 		It("should return error when FailNextSet is true", func() {
-			f := &FakeNatsSignaler{FailNextSet: true}
+			f := &FakeNatsSignaler{}
+			f.SetFailNextSet(true)
 			Expect(f.SetExceeded(context.Background(), "k2")).To(HaveOccurred())
-			Expect(f.FailNextSet).To(BeFalse()) // reset after use
+			Expect(f.FailNextSetArmed()).To(BeFalse()) // reset after use
 		})
 	})
 

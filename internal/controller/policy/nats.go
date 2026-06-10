@@ -3,7 +3,10 @@
 
 package policy
 
-import "context"
+import (
+	"context"
+	"sync"
+)
 
 // NatsSignaler writes and deletes boolean enforcement signals in the NATS KV bucket
 // `keese-budget-exceeded`. The real implementation calls the NATS JetStream KV API;
@@ -34,23 +37,32 @@ type NatsSignaler interface {
 	ClearExceeded(ctx context.Context, key string) error
 }
 
-// FakeNatsSignaler is a test double for NatsSignaler.
-// It records set/clear calls for assertion.
+// FakeNatsSignaler is a concurrency-safe test double for NatsSignaler.
+//
+// The reconciler runs in the controller-runtime manager goroutine, while test
+// assertions (Eventually) read recorded calls from the Ginkgo goroutine. All
+// recorded state is guarded by mu; cross-goroutine readers must use the
+// accessor methods (SetCallCount, ClearCallCount, IsExceeded, …) rather than
+// touching fields directly. Test setup that runs before the reconciler observes
+// a resource may reset state via the Reset* / SetFailNext* helpers, which also
+// take the lock so a concurrent reconcile never races the reset.
 type FakeNatsSignaler struct {
-	// Exceeded holds the set of keys currently marked as exceeded.
-	Exceeded map[string]bool
+	mu sync.Mutex
 
-	// SetCalls records all SetExceeded calls (key).
-	SetCalls []string
+	// exceeded holds the set of keys currently marked as exceeded.
+	exceeded map[string]bool
 
-	// ClearCalls records all ClearExceeded calls (key).
-	ClearCalls []string
+	// setCalls records all SetExceeded calls (key), in order.
+	setCalls []string
 
-	// FailNextSet causes the next SetExceeded call to return an error.
-	FailNextSet bool
+	// clearCalls records all ClearExceeded calls (key), in order.
+	clearCalls []string
 
-	// FailNextClear causes the next ClearExceeded call to return an error.
-	FailNextClear bool
+	// failNextSet causes the next SetExceeded call to return an error.
+	failNextSet bool
+
+	// failNextClear causes the next ClearExceeded call to return an error.
+	failNextClear bool
 }
 
 type natsSignalError struct{ key string }
@@ -61,29 +73,105 @@ func (e natsSignalError) Error() string {
 
 // SetExceeded implements NatsSignaler.
 func (f *FakeNatsSignaler) SetExceeded(_ context.Context, key string) error {
-	f.SetCalls = append(f.SetCalls, key)
-	if f.FailNextSet {
-		f.FailNextSet = false
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.setCalls = append(f.setCalls, key)
+	if f.failNextSet {
+		f.failNextSet = false
 		return natsSignalError{key: key}
 	}
-	if f.Exceeded == nil {
-		f.Exceeded = make(map[string]bool)
+	if f.exceeded == nil {
+		f.exceeded = make(map[string]bool)
 	}
-	f.Exceeded[key] = true
+	f.exceeded[key] = true
 	return nil
 }
 
 // ClearExceeded implements NatsSignaler.
 func (f *FakeNatsSignaler) ClearExceeded(_ context.Context, key string) error {
-	f.ClearCalls = append(f.ClearCalls, key)
-	if f.FailNextClear {
-		f.FailNextClear = false
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.clearCalls = append(f.clearCalls, key)
+	if f.failNextClear {
+		f.failNextClear = false
 		return natsSignalError{key: key}
 	}
-	if f.Exceeded != nil {
-		delete(f.Exceeded, key)
+	if f.exceeded != nil {
+		delete(f.exceeded, key)
 	}
 	return nil
+}
+
+// --- Guarded accessors (safe to call from any goroutine) ---
+
+// SetCallCount returns the number of SetExceeded calls recorded so far.
+func (f *FakeNatsSignaler) SetCallCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.setCalls)
+}
+
+// ClearCallCount returns the number of ClearExceeded calls recorded so far.
+func (f *FakeNatsSignaler) ClearCallCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.clearCalls)
+}
+
+// SetCallsSnapshot returns a copy of the recorded SetExceeded keys, in order.
+func (f *FakeNatsSignaler) SetCallsSnapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.setCalls...)
+}
+
+// ClearCallsSnapshot returns a copy of the recorded ClearExceeded keys, in order.
+func (f *FakeNatsSignaler) ClearCallsSnapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.clearCalls...)
+}
+
+// IsExceeded reports whether the given key is currently marked exceeded.
+func (f *FakeNatsSignaler) IsExceeded(key string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.exceeded[key]
+}
+
+// --- Guarded mutators for test setup (safe against a concurrent reconcile) ---
+
+// Reset clears all recorded calls and the exceeded set. Use in test setup to
+// start a case from a known state without racing an in-flight reconcile.
+func (f *FakeNatsSignaler) Reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.exceeded = map[string]bool{}
+	f.setCalls = nil
+	f.clearCalls = nil
+}
+
+// SetFailNextSet arms (or disarms) a one-shot error on the next SetExceeded.
+func (f *FakeNatsSignaler) SetFailNextSet(v bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.failNextSet = v
+}
+
+// SetFailNextClear arms (or disarms) a one-shot error on the next ClearExceeded.
+func (f *FakeNatsSignaler) SetFailNextClear(v bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.failNextClear = v
+}
+
+// FailNextSetArmed reports whether the next SetExceeded call is armed to fail.
+func (f *FakeNatsSignaler) FailNextSetArmed() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.failNextSet
 }
 
 var _ NatsSignaler = &FakeNatsSignaler{}
