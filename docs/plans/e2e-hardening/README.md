@@ -59,10 +59,10 @@ conductor waves ([ADR 29](../../designs/29-conductor-orchestration.md)).
 | EH8 | FeatureGate behavior e2e | test-engineer | wave | — | shipped-with-stubs |
 | EH9 | Workflow + WorkflowRun e2e | test-engineer | wave | — | shipped-with-stubs |
 | EH10 | Real drain/SIGTERM e2e (replace stand-ins) | test-engineer | wave | EH3 | shipped-with-stubs |
-| EH11 | RecipeSource + RuntimeExtension e2e | test-engineer | wave | — | planned |
-| EH12 | Retire/replace scaffold `test/e2e/` | test-engineer | wave | — | planned |
-| EH13 | Runtime SPI unit tests (adkgo/adkpython/podexec) | test-engineer | wave | — | planned |
-| EH14 | FeatureGate envtest idempotency | controller-author | wave | — | planned |
+| EH11 | RecipeSource + RuntimeExtension e2e | test-engineer | wave | — | shipped-with-stubs |
+| EH12 | Retire/replace scaffold `test/e2e/` | test-engineer | wave | — | complete |
+| EH13 | Runtime SPI unit tests (adkgo/adkpython/podexec) | test-engineer | wave | — | complete |
+| EH14 | FeatureGate envtest idempotency | controller-author | wave | — | complete |
 
 ## Wave structure (conflict-free batches, ~3/wave)
 

@@ -62,6 +62,8 @@ more numbered TestStep YAMLs that are executed in order.
 | `token-budget/` | TokenBudget Ready + BackendTrafficPolicy rate-limit projection + in-budget→200. (over-budget 429 gated on metering.) | EH7 |
 | `feature-gate/` | FeatureGate flip observable via the `keese-features` projection ConfigMap (enable→true/disable→false) + status. (cosign admission-outcome flip gated on OLM/webhook.) | EH8 |
 | `workflow/` | Workflow→Argo `WorkflowTemplate`/`CronJob`; WorkflowRun→Argo→Succeeded (live argosay); `concurrencyPolicy=Forbid`; finalizer-cascade GC. (runCount gated.) | EH9 |
+| `recipe-source/` | RecipeSource (ConfigMap/OCI) → Synced + observedGeneration + finalizer cache-evict. (real OCI registry gated; FakeOCIFetcher.) | EH11 |
+| `runtime-extension/` | RuntimeExtension reconcile → `ExtensionTupleWritten` owner tuple + `Degraded`/`ExtensionRuntimeRefInvalid` negative path. (enabled_in unwired.) | EH11 |
 
 ## Adding a case
 

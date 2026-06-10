@@ -10,8 +10,11 @@ depends:
   - ../../../internal/controller/keese/recipesource_controller.go
   - ../../../internal/controller/keese/runtimeextension_controller.go
 related_skills: [plan-management]
-status: planned
-last_verified: 2026-06-09
+status: shipped-with-stubs
+last_verified: 2026-06-10
+revisit_when_oci_registry_live: true
+revisit_when_openfga_seeded: true
+revisit_when_enabled_in_wired: true
 phase: EH11
 model_tier: sonnet
 depends_on: []

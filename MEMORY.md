@@ -77,6 +77,29 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-10 — e2e-hardening final wave (EH11–EH14): track complete (14/14)
+
+- `tests/e2e/recipe-source/` + `runtime-extension/` (EH11, shipped-with-stubs);
+  retired the kubebuilder scaffold `test/e2e/` + deleted the now-orphaned
+  `test/utils/` (EH12 — kuttl `tests/e2e/` is the only e2e); unit tests for
+  `adkgo`/`adkpython`/`podexec`, EH2 floors ratcheted 0.0→100/100/91 (EH13);
+  FeatureGate envtest idempotency, policy suite 25/25 (EH14).
+- **More follow-ups (impl/bugs, NOT test defects):**
+  - `RuntimeExtension` reconciler never calls `WriteExtensionEnabledIn` (defined in
+    `runtime_rebac.go`, only tests call it) → the extension→workspace `enabled_in`
+    tuple is **unwired**; the reconciler writes only the `owner` tuple.
+  - `internal/runtime/podexec/podexec.go:65` **data race** on the context-timeout
+    path (background copy goroutine writes the buffers `Exec` reads); `-race` flags
+    it. Low severity; fix with errgroup/WaitGroup.
+  - **Pre-existing** `FakeNatsSignaler` `-race` in the tokenbudget test harness
+    (`internal/controller/policy/nats.go` unguarded fields) — on `main`, keeps
+    `-race -tags=integration ./internal/controller/policy/...` red until a mutex lands.
+- **Track complete (14/14).** e2e grew from 8 suites (no authz/policy, no live
+  ReBAC, busybox drain) to 14 suites + unit/envtest coverage; CI installs kuttl
+  (nightly fixed), gates the coverage ratchet on PRs, runs the sigterm-drain
+  contract. The consolidated controller-gap list across the wave entries is the
+  natural next controller-author track.
+
 ### 2026-06-08 — Conductor: parallel-build orchestrator adopted
 
 - Ported the `conductor/` wave orchestrator (scheduler · footprint-coloring ·

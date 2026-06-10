@@ -10,8 +10,8 @@ depends:
   - ../../../internal/controller/policy/featuregate_controller.go
   - ../../../internal/controller/policy/suite_test.go
 related_skills: [plan-management, controller-authoring]
-status: planned
-last_verified: 2026-06-09
+status: complete
+last_verified: 2026-06-10
 phase: EH14
 model_tier: sonnet
 depends_on: []
