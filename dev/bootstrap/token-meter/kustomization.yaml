@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Dev bootstrap overlay for the keese-token-meter metering hop (CH5b).
+# Applied by `make bootstrap-infra` AFTER helmfile sync (which brings up the
+# Tier-1 OTEL collector that POSTs usage to the meter's /ingest). Deploys:
+#   - keese-token-meter Deployment + Service (HTTP /ingest + /metrics on 8080)
+#   - the dev metering Prometheus that scrapes the meter (authoritative store,
+#     http://prometheus.monitoring.svc:9090 — the endpoint CH5c's reconciler
+#     PromQL client targets)
+#   - fail-closed NetworkPolicies pinning collector→meter and Prometheus→meter
+#     (rule 05.5, wildcard-free)
+#
+# The meter image is the floating :dev tag (rule 05.12); build + kind-load it
+# with `make token-meter-load` (cmd/token-meter/Dockerfile, owned by CH5a).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../../config/token-meter

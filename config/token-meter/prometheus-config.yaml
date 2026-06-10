@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Scrape config for the dev metering Prometheus. It scrapes exactly one target:
+# the keese-token-meter /metrics surface that carries the
+# keese_token_budget_consumed_total{tenant,workspace,model,direction} contract
+# series (ADR 30). This is the authoritative store the TokenBudget reconciler
+# queries via http://prometheus.monitoring.svc:9090 (10b; CH5c wires the client).
+#
+# Dev-only: a single static scrape, no remote_write, no alerting. The
+# production metering pipeline uses the ECK/Prometheus stack pinned in 10a; this
+# minimal server exists so the local loop materializes the live series CH5c reads.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: metering-store
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    scrape_configs:
+      - job_name: keese-token-meter
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - keese-token-meter.monitoring.svc.cluster.local:8080
+            labels:
+              keese_component: token-meter

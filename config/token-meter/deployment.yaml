@@ -1,0 +1,101 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# keese-token-meter Deployment (ADR 30 / CH5b). The meter is the one missing
+# hop in TokenBudget enforcement: the Tier-1 OTEL collector POSTs each parsed
+# per-response token-usage record to this pod's HTTP /ingest (JSON contract
+# from CH5a's cmd/token-meter/server.go), and the meter relabels it into the
+# keese_token_budget_consumed_total{tenant,workspace,model,direction} contract
+# series exposed on /metrics, which Prometheus scrapes (the authoritative store
+# the reconciler reads, 10b).
+#
+# Posture (rule 05 zero-trust): the meter holds no secrets, mounts no SA token
+# (automountServiceAccountToken: false), runs as nonroot uid 65532 with a
+# read-only root filesystem. It is stateless — Prometheus is the durable store
+# (rule 06 §5), so a restart loses at most the in-flight dedup window.
+#
+# Rule 06 §3 budget: infra-sidecar grace = 30s; the binary's --drain-timeout
+# defaults to 25s, leaving headroom for HTTP shutdown. Liveness probe budget
+# (rule 06.8): initialDelaySeconds + periodSeconds*failureThreshold = 5+10*3 =
+# 35 >= terminationGracePeriodSeconds (30), so the kubelet never SIGKILLs
+# mid-drain. Readiness flips to 503 on SIGTERM (server.go /readyz) so the
+# Service stops routing before the listener closes (rule 06.9).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keese-token-meter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: keese-token-meter
+    app.kubernetes.io/component: metering
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keese-token-meter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keese-token-meter
+        app.kubernetes.io/component: metering
+    spec:
+      serviceAccountName: keese-token-meter
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: token-meter
+          # Image pinned by digest in config/overlays/prod via kustomize patch;
+          # dev overlays use the floating :dev tag (rule 05.12). The dev image
+          # is built from cmd/token-meter/Dockerfile and kind-loaded by
+          # `make token-meter-load` (CH5a Dockerfile; see dev/bootstrap README).
+          image: ghcr.io/keese-ai/keese-token-meter:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - --listen=:8080
+            # dedup-ttl must exceed the gateway upstream retry budget so all
+            # attempts of one request fall inside the dedup window (ADR 30).
+            - --dedup-ttl=60s
+            - --queue-depth=4096
+            # Stay within the 30s grace budget with HTTP-shutdown headroom.
+            - --drain-timeout=25s
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi

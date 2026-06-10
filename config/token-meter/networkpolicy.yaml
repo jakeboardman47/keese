@@ -1,0 +1,113 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Fail-closed, wildcard-free NetworkPolicies for the metering hop (rule 05.5).
+# The meter sits on exactly two connections, both enumerated by exact pod +
+# port — nothing else may reach it and it may reach nothing but DNS:
+#
+#   1. Tier-1 OTEL collector  → meter :8080  (POST /ingest)   [ingress]
+#   2. Prometheus             → meter :8080  (scrape /metrics) [ingress]
+#   3. meter                  → kube-dns :53                   [egress]
+#
+# The meter is a pure server: it never initiates a connection to Prometheus
+# (Prometheus scrapes it) and never egresses to the gateway or the internet, so
+# its egress allowlist is DNS-only. There is no `to: []`/`podSelector: {}`
+# wildcard anywhere (rule 05.5).
+---
+# Ingress to the meter: only the Tier-1 collector (/ingest) and Prometheus
+# (/metrics), both on 8080. Default-deny for every other source.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keese-token-meter-ingress
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: keese-token-meter
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: keese-token-meter
+  policyTypes: [Ingress]
+  ingress:
+    # Tier-1 OTEL collector DaemonSet → POST /ingest. The collector runs in the
+    # `observability` namespace (dev/bootstrap/values/otel-collector.yaml,
+    # 10a Tier-1). Matched by namespace + the chart's standard component label.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+      ports:
+        - port: 8080
+          protocol: TCP
+    # Prometheus → scrape /metrics. Same namespace (monitoring).
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+# Egress from the meter: DNS only. The meter resolves no upstream and dials no
+# Service — this is the minimal allowlist that keeps in-cluster name resolution
+# working while denying every other outbound destination (fail-closed).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keese-token-meter-egress
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: keese-token-meter
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: keese-token-meter
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# Prometheus egress: it may reach the meter :8080 (scrape) and DNS, nothing
+# more. This pins the scrape path from the Prometheus side so the metering hop
+# is fully enumerated on both ends (rule 05.5).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keese-prometheus-egress
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes: [Egress]
+  egress:
+    # Scrape the meter's /metrics.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: keese-token-meter
+      ports:
+        - port: 8080
+          protocol: TCP
+    # DNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# Single ClusterIP Service fronting the meter's one HTTP listener (8080):
+#   - /ingest  ← Tier-1 OTEL collector POSTs usage records
+#   - /metrics ← Prometheus scrapes the contract series
+#   - /healthz, /readyz ← kubelet probes
+# The collector targets http://keese-token-meter.monitoring.svc:8080/ingest;
+# Prometheus scrapes http://keese-token-meter.monitoring.svc:8080/metrics.
+apiVersion: v1
+kind: Service
+metadata:
+  name: keese-token-meter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: keese-token-meter
+    app.kubernetes.io/component: metering
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: keese-token-meter
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

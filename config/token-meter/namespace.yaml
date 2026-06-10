@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# The token-meter and its scraping Prometheus live in the `monitoring`
+# namespace — the same namespace the TokenBudget reconciler's PromQL client
+# targets (`http://prometheus.monitoring.svc:9090`, see
+# internal/controller/policy/prom_http.go). Keeping the meter here means its
+# /metrics surface and Prometheus share one NetworkPolicy boundary (rule 05.5)
+# and the reconciler's Service DNS resolves without cross-namespace routing.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    kubernetes.io/metadata.name: monitoring
+    keese.ai/bootstrap: "true"
+    # Allows the operator's metrics scraper / other monitoring-labeled
+    # namespaces to be matched by NetworkPolicy namespaceSelectors.
+    metrics: enabled
