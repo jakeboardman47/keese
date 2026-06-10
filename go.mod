@@ -19,13 +19,14 @@ require (
 	github.com/openfga/go-sdk v0.8.0
 	github.com/projectcapsule/capsule v0.7.2
 	github.com/prometheus/client_golang v1.23.2
+	github.com/prometheus/common v0.66.1
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260122232226-8e98ce8d340d
 	google.golang.org/grpc v1.78.0
 	k8s.io/api v0.33.5
-	k8s.io/apiextensions-apiserver v0.33.5
 	k8s.io/apimachinery v0.34.0-alpha.0
 	k8s.io/client-go v0.33.5
 	knative.dev/eventing v0.47.3
+	knative.dev/pkg v0.0.0-20251022152246-7bf6febca0b3
 	sigs.k8s.io/controller-runtime v0.21.0
 	sigs.k8s.io/gateway-api v1.3.1-0.20250527223622-54df0a899c1c
 )
@@ -189,6 +190,7 @@ require (
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/kyverno/kyverno-json v0.0.4-0.20240730143747-aade3d42fc0e // indirect
 	github.com/letsencrypt/boulder v0.0.0-20240823215653-da7865cb107b // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
@@ -219,7 +221,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/protocolbuffers/txtpbfmt v0.0.0-20241112170944-20d2c9ebc01d // indirect
 	github.com/r3labs/diff v1.1.0 // indirect
@@ -308,6 +309,7 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	k8s.io/apiextensions-apiserver v0.33.5 // indirect
 	k8s.io/apiserver v0.33.5 // indirect
 	k8s.io/component-base v0.33.5 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
@@ -315,7 +317,6 @@ require (
 	k8s.io/kubectl v0.33.3 // indirect
 	k8s.io/pod-security-admission v0.32.3 // indirect
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
-	knative.dev/pkg v0.0.0-20251022152246-7bf6febca0b3 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.32.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
