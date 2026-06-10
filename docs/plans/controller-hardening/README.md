@@ -43,7 +43,7 @@ test-only e2e track, every phase gets a harder diff review, SSA-only writes
 | CH8 | Fix default GuardrailBinding name mismatch | controller-author | — | complete |
 | CH3 | Wire enabled_in tuple on workspace bind | controller-author | — | complete |
 | CH7 | Bootstrap overlays (OLM/cosign + goose-runtime) | infra-bootstrap | — | shipped-with-stubs |
-| CH4 | Cross-tenant messageable_from + OpenFGA model | rebac-modeler | — | planned |
+| CH4 | Cross-tenant messageable_from + OpenFGA model | rebac-modeler | — | complete |
 | CH5 | Token-cost metering pipeline (design ADR first) | architect | — | planned |
 
 ## Wave structure

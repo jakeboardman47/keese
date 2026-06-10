@@ -77,6 +77,20 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-10 — controller-hardening CH4: cross-tenant ext_authz decision
+
+- ext_authz now authorizes cross-tenant A2A messaging. Discriminator: the 09 a2a
+  sidecar stamps `x-keese-a2a-scope: cross-tenant` + `x-keese-a2a-peer-workspace`;
+  `extauth.Authorize` then `Check(user=workspace:<W_from>, messageable_from,
+  object=workspace:<W_to>)` → the tuple `workspace:<W_to>#messageable_from@workspace:<W_from>`
+  the CTA controller already writes (no `model.fga` change — the relation existed,
+  04a iter-5). **Asymmetric** (a→b ≠ b→a); **fail-closed** on missing subject/peer/
+  FGA-error/deny; audit adds `from_workspace`/`to_workspace`, no token leak (rule 05.10).
+  Documented the discriminator in `egress-authz-protocol.md` §1/§6.
+- **Follow-up (not authz):** the live path only fires once the a2a/NATS transport
+  sidecar (design 09) actually stamps those two headers at subscribe + first-publish —
+  a transport task outside CH4. Unblocks EH6 `revisit_when_cross_tenant_live` once wired.
+
 ### 2026-06-10 — controller-hardening wave 2 (CH3/CH7/CH8)
 
 - **CH3 — `enabled_in` wired.** A `RuntimeExtension` is "enabled in" a `Workspace`

@@ -64,6 +64,8 @@ Cross-cutting contract between Envoy AI Gateway's `ext_authz` filter and the `ke
 | Target path | `request.http.path` |
 | HTTP method | `request.http.method` |
 | JWT payload | `metadata_context.filter_metadata["keese.sa_token"]` |
+| A2A scope (discriminator) | `request.headers["x-keese-a2a-scope"]` — value `cross-tenant` routes to the `messageable_from` Check (§4) instead of `can_call`; stamped by the 09 a2a sidecar |
+| A2A peer workspace | `request.headers["x-keese-a2a-peer-workspace"]` — the destination (`W_to`) workspace UID; the FGA *object* of the `messageable_from` Check |
 
 ### CheckResponse fields set
 
@@ -128,7 +130,8 @@ credential broker 17). BSP resolution: workspace → tenant → cluster-default 
 
 Per rule 05.10 — never tokens, never request/response bodies. Fields:
 `job="keese-ext-authz"`, `tenant`, `tuple`, `sa`, `host`, `decision` (allow|deny),
-`upstream_status`, `latency_ms`, `model_id`. No other fields.
+`upstream_status`, `latency_ms`, `model_id`. Cross-tenant a2a decisions additionally
+carry `from_workspace`/`to_workspace` (the `messageable_from` Check pair). No other fields.
 
 Destinations: ES `keese-openfga-audit-*` (30-day ILM) + Loki
 `{job="keese-ext-authz", tenant="<T>"}` (≥ 1-year). Fan-out via OTEL (10a).

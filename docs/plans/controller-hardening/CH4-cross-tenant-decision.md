@@ -12,7 +12,7 @@ depends:
   - ../../../internal/authz/extauth/resolver.go
   - ../../../dev/bootstrap/openfga/model.fga
 related_skills: [plan-management]
-status: planned
+status: complete
 last_verified: 2026-06-10
 phase: CH4
 model_tier: opus
