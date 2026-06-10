@@ -28,6 +28,12 @@ type AuditFields struct {
 	Decision      string // "allow" | "deny"
 	Reason        string // ReasonAllowed | ReasonNoMatch | ReasonSubjectError | ReasonFGADenied | ReasonFGAError
 	Duration      time.Duration
+
+	// Cross-tenant a2a audit fields (rule 05.10: (tuple, SA, from, to,
+	// decision); never tokens, never bodies). Empty on the egress path.
+	Tuple         string // canonical `object#relation@user`
+	FromWorkspace string // W_from (caller workspace id)
+	ToWorkspace   string // W_to (peer workspace id)
 }
 
 // LogAudit emits a single structured log line per request. Allow at
@@ -45,6 +51,16 @@ func LogAudit(log logr.Logger, f AuditFields) {
 		"decision", f.Decision,
 		"reason", f.Reason,
 		"duration_ms", f.Duration.Milliseconds(),
+	}
+	// Cross-tenant a2a decisions carry the (tuple, from, to) shape per
+	// rule 05.10. Only appended when present so the egress path's audit
+	// line is unchanged.
+	if f.Tuple != "" || f.FromWorkspace != "" || f.ToWorkspace != "" {
+		args = append(args,
+			"tuple", f.Tuple,
+			"from_workspace", f.FromWorkspace,
+			"to_workspace", f.ToWorkspace,
+		)
 	}
 	switch f.Reason {
 	case ReasonFGAError:
@@ -68,7 +84,7 @@ func AuditFromDecision(d *Decision, req *HTTPRequest, requestID string, dur time
 	if d.Workspace.Namespace != "" || d.Workspace.Name != "" {
 		ws = d.Workspace.Namespace + "/" + d.Workspace.Name
 	}
-	return AuditFields{
+	f := AuditFields{
 		RequestID:     requestID,
 		Path:          req.Path,
 		Method:        req.Method,
@@ -81,4 +97,10 @@ func AuditFromDecision(d *Decision, req *HTTPRequest, requestID string, dur time
 		Reason:        d.Reason,
 		Duration:      dur,
 	}
+	if d.CrossTenant {
+		f.Tuple = d.Tuple
+		f.FromWorkspace = d.CallerWorkspace
+		f.ToWorkspace = d.PeerWorkspace
+	}
+	return f
 }

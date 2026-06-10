@@ -28,15 +28,30 @@ type Decision struct {
 	// gRPC `permission_denied` body. Never includes user-controlled
 	// strings.
 	Reason string
+
+	// Cross-tenant a2a fields (set only on the messageable_from path;
+	// see crosstenant.go). CrossTenant flags the decision shape so
+	// audit can record (tuple, SA, from, to, decision) per rule 05.10.
+	CrossTenant bool
+	// CallerWorkspace is the "from" workspace (the request's own
+	// workspace UID = FGA user W_from).
+	CallerWorkspace string
+	// PeerWorkspace is the "to" workspace (the destination peer = FGA
+	// object W_to).
+	PeerWorkspace string
+	// Tuple is the canonical OpenFGA tuple string the cross-tenant
+	// decision evaluated, `object#relation@user`. Audited verbatim;
+	// it is built only from validated workspace ids, never tokens.
+	Tuple string
 }
 
 // Reason codes for DENY.
 const (
-	ReasonAllowed       = "allowed"
-	ReasonNoMatch       = "no_binding_matched"
-	ReasonSubjectError  = "subject_extraction_failed"
-	ReasonFGADenied     = "openfga_denied"
-	ReasonFGAError      = "openfga_check_error"
+	ReasonAllowed      = "allowed"
+	ReasonNoMatch      = "no_binding_matched"
+	ReasonSubjectError = "subject_extraction_failed"
+	ReasonFGADenied    = "openfga_denied"
+	ReasonFGAError     = "openfga_check_error"
 )
 
 // Authorize is the orchestration function: resolve binding → extract
@@ -44,6 +59,15 @@ const (
 // dependencies passed in; the gRPC server wires the deps once and
 // calls this per request.
 func Authorize(ctx context.Context, req *HTTPRequest, resolver *Resolver, fga FGAChecker) *Decision {
+	// Step 0: cross-tenant a2a message requests carry the x-keese-a2a-scope
+	// discriminator (see crosstenant.go). They are NOT tool calls — they
+	// never match a ToolBinding — so they are resolved against the
+	// cross-tenant trust tuple `workspace:<W_to>#messageable_from@workspace:
+	// <W_from>` instead of `tool:<name>#can_call`. Fail-closed inside.
+	if isCrossTenantA2A(req) {
+		return authorizeCrossTenant(ctx, req, fga)
+	}
+
 	// Step 1: try resolving without a workspace filter (covers
 	// cluster ToolBindings, which don't need namespace scope).
 	res := resolver.Resolve(&ResolveRequest{HTTP: *req})
