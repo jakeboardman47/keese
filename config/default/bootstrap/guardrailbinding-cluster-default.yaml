@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 #
-# Bootstrap GuardrailBinding: keese-default
+# Bootstrap GuardrailBinding: keese.ai-default
 # Cluster-scoped fallback binding installed at deploy time. Workspaces that
 # do not declare an explicit GuardrailBinding inherit this one through the
 # scope merge lattice (see docs/designs/06-guardrailbinding.md).
@@ -16,7 +16,7 @@
 apiVersion: authz.keese.ai/v1alpha1
 kind: GuardrailBinding
 metadata:
-  name: keese-default
+  name: keese.ai-default
   namespace: keese-system
   labels:
     keese.ai/bootstrap: "true"
