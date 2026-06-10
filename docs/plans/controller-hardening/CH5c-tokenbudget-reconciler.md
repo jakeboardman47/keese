@@ -10,8 +10,9 @@ depends:
   - CH5b-meter-bootstrap-wiring.md
   - ../../../internal/controller/policy/tokenbudget_controller.go
 related_skills: [plan-management, controller-authoring]
-status: planned
+status: complete
 last_verified: 2026-06-10
+revisit_when_adr30_current: true
 phase: CH5c
 model_tier: sonnet
 depends_on: [CH5b]

@@ -77,6 +77,24 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-10 — controller-hardening CH5c: TokenBudget enforcement loop
+
+- `internal/controller/policy/tokenbudget_controller.go` (CH5c, complete): the reconciler
+  now closes the enforcement loop — queries `increase(keese_token_budget_consumed_total
+  {…}[windowDuration])`, compares to `spec.limits`, and flips the NATS-KV exceeded boolean
+  on crossover (hard mode → ext_authz 429; soft mode clears only when Prometheus is
+  healthy). **Fail-open:** a Prometheus fetch error never false-clears an existing exceeded
+  signal (ADR 30 §failure-modes). `windowStart`-based reset; status derived (rule 04.4).
+  New `tokenbudget_metering_envtest_test.go` (mock Prom: under/at/over, reset, fetch-error
+  fail-open, soft/hard) — policy integration suite `-race` green (verified locally, 89.8s).
+- **Spec follow-up:** `policy.keese.ai-v1alpha1.md:91`'s vague `tokenUsageMetric` note
+  should ref ADR 30, but the designs-before-specs gate blocks it until ADR 30 is `current`
+  (it's `draft`). Deferred — tracked by `revisit_when_adr30_current` on the CH5c phase doc.
+- **Rate-limit salvage:** CH5c's agent was cut off by a server rate-limit (2nd this
+  session) but had committed its core work first — the "commit early per logical unit"
+  instruction made it recoverable + verifiable. Only the uncommitted gated spec edit was lost
+  (correctly). Lesson: always tell dispatched agents to commit incrementally.
+
 ### 2026-06-10 — controller-hardening CH5b: meter bootstrap wiring
 
 - `config/token-meter/` (CH5b, shipped-with-stubs): keese-token-meter Deployment +
