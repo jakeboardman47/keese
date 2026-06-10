@@ -35,9 +35,9 @@ cert-manager
   ├── argo-workflows
   └── qdrant
        ↓
-    otel-collector
-       ↓
-    keese-operator (Tilt live-reload)
+    otel-collector ──(token-usage POST /ingest)──▶ keese-token-meter ──▶ prometheus (dev)
+       ↓                                                                      ↑
+    keese-operator (Tilt live-reload) ──(TokenBudget PromQL, CH5c)───────────┘
 ```
 
 ## Component matrix
@@ -57,7 +57,9 @@ cert-manager
 | external-secrets | external-secrets | OpenBao → K8s Secret bridge |
 | argo-workflows | argo | Workflow execution engine |
 | qdrant | qdrant | Vector memory backend |
-| otel-collector | observability | OTLP receive → ES/APM export |
+| otel-collector | observability | OTLP receive → ES/APM export + token-usage → token-meter /ingest (CH5b) |
+| keese-token-meter | monitoring | Relabel gateway token-usage → `keese_token_budget_consumed_total` (ADR 30 / CH5b) |
+| prometheus (dev) | monitoring | Scrapes the meter; authoritative consumed-token store the TokenBudget reconciler reads (10b) |
 
 ## OpenBao (dev mode → automatic; prod → manual unseal)
 
@@ -171,6 +173,44 @@ make goose-runtime-load    # docker build + kind load goose-runtime:dev
 make e2e-images-load       # or load both EH8 + EH10 images at once
 ```
 
+## Token-meter metering hop (CH5b · ADR 30)
+
+`make bootstrap-infra` SSA-applies `dev/bootstrap/token-meter/` (which pulls in
+`config/token-meter/`) after the cosign webhook. It deploys, in the `monitoring`
+namespace:
+
+- **keese-token-meter** — the CH5a binary. Serves one HTTP listener on `:8080`:
+  `POST /ingest` (the Tier-1 OTEL collector posts each gateway token-usage
+  record here as `{request_id,tenant,workspace,model,tokens_in,tokens_out,
+  final}`), `/metrics` (the relabeled
+  `keese_token_budget_consumed_total{tenant,workspace,model,direction}` contract
+  series), and `/healthz` + `/readyz`.
+- **prometheus (dev)** — scrapes the meter's `/metrics` and serves PromQL at
+  `http://prometheus.monitoring.svc:9090`, the exact endpoint the TokenBudget
+  reconciler's client targets (`internal/controller/policy/prom_http.go`). CH5c
+  un-stubs that reconciler against this live series.
+- **fail-closed NetworkPolicies** (wildcard-free, rule 05.5): only the Tier-1
+  collector → meter:8080 (`/ingest`) and Prometheus → meter:8080 (`/metrics`)
+  may reach the meter; the meter egresses to DNS only.
+
+The Tier-1 export side lives in `dev/bootstrap/values/otel-collector.yaml`
+(the `metrics/tokenusage` pipeline + `otlphttp/token-meter` exporter). The
+otel-collector helmfile release is still gated behind the tech-debt re-enable
+(see `helmfile.yaml` Layer 2), so locally the meter + Prometheus run and the
+contract series materializes the moment the collector is restored or usage is
+POSTed to `/ingest` directly.
+
+The meter image is the floating `:dev` tag (rule 05.12). `make bootstrap-infra`
+does **not** build it — load it first:
+
+```bash
+make token-meter-load      # docker build cmd/token-meter/Dockerfile + kind load
+make e2e-images-load       # or load goose-runtime + cosign-webhook + token-meter
+```
+
+Until the image is loaded the Deployment stays Pending and the consumed series
+is empty (bootstrap-infra logs this and continues — non-fatal, fail-open).
+
 ## Reseed everything
 
 ```bash
@@ -195,5 +235,6 @@ with a warm Docker layer cache. Measured by `scripts/dev/time-bootstrap.sh`.
 - Helmfile: `dev/bootstrap/helmfile.yaml`
 - Kind config: `dev/kind/ctlptl.yaml`, `dev/kind/kind-config.yaml`
 - OTEL topology: `docs/designs/10a-otel-topology.md`
+- Token metering pipeline: `docs/designs/30-token-metering-pipeline.md` (CH5b hop)
 - Secrets: `docs/designs/11-secrets-pluggable-vault.md`
 - OpenFGA model: `docs/designs/04a-openfga-authz-model.md`
