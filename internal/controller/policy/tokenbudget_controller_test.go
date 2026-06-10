@@ -195,16 +195,23 @@ var _ = Describe("TokenBudget Controller", func() {
 			Expect(t.Status.ConsumedCurrent).NotTo(BeEmpty())
 			Expect(t.Status.ConsumedCurrent[0].TotalTokens).To(Equal(int64(9500)))
 
-			By("asserting MetricFetchHealthy condition is False")
-			var metricCond *metav1.Condition
-			for i := range t.Status.Conditions {
-				if t.Status.Conditions[i].Type == "MetricFetchHealthy" {
-					metricCond = &t.Status.Conditions[i]
-					break
+			By("asserting MetricFetchHealthy condition flips to False")
+			// The condition and the MetricFetchFailed event are written by the same
+			// reconcile via two separate API calls (recordEvent + status patch), so a
+			// single synchronous read can race the status commit. Poll with Eventually
+			// per rule 06-testing (async assertions) rather than reading once.
+			Eventually(func() metav1.ConditionStatus {
+				var cur policyv1alpha1.TokenBudget
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: ns}, &cur); err != nil {
+					return metav1.ConditionUnknown
 				}
-			}
-			Expect(metricCond).NotTo(BeNil())
-			Expect(metricCond.Status).To(Equal(metav1.ConditionFalse))
+				for i := range cur.Status.Conditions {
+					if cur.Status.Conditions[i].Type == "MetricFetchHealthy" {
+						return cur.Status.Conditions[i].Status
+					}
+				}
+				return metav1.ConditionUnknown
+			}, 10*time.Second, 250*time.Millisecond).Should(Equal(metav1.ConditionFalse))
 		})
 	})
 

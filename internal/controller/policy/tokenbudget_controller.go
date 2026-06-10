@@ -178,19 +178,41 @@ func (r *TokenBudgetReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		remaining := r.computeRemaining(limit, consumed)
 		natsKey := budgetExceededKey(scopeType, scopeID, limit.Model)
 
-		if exceeded {
+		switch {
+		case exceeded && tb.Spec.ExhaustionMode == policyv1alpha1.ExhaustionModeHard:
+			// Crossover in hard mode: flip the NATS KV exceeded boolean → ext_authz 429.
+			// Idempotent — re-writing an already-true key is a no-op end-to-end.
 			anyExceeded = true
-			if tb.Spec.ExhaustionMode == policyv1alpha1.ExhaustionModeHard {
-				if err := r.NatsSignaler.SetExceeded(ctx, natsKey); err != nil {
-					log.Error(err, "NATS KV write failed", "key", natsKey)
-					r.Recorder.Eventf(&tb, corev1.EventTypeWarning, ReasonBudgetSignalWriteFailed,
-						"NATS KV write failed for key %s: %v", natsKey, err)
+			if err := r.NatsSignaler.SetExceeded(ctx, natsKey); err != nil {
+				log.Error(err, "NATS KV write failed", "key", natsKey)
+				r.Recorder.Eventf(&tb, corev1.EventTypeWarning, ReasonBudgetSignalWriteFailed,
+					"NATS KV write failed for key %s: %v", natsKey, err)
+			}
+			r.Recorder.Eventf(&tb, corev1.EventTypeWarning, ReasonBudgetExceeded,
+				"Budget exceeded for model %s (mode=%s)", limit.Model, tb.Spec.ExhaustionMode)
+
+		case exceeded && tb.Spec.ExhaustionMode == policyv1alpha1.ExhaustionModeSoft:
+			// Soft mode: warn-only — never write the hard-429 signal (spec §soft).
+			// Clear any stale true key (e.g. left by a prior hard config) but ONLY
+			// when Prometheus is healthy, so a fetch error never false-clears an
+			// existing exceeded signal (ADR 30 §failure-modes; budgets fail open).
+			anyExceeded = true
+			if metricHealthy {
+				if err := r.NatsSignaler.ClearExceeded(ctx, natsKey); err != nil {
+					log.Error(err, "NATS KV clear failed (soft mode)", "key", natsKey)
 				}
 			}
 			r.Recorder.Eventf(&tb, corev1.EventTypeWarning, ReasonBudgetExceeded,
 				"Budget exceeded for model %s (mode=%s)", limit.Model, tb.Spec.ExhaustionMode)
-		} else if metricHealthy {
-			// Only clear the signal if Prometheus is healthy (no false-clear on failure).
+
+		case exceeded && tb.Spec.ExhaustionMode == policyv1alpha1.ExhaustionModeDisabled:
+			// Disabled: accounting only — no event, no signal, phase stays Ready
+			// (spec §disabled). Deliberately does not set anyExceeded.
+
+		case !exceeded && metricHealthy:
+			// Under budget and Prometheus healthy: safe to clear the signal.
+			// Guarded by metricHealthy so a fetch error never false-clears an
+			// existing exceeded key (ADR 30 §failure-modes — fail-open for budgets).
 			if err := r.NatsSignaler.ClearExceeded(ctx, natsKey); err != nil {
 				log.Error(err, "NATS KV clear failed", "key", natsKey)
 			}
