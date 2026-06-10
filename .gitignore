@@ -144,3 +144,5 @@ sbom-*.spdx.json
 /keese-wf-launcher
 /keese-authz
 /manager
+/token-meter
+/keese-drain
