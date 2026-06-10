@@ -46,7 +46,10 @@ kagent integration is explicitly out of scope; keese remains standalone.
 | Phase | Title | Effort | Deps | Critical path | Status |
 |---|---|---|---|---|---|
 | E0 | [AgentRuntime SPI expansion](E0-runtime-spi-expansion.md) | 3 d | — | yes | shipped (ADK skeletons; logic in E1/E3) |
-| E1 | [ADK Python runtime](E1-adk-python-runtime.md) | 2 w | E0 | yes | planned |
+| E1 | [ADK Python runtime](E1-adk-python-runtime.md) (umbrella) | 2 w | E0 | yes | decomposed → E1a–c |
+| E1a | [· image + provider + discriminator](E1a-adk-python-image-provider.md) | 4 d | E0 | yes | planned |
+| E1b | [· A2A bridge sidecar](E1b-adk-python-a2a-bridge.md) | 3 d | E1a | yes | planned |
+| E1c | [· NetworkPolicy + envtest](E1c-adk-python-networkpolicy-envtest.md) | 3 d | E1b | yes | planned |
 | E2 | [A2A protocol on Workspace](E2-a2a-protocol.md) | 1 w | E1 | yes | planned |
 | E3 | [ADK Go runtime](E3-adk-go-runtime.md) | 2 w | E0 | yes | planned |
 | E4 | [Context compaction](E4-context-compaction.md) | 3 d | E1 | yes | planned |
@@ -79,12 +82,13 @@ graph LR
 
 ## Conductor wave sequencing
 
-`E0` is **shipped** (the SPI foundation), so the scheduler reports both `E1` and
-`E3` ready. **Lead with `E1`, not `E3`.** `E1` (ADK Python runtime) is the
-critical-path root that unblocks `E2` → the CRD fan-out (`E5`–`E8`) → `E9`/`E10`;
-`E3` (ADK Go runtime) is a **leaf that unblocks nothing**. `E1` and `E3` share the
-runtime-SPI footprint, so the scheduler batches only one and may surface the leaf —
-override it and run `E1` first.
+`E0` is **shipped** (the SPI foundation). **E1 is decomposed into a sequential
+sub-chain `E1a → E1b → E1c`** (see [E1](E1-adk-python-runtime.md)) and is itself
+`dispatch: manual`. So the scheduler reports `E1a` and `E3` ready — **lead with
+`E1a`, not `E3`**: the E1 chain is the critical-path root that unblocks `E2` → the
+CRD fan-out (`E5`–`E8`) → `E9`/`E10`, whereas `E3` (ADK Go) is a **leaf that unblocks
+nothing**. `E1a`–`c` and `E3` share `internal/runtime/providers/adk/`, so run the E1
+chain first. **Mark E1 `shipped` when `E1c` lands** — that unblocks Wave 2.
 
 Waves are dependency tiers; within each, the scheduler batches conflict-free
 subsets. The runtime-implementer leaves (`E3`/`E4`/`E11`/`E12`) share runtime-SPI
@@ -92,8 +96,8 @@ code, so they serialize among themselves; the `crd-author` phases are disjoint.
 
 | Wave | Unlocked after | Phases | Agent(s) |
 |---|---|---|---|
-| **1** | `E0` (shipped) | `E1` | implementer |
-| **2** | `E1` | `E2`  ‖  {`E3`, `E4`, `E11`, `E12`} | controller-author ‖ implementer |
+| **1** | `E0` (shipped) | `E1a` → `E1b` → `E1c` (sequential) | controller-author / implementer |
+| **2** | `E1` shipped | `E2`  ‖  {`E3`, `E4`, `E11`, `E12`} | controller-author ‖ implementer |
 | **3** | `E2` | `E5`, `E6`, `E7`, `E8` | crd-author ×4 (clean fan-out) |
 | **4** | `E8` | `E9`, `E10` | implementer ×2 |
 

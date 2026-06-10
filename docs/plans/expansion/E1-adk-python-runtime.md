@@ -15,11 +15,12 @@ depends:
   - ../../designs/05b-credential-injection-patterns.md
 related_skills: [plan-management, controller-authoring]
 status: planned
-last_verified: 2026-05-13
+last_verified: 2026-06-10
 phase: E1
+dispatch: manual
 model_tier: sonnet
 depends_on: [E0]
-agent: implementer
+agent: controller-author
 outputs:
   - internal/runtime/providers/adk/
   - internal/controller/keese/workspacesession_controller.go
@@ -31,6 +32,15 @@ outputs:
 
 **Refinement pass:** correctness & security.
 **Effort:** 2 weeks. **Owner agent:** `controller-author`.
+
+> **Decomposed 2026-06-10** into sequential sub-phases for conductor dispatch (a
+> single 2-week pass risks rate-limit cutoff):
+> [E1a](E1a-adk-python-image-provider.md) (T1/T2/T5 — image + provider pod template +
+> discriminator) → [E1b](E1b-adk-python-a2a-bridge.md) (T3/T6 — A2A bridge sidecar +
+> ReBAC stub) → [E1c](E1c-adk-python-networkpolicy-envtest.md) (T4/T7 — NetworkPolicy +
+> envtest). This doc remains the **authoritative task spec + security rules**; the
+> sub-phases reference it. E1 is `dispatch: manual`; **mark E1 `status: shipped` when
+> all three sub-phases land** (unblocks E2/E4/E11/E12).
 
 ## Goal
 
