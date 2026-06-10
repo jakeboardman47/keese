@@ -7,7 +7,7 @@ category: index
 depends: [../README.md, ../rubric.md]
 related_skills: [plan-management]
 status: current
-last_verified: 2026-06-08
+last_verified: 2026-06-10
 ---
 
 # E — Ecosystem Expansion track
@@ -66,9 +66,9 @@ graph LR
   E0 --> E1
   E0 --> E3
   E1 --> E2
+  E1 --> E4
   E1 --> E11
   E1 --> E12
-  E2 --> E4
   E2 --> E5
   E2 --> E6
   E2 --> E7
@@ -77,12 +77,30 @@ graph LR
   E8 --> E10
 ```
 
-## Parallel-execution groups
+## Conductor wave sequencing
 
-- **Group A — critical path (sequential):** E0 → E1 → E2 → E3; E4 follows E2.
-- **Group B — parallel after E2:** E5, E6, E7, E8 (independent of each other).
-- **Group C — parallel after E8:** E9, E10 (independent of each other).
-- **Group D — parallel after E1:** E11, E12 (independent of each other).
+`E0` is **shipped** (the SPI foundation), so the scheduler reports both `E1` and
+`E3` ready. **Lead with `E1`, not `E3`.** `E1` (ADK Python runtime) is the
+critical-path root that unblocks `E2` → the CRD fan-out (`E5`–`E8`) → `E9`/`E10`;
+`E3` (ADK Go runtime) is a **leaf that unblocks nothing**. `E1` and `E3` share the
+runtime-SPI footprint, so the scheduler batches only one and may surface the leaf —
+override it and run `E1` first.
+
+Waves are dependency tiers; within each, the scheduler batches conflict-free
+subsets. The runtime-implementer leaves (`E3`/`E4`/`E11`/`E12`) share runtime-SPI
+code, so they serialize among themselves; the `crd-author` phases are disjoint.
+
+| Wave | Unlocked after | Phases | Agent(s) |
+|---|---|---|---|
+| **1** | `E0` (shipped) | `E1` | implementer |
+| **2** | `E1` | `E2`  ‖  {`E3`, `E4`, `E11`, `E12`} | controller-author ‖ implementer |
+| **3** | `E2` | `E5`, `E6`, `E7`, `E8` | crd-author ×4 (clean fan-out) |
+| **4** | `E8` | `E9`, `E10` | implementer ×2 |
+
+**Critical path:** `E0` → `E1` → `E2` → `E8` → `E9`/`E10` — four phases deep past
+the shipped foundation. `E2` (controller-author) is footprint-disjoint from the
+Wave-2 runtime leaves, so it runs alongside them; Wave 3's four new CRDs
+(`ModelProvider` / `Skills` / `ScheduledRun` / `SessionStore`) parallelize cleanly.
 
 ## Total effort estimate
 
