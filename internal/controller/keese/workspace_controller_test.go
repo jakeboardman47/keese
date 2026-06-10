@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -58,7 +57,6 @@ func makeWorkspace(ns, name string) *keesev1alpha1.Workspace {
 }
 
 var _ = Describe("WorkspaceReconciler", func() {
-
 	// --- Idempotency test ---
 	Describe("Idempotency", func() {
 		var (
@@ -242,7 +240,7 @@ var _ = Describe("WorkspaceReconciler", func() {
 			))
 		})
 
-		It("creates an egress-allowlist NetworkPolicy with gateway and NATS ports", func() {
+		It("creates an egress-allowlist NetworkPolicy with DNS and NATS ports", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -253,14 +251,20 @@ var _ = Describe("WorkspaceReconciler", func() {
 			egressName := egressNPName(&fresh)
 			var np networkingv1.NetworkPolicy
 			Expect(k8sClient.Get(ctx, mustNamespacedName("default", egressName), &np)).To(Succeed())
-			Expect(np.Spec.Egress).To(HaveLen(2)) // gateway + nats
+			// Three egress rules emitted by buildEgressNetworkPolicy today:
+			// DNS over UDP/53, DNS over TCP/53, and NATS/4222. DNS resolution is
+			// required so the agent can resolve the gateway Service name. The
+			// dedicated Envoy AI Gateway :443 egress rule is not yet emitted (see
+			// the `_ = gatewayEgressPort` stub in workspace_controller.go); when it
+			// lands, add gatewayEgressPort to the ContainElements assertion below.
+			Expect(np.Spec.Egress).To(HaveLen(3))
 			ports := []int32{}
 			for _, rule := range np.Spec.Egress {
 				for _, p := range rule.Ports {
 					ports = append(ports, p.Port.IntVal)
 				}
 			}
-			Expect(ports).To(ContainElements(int32(gatewayEgressPort), int32(natsEgressPort)))
+			Expect(ports).To(ContainElements(int32(53), int32(natsEgressPort)))
 		})
 	})
 
@@ -597,10 +601,6 @@ func listNetworkPoliciesByLabel(ctx context.Context, ns string, matchLabels map[
 	return list.Items, err
 }
 
-// noopRecorder satisfies record.EventRecorder without emitting anything.
-type noopRecorder struct{}
-
-func (n *noopRecorder) Event(_ runtime.Object, _, _, _ string)                    {}
-func (n *noopRecorder) Eventf(_ runtime.Object, _, _, _ string, _ ...interface{}) {}
-func (n *noopRecorder) AnnotatedEventf(_ runtime.Object, _ map[string]string, _, _, _ string, _ ...interface{}) {
-}
+// noopRecorder is defined once in recipesource_controller_test.go (value
+// receivers, so both noopRecorder{} and &noopRecorder{} satisfy
+// record.EventRecorder) and shared across the consolidated keese suite.

@@ -8,7 +8,6 @@ package keese
 import (
 	"context"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,13 +19,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	authzv1alpha1 "github.com/keese-ai/keese/api/authz/v1alpha1"
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
 )
 
-const (
-	eventuallyTimeout  = 10 * time.Second
-	eventuallyInterval = 250 * time.Millisecond
-)
+// eventuallyTimeout / eventuallyInterval are defined once in
+// workspace_controller_test.go and shared across the consolidated keese suite.
 
 // makeTenant returns a minimal cluster-scoped Tenant with the managed label.
 // JWKSCacheFailOpenSeconds is left at its zero value (omitted from JSON) to exercise
@@ -49,7 +47,7 @@ func makeTenant(name string) *keesev1alpha1.Tenant {
 }
 
 // makeTenantReconciler returns a TenantReconciler wired to the envtest client.
-func makeTenantReconciler(rebac RebacWriter) *TenantReconciler {
+func makeTenantReconciler(rebac TenantRebacWriter) *TenantReconciler {
 	if rebac == nil {
 		rebac = &TenantFakeRebacWriter{}
 	}
@@ -66,7 +64,6 @@ func nsn(name string) types.NamespacedName {
 }
 
 var _ = Describe("TenantReconciler", func() {
-
 	// --- Idempotency ---
 	Describe("Idempotency", func() {
 		var (
@@ -181,17 +178,30 @@ var _ = Describe("TenantReconciler", func() {
 				"expected CapsuleTenantNotFound warning when capsule label is absent")
 		})
 
-		It("mirrors namespaces labelled capsule.clastix.io/tenant=<capsuleName>", func() {
-			ns := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: fmt.Sprintf("acme-ns-%d", GinkgoRandomSeed()),
-					Labels: map[string]string{
-						"capsule.clastix.io/tenant": "acme-capsule",
+		It("mirrors namespaces from the referenced Capsule Tenant's status.namespaces", func() {
+			// The keese Tenant created in BeforeEach references a Capsule Tenant
+			// named "acme-capsule" via capsuleTenantRef. The reconciler GETs that
+			// Capsule Tenant and mirrors its status.namespaces (it does not scan
+			// namespaces by label — see resolveCapsuleNamespaces in
+			// tenant_controller.go). So the test must create the Capsule Tenant and
+			// populate its status.
+			nsName := fmt.Sprintf("acme-ns-%d", GinkgoRandomSeed())
+			capTenant := &capsulev1beta2.Tenant{
+				ObjectMeta: metav1.ObjectMeta{Name: "acme-capsule"},
+				Spec: capsulev1beta2.TenantSpec{
+					Owners: capsulev1beta2.OwnerListSpec{
+						{Name: "alice", Kind: "User"},
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
-			DeferCleanup(func() { _ = k8sClient.Delete(ctx, ns) })
+			Expect(k8sClient.Create(ctx, capTenant)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, capTenant) })
+
+			origCap := capTenant.DeepCopy()
+			capTenant.Status.Namespaces = []string{nsName}
+			capTenant.Status.Size = 1
+			capTenant.Status.State = capsulev1beta2.TenantStateActive
+			Expect(k8sClient.Status().Patch(ctx, capTenant, client.MergeFrom(origCap))).To(Succeed())
 
 			req := reconcile.Request{NamespacedName: nsn(tenant.Name)}
 			_, err := r.Reconcile(ctx, req)
@@ -199,7 +209,7 @@ var _ = Describe("TenantReconciler", func() {
 
 			var fresh keesev1alpha1.Tenant
 			Expect(k8sClient.Get(ctx, nsn(tenant.Name), &fresh)).To(Succeed())
-			Expect(fresh.Status.Namespaces).To(ContainElement(ns.Name))
+			Expect(fresh.Status.Namespaces).To(ContainElement(nsName))
 		})
 	})
 
@@ -225,11 +235,16 @@ var _ = Describe("TenantReconciler", func() {
 			Expect(k8sClient.Create(ctx, capTenant)).To(Succeed())
 			DeferCleanup(func() { _ = k8sClient.Delete(ctx, capTenant) })
 
-			// Patch the Capsule Tenant status to report two namespaces.
+			// Patch the Capsule Tenant status to report two namespaces. The Capsule
+			// Tenant CRD marks status.size and status.state as required, so set them
+			// alongside namespaces or the status patch is rejected with
+			// "size: Required value".
 			ns1 := fmt.Sprintf("ns-acme-a-%d", GinkgoRandomSeed())
 			ns2 := fmt.Sprintf("ns-acme-b-%d", GinkgoRandomSeed())
 			origCap := capTenant.DeepCopy()
 			capTenant.Status.Namespaces = []string{ns1, ns2}
+			capTenant.Status.Size = 2
+			capTenant.Status.State = capsulev1beta2.TenantStateActive
 			Expect(k8sClient.Status().Patch(ctx, capTenant, client.MergeFrom(origCap))).To(Succeed())
 
 			// Create the keese Tenant referencing the Capsule Tenant.
@@ -379,21 +394,21 @@ var _ = Describe("TenantReconciler", func() {
 			Expect(k8sClient.Create(ctx, peer)).To(Succeed())
 			DeferCleanup(func() { _ = forceDeleteTenant(peer.Name) })
 
-			cra := &keesev1alpha1.CrossTenantAgreement{
+			cra := &authzv1alpha1.CrossTenantAgreement{
 				ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("cra-%d", GinkgoRandomSeed())},
-				Spec: keesev1alpha1.CrossTenantAgreementSpec{
-					From:  keesev1alpha1.TenantEndpoint{TenantRef: keesev1alpha1.LocalObjectRef{Name: tenantName}},
-					To:    keesev1alpha1.TenantEndpoint{TenantRef: keesev1alpha1.LocalObjectRef{Name: peer.Name}},
-					Scope: keesev1alpha1.CRAScope{NATSSubjects: []string{"keese.cta.test"}, A2ARoles: []keesev1alpha1.A2ARole{keesev1alpha1.A2ARoleReader}},
+				Spec: authzv1alpha1.CrossTenantAgreementSpec{
+					From:  authzv1alpha1.TenantEndpoint{TenantRef: authzv1alpha1.LocalObjectRef{Name: tenantName}},
+					To:    authzv1alpha1.TenantEndpoint{TenantRef: authzv1alpha1.LocalObjectRef{Name: peer.Name}},
+					Scope: authzv1alpha1.CRAScope{NATSSubjects: []string{"keese.cta.test"}, A2ARoles: []authzv1alpha1.A2ARole{authzv1alpha1.A2ARoleReader}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, cra)).To(Succeed())
 			// Manually patch status to Approved so hasActiveCRAs returns true.
 			origCRA := cra.DeepCopy()
-			cra.Status.Phase = keesev1alpha1.CRAPhaseA
+			cra.Status.Phase = authzv1alpha1.CRAPhaseA
 			Expect(k8sClient.Status().Patch(ctx, cra, client.MergeFrom(origCRA))).To(Succeed())
 			DeferCleanup(func() {
-				var c keesev1alpha1.CrossTenantAgreement
+				var c authzv1alpha1.CrossTenantAgreement
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: cra.Name}, &c); err == nil {
 					c.Finalizers = nil
 					_ = k8sClient.Update(ctx, &c)
@@ -515,12 +530,15 @@ type capturingRecorder struct {
 func (c *capturingRecorder) Event(_ runtime.Object, _, reason, _ string) {
 	c.events = append(c.events, reason)
 }
+
 func (c *capturingRecorder) Eventf(_ runtime.Object, _, reason, _ string, _ ...interface{}) {
 	c.events = append(c.events, reason)
 }
+
 func (c *capturingRecorder) AnnotatedEventf(_ runtime.Object, _ map[string]string, _, reason, _ string, _ ...interface{}) {
 	c.events = append(c.events, reason)
 }
+
 func (c *capturingRecorder) hasReason(reason string) bool {
 	for _, e := range c.events {
 		if e == reason {

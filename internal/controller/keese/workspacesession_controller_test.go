@@ -46,8 +46,10 @@ func makeSession(ns, name, wsName, subject, sessionName string, mode keesev1alph
 	}
 }
 
-// reconcileN drives n reconcile passes for the given session via the given reconciler.
-func reconcileN(ctx context.Context, r *WorkspaceSessionReconciler, nsn types.NamespacedName, n int) {
+// reconcileSessionN drives n reconcile passes for the given session via the given
+// reconciler. Named distinctly from the Workflow suite's reconcileN (different
+// reconciler type) now that both live in package keese.
+func reconcileSessionN(ctx context.Context, r *WorkspaceSessionReconciler, nsn types.NamespacedName, n int) {
 	for i := 0; i < n; i++ {
 		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
 		Expect(err).NotTo(HaveOccurred())
@@ -55,7 +57,6 @@ func reconcileN(ctx context.Context, r *WorkspaceSessionReconciler, nsn types.Na
 }
 
 var _ = Describe("WorkspaceSessionReconciler", func() {
-
 	// --- Spec 1: Idempotency ---
 	Describe("Idempotency", func() {
 		It("converges in ≤3 reconciles with no spec change", func() {
@@ -126,7 +127,7 @@ var _ = Describe("WorkspaceSessionReconciler", func() {
 			}
 
 			// Two passes: first adds finalizer, second hits the non-interactive check.
-			reconcileN(ctx, r, nsn, 2)
+			reconcileSessionN(ctx, r, nsn, 2)
 
 			var fresh keesev1alpha1.WorkspaceSession
 			Expect(k8sClient.Get(ctx, nsn, &fresh)).To(Succeed())
@@ -180,7 +181,7 @@ var _ = Describe("WorkspaceSessionReconciler", func() {
 				Rebac:    &WorkspaceFakeRebacWriter{},
 			}
 
-			reconcileN(ctx, r, nsn, 2)
+			reconcileSessionN(ctx, r, nsn, 2)
 
 			var freshSess keesev1alpha1.WorkspaceSession
 			Expect(k8sClient.Get(ctx, nsn, &freshSess)).To(Succeed())
@@ -227,7 +228,7 @@ var _ = Describe("WorkspaceSessionReconciler", func() {
 				Rebac:    &WorkspaceFakeRebacWriter{},
 			}
 
-			reconcileN(ctx, r, nsn1, 2)
+			reconcileSessionN(ctx, r, nsn1, 2)
 
 			var fresh1 keesev1alpha1.WorkspaceSession
 			Expect(k8sClient.Get(ctx, nsn1, &fresh1)).To(Succeed())
@@ -241,7 +242,7 @@ var _ = Describe("WorkspaceSessionReconciler", func() {
 			)
 			Expect(k8sClient.Create(ctx, sess2)).To(Succeed())
 			nsn2 := types.NamespacedName{Namespace: sess2.Namespace, Name: sess2.Name}
-			reconcileN(ctx, r, nsn2, 2)
+			reconcileSessionN(ctx, r, nsn2, 2)
 
 			var fresh2 keesev1alpha1.WorkspaceSession
 			Expect(k8sClient.Get(ctx, nsn2, &fresh2)).To(Succeed())
@@ -287,8 +288,8 @@ var _ = Describe("WorkspaceSessionReconciler", func() {
 
 			nsn1 := types.NamespacedName{Namespace: "default", Name: sess1.Name}
 			nsn2 := types.NamespacedName{Namespace: "default", Name: sess2.Name}
-			reconcileN(ctx, r, nsn1, 2)
-			reconcileN(ctx, r, nsn2, 2)
+			reconcileSessionN(ctx, r, nsn1, 2)
+			reconcileSessionN(ctx, r, nsn2, 2)
 
 			var f1, f2 keesev1alpha1.WorkspaceSession
 			Expect(k8sClient.Get(ctx, nsn1, &f1)).To(Succeed())
@@ -339,7 +340,7 @@ var _ = Describe("WorkspaceSessionReconciler", func() {
 					Recorder: &noopRecorder{},
 					Rebac:    &WorkspaceFakeRebacWriter{},
 				}
-				reconcileN(ctx, r, nsn, 2)
+				reconcileSessionN(ctx, r, nsn, 2)
 
 				var fresh keesev1alpha1.WorkspaceSession
 				Expect(k8sClient.Get(ctx, nsn, &fresh)).To(Succeed())
@@ -381,7 +382,7 @@ var _ = Describe("WorkspaceSessionReconciler", func() {
 			}
 
 			// Provision session and advance to Active manually via status patch.
-			reconcileN(ctx, r, nsn, 2)
+			reconcileSessionN(ctx, r, nsn, 2)
 
 			var freshSess keesev1alpha1.WorkspaceSession
 			Expect(k8sClient.Get(ctx, nsn, &freshSess)).To(Succeed())
@@ -439,7 +440,7 @@ var _ = Describe("WorkspaceSessionReconciler", func() {
 			}
 
 			// Provision.
-			reconcileN(ctx, r, nsn, 2)
+			reconcileSessionN(ctx, r, nsn, 2)
 
 			var provisionedSess keesev1alpha1.WorkspaceSession
 			Expect(k8sClient.Get(ctx, nsn, &provisionedSess)).To(Succeed())

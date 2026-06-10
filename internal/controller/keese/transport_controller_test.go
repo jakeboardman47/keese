@@ -7,7 +7,6 @@ package keese
 
 import (
 	"context"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -22,11 +21,7 @@ import (
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
 )
 
-const (
-	testNamespace = "default"
-	eventually    = 10 * time.Second
-	pollInterval  = 250 * time.Millisecond
-)
+const testNamespace = "default"
 
 func reconcilerWith(nats *FakeNatsStreamer, cta *FakeCTAResolver, cert *FakeCertManagerReader) *TransportReconciler {
 	recorder := k8sClient.Scheme() // unused; we supply a fake recorder below
@@ -48,9 +43,11 @@ type fakeEventRecorder struct{ Events []string }
 func (f *fakeEventRecorder) Event(obj runtime.Object, eventType, reason, message string) {
 	f.Events = append(f.Events, reason+": "+message)
 }
+
 func (f *fakeEventRecorder) Eventf(obj runtime.Object, eventType, reason, messageFmt string, args ...interface{}) {
 	f.Events = append(f.Events, reason)
 }
+
 func (f *fakeEventRecorder) AnnotatedEventf(obj runtime.Object, annotations map[string]string, eventType, reason, messageFmt string, args ...interface{}) {
 	f.Events = append(f.Events, reason)
 }
@@ -73,7 +70,6 @@ func reconcileOnce(ctx context.Context, r *TransportReconciler, name string) (re
 }
 
 var _ = Describe("Transport Controller", func() {
-
 	// ---------- 1. Idempotency ----------
 
 	Context("Idempotency", func() {

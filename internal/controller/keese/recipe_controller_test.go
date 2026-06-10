@@ -25,7 +25,7 @@ var _ = Describe("Recipe Controller", func() {
 	)
 
 	// buildRecipeReconciler creates a RecipeReconciler with fake dependencies.
-	buildRecipeReconciler := func(rebac RebacWriter, extAuthz ExtAuthzChecker) *RecipeReconciler {
+	buildRecipeReconciler := func(rebac RecipeRebacWriter, extAuthz ExtAuthzChecker) *RecipeReconciler {
 		return &RecipeReconciler{
 			Client:   k8sClient,
 			Scheme:   k8sClient.Scheme(),

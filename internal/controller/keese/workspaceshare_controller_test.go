@@ -36,7 +36,6 @@ func makeWorkspaceShare(ns, name, workspaceName, targetNS string) *keesev1alpha1
 }
 
 var _ = Describe("WorkspaceShareReconciler", func() {
-
 	// --- Basic reconcile test ---
 	Describe("Reconcile without backing Workspace", func() {
 		var (
@@ -103,9 +102,13 @@ var _ = Describe("WorkspaceShareReconciler", func() {
 	})
 
 	// --- ReBAC tuples test with backing Workspace ---
-	// Uses the running manager (not a per-test reconciler) and asserts via status.
+	// Drives a per-test reconciler (the consolidated keese suite runs only the
+	// Memory/SharedMemory reconcilers in its background manager — every other
+	// controller, including WorkspaceShare, is exercised by constructing a
+	// reconciler with per-spec fakes and calling Reconcile, so that the spec's own
+	// fake observes the work; see suite_test.go). Asserts via status.
 	Describe("ReBAC tuples with backing Workspace", func() {
-		It("sets Ready=True and RebacTupleCount>0 after manager reconciles", func() {
+		It("sets Ready=True and RebacTupleCount>0 after reconcile", func() {
 			// Unique per-It names to avoid cross-test collisions.
 			suffix := fmt.Sprintf("%d-ready", GinkgoParallelProcess())
 			wsName := fmt.Sprintf("ws-for-share-%s", suffix)
@@ -120,8 +123,17 @@ var _ = Describe("WorkspaceShareReconciler", func() {
 			Expect(k8sClient.Create(ctx, share)).To(Succeed())
 			wssNSN := types.NamespacedName{Namespace: share.Namespace, Name: share.Name}
 
-			// Wait for the running manager to drive the share to Ready.
+			r := &WorkspaceShareReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: &noopRecorder{},
+				Rebac:    &WorkspaceFakeRebacWriter{},
+			}
+
+			// Drive reconciles until the share reaches Ready with tuples written.
 			Eventually(func(g Gomega) {
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: wssNSN})
+				g.Expect(err).NotTo(HaveOccurred())
 				var fresh keesev1alpha1.WorkspaceShare
 				g.Expect(k8sClient.Get(ctx, wssNSN, &fresh)).To(Succeed())
 				g.Expect(fresh.Status.RebacTupleCount).To(BeNumerically(">", 0))

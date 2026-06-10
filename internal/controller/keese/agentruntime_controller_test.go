@@ -41,9 +41,10 @@ var _ = Describe("AgentRuntime Controller", func() {
 
 	Describe("AgentRuntime_unknown_provider_rejected", func() {
 		It("is rejected at admission (CEL XValidation) when no impl field is set", func() {
-			// The CRD CEL XValidation enforces exactly one of goose/claudeCode/aider.
-			// An object with all-nil implementation is rejected at the API server level
-			// (admission 422 UnprocessableEntity) — this is the correct behaviour per spec.
+			// The CRD CEL XValidation enforces that exactly one implementation
+			// provider is set. An object with all-nil implementation is rejected at
+			// the API server level (admission 422 UnprocessableEntity) — correct
+			// behaviour per spec.
 			ar := &keesev1alpha1.AgentRuntime{
 				ObjectMeta: metav1.ObjectMeta{Name: "ar-no-impl"},
 				Spec: keesev1alpha1.AgentRuntimeSpec{
@@ -54,8 +55,11 @@ var _ = Describe("AgentRuntime Controller", func() {
 			}
 			err := k8sClient.Create(ctx, ar)
 			Expect(err).To(HaveOccurred(), "expected admission rejection for all-nil implementation")
-			// The error must mention the CEL rule message.
-			Expect(err.Error()).To(ContainSubstring("exactly one of goose, claudeCode, or aider must be set"))
+			// The error must mention the CEL rule message. Match only the stable
+			// prefix so the assertion survives future provider additions to the
+			// one-of (e.g. adkPython, adkGo were added after this test was first
+			// written).
+			Expect(err.Error()).To(ContainSubstring("exactly one of goose, claudeCode"))
 		})
 	})
 
@@ -235,5 +239,6 @@ type nopRecorder struct{}
 func (n *nopRecorder) Event(_ kruntime.Object, _, _, _ string) {}
 func (n *nopRecorder) Eventf(_ kruntime.Object, _, _, _ string, _ ...interface{}) {
 }
+
 func (n *nopRecorder) AnnotatedEventf(_ kruntime.Object, _ map[string]string, _, _, _ string, _ ...interface{}) {
 }
