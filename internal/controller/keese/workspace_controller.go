@@ -54,6 +54,12 @@ type WorkspaceReconciler struct {
 	Recorder record.EventRecorder
 	Rebac    WorkspaceRebacWriter
 
+	// RuntimeRebac writes the extension:E#enabled_in@workspace:W tuples for the
+	// RuntimeExtensions enabled in this Workspace (those whose spec.runtimeRef
+	// matches the Workspace's). Defaulted to RuntimeNoopRebacWriter in
+	// SetupWithManager when nil. See workspace_extensions.go for the linkage.
+	RuntimeRebac RuntimeRebacWriter
+
 	// GatewayNamespace overrides the namespace where the Envoy AI Gateway +
 	// NATS services live. Empty → gatewayServiceNamespaceDefault. Wired from
 	// the KEESE_GATEWAY_NS env var in cmd/main.go.
@@ -75,6 +81,7 @@ func (r *WorkspaceReconciler) gatewayNamespace() string {
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=keese.ai,resources=runtimeextensions,verbs=get;list;watch
 
 // Reconcile implements the main reconciliation loop for Workspace.
 // Idiom: fetch → deepcopy for status patch → handle deletion → ensure desired state → update status.
@@ -205,6 +212,17 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		"%d ReBAC tuples synced", len(tuples))
 	ws.Status.RebacTupleCount = int32(len(tuples)) //nolint:gosec
 
+	// --- RuntimeExtension enabled_in tuples ---
+	// Write extension:E#enabled_in@workspace:W for every RuntimeExtension
+	// enabled in this Workspace (those whose spec.runtimeRef matches the
+	// Workspace's runtimeRef). Idempotent; the RuntimeExtension controller's
+	// CountEnabledIn then reflects the count into status.boundWorkspaces.
+	if err := r.syncEnabledInTuples(ctx, &ws); err != nil {
+		log.Error(err, "failed to write extension enabled_in tuples")
+		r.setProgressing(&ws, "ExtensionTupleSyncFailed", err.Error())
+		return ctrl.Result{RequeueAfter: requeueAfterBackoff}, r.patchStatus(ctx, &ws, orig)
+	}
+
 	// --- Advance FSM ---
 	switch ws.Status.Phase {
 	case keesev1alpha1.WorkspacePhasePending, keesev1alpha1.WorkspacePhaseProvisioning:
@@ -267,6 +285,17 @@ func (r *WorkspaceReconciler) cleanup(ctx context.Context, ws *keesev1alpha1.Wor
 		log.Error(err, "failed to delete ReBAC tuples; will retry")
 		r.Recorder.Eventf(ws, corev1.EventTypeWarning, ReasonRebacTupleDeleteFailed,
 			"ReBAC tuple deletion failed: %v", err)
+		_ = r.patchStatus(ctx, ws, orig)
+		return ctrl.Result{RequeueAfter: requeueAfterBackoff}, nil
+	}
+
+	// Delete RuntimeExtension enabled_in tuples (extension:E#enabled_in@workspace:W)
+	// before tearing down sub-resources. Idempotent — re-running after the tuples
+	// are gone is a no-op. The finalizer blocks deletion until this succeeds.
+	if err := r.deleteEnabledInTuples(ctx, ws); err != nil {
+		log.Error(err, "failed to delete extension enabled_in tuples; will retry")
+		r.Recorder.Eventf(ws, corev1.EventTypeWarning, ReasonRebacTupleDeleteFailed,
+			"extension enabled_in tuple deletion failed: %v", err)
 		_ = r.patchStatus(ctx, ws, orig)
 		return ctrl.Result{RequeueAfter: requeueAfterBackoff}, nil
 	}
@@ -339,6 +368,9 @@ func (r *WorkspaceReconciler) setProgressing(ws *keesev1alpha1.Workspace, reason
 func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Rebac == nil {
 		r.Rebac = WorkspaceNoopRebacWriter{}
+	}
+	if r.RuntimeRebac == nil {
+		r.RuntimeRebac = RuntimeNoopRebacWriter{}
 	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("workspace-controller")
