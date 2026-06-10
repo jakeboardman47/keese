@@ -270,6 +270,7 @@ func main() {
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
 		Rebac:            workspaceRebac,
+		RuntimeRebac:     runtimeRebac,
 		GatewayNamespace: os.Getenv("KEESE_GATEWAY_NS"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Workspace")
