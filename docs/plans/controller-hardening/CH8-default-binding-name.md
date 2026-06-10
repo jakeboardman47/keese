@@ -9,7 +9,7 @@ depends:
   - ../../../config/default/bootstrap/guardrailbinding-cluster-default.yaml
   - ../../../internal/controller/keese
 related_skills: [plan-management, controller-authoring]
-status: planned
+status: complete
 last_verified: 2026-06-10
 phase: CH8
 model_tier: sonnet

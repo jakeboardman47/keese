@@ -77,6 +77,27 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-10 — controller-hardening wave 2 (CH3/CH7/CH8)
+
+- **CH3 — `enabled_in` wired.** A `RuntimeExtension` is "enabled in" a `Workspace`
+  when both reference the **same cluster-scoped `AgentRuntime`** (there is no
+  `Workspace.spec.runtimeExtensions` field; the match is namespace-local). The
+  Workspace reconciler now writes `extension:E#enabled_in@workspace:W` via
+  `RuntimeRebac` on bind + deletes on finalize; `boundWorkspaces` populates.
+  **Production wiring gotcha:** `cmd/main.go`'s `WorkspaceReconciler{…}` must pass
+  `RuntimeRebac: runtimeRebac` — without it the field defaults to the noop writer and
+  the feature is inert in prod (the agent couldn't touch `cmd/`; orchestrator added it).
+  121/121 keese integration specs green. Unblocks EH11 `revisit_when_enabled_in_wired`.
+- **CH7 — cosign-webhook bootstrap overlay** (`dev/bootstrap/cosign-webhook/`) +
+  `make cosign-webhook-load`/`e2e-images-load`. `shipped-with-stubs`: OLM is too heavy
+  for the dev loop, so EH8's full admission proof still needs a minimal OLM (2/3
+  preconditions land now); EH10 just needs `make goose-runtime-load`.
+- **CH8 — default GuardrailBinding renamed** `keese-default`→`keese.ai-default` to
+  match the `defaultBindingName` const (fixes `DefaultBindingMissing` / EH5
+  default-inherit). **Follow-up:** the OLM bundle alm-example still says
+  `keese-keese-default` — needs a `make bundle` regen (hand-editing the generated CSV
+  trips the SPDX hook); deferred to an olm-author pass.
+
 ### 2026-06-10 — controller-hardening wave 1 (CH1/CH2/CH6) + CH9 finding
 
 - Fixed the two data races the e2e track surfaced: `FakeNatsSignaler`

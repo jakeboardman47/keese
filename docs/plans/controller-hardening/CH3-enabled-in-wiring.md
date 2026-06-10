@@ -10,7 +10,7 @@ depends:
   - ../../../internal/controller/keese/runtime_rebac.go
   - ../../../internal/controller/keese/workspace_rebac.go
 related_skills: [plan-management, controller-authoring]
-status: planned
+status: complete
 last_verified: 2026-06-10
 phase: CH3
 model_tier: sonnet

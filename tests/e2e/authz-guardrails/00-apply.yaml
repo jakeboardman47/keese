@@ -10,7 +10,7 @@
 #
 # Apply order: hello-keese.yaml must already be applied (it provisions
 # tenant alpha, AgentRuntime goose-default, my-ws + its session). The
-# cluster-default GuardrailBinding `keese-default` in keese-system is part
+# cluster-default GuardrailBinding `keese.ai-default` in keese-system is part
 # of the operator bootstrap (config/default/bootstrap/), so the
 # default-inherit assertion has its parent present.
 apiVersion: kuttl.dev/v1beta1

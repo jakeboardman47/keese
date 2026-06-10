@@ -40,9 +40,9 @@ test-only e2e track, every phase gets a harder diff review, SSA-only writes
 | CH2 | Fix podexec context-timeout data race | controller-author | — | complete |
 | CH6 | Write Workflow.status.runCount | controller-author | — | complete |
 | CH9 | Dedup the keese envtest harness (suite won't compile) | test-engineer | — | complete |
-| CH8 | Fix default GuardrailBinding name mismatch | controller-author | — | planned |
-| CH3 | Wire enabled_in tuple on workspace bind | controller-author | — | planned |
-| CH7 | Bootstrap overlays (OLM/cosign + goose-runtime) | infra-bootstrap | — | planned |
+| CH8 | Fix default GuardrailBinding name mismatch | controller-author | — | complete |
+| CH3 | Wire enabled_in tuple on workspace bind | controller-author | — | complete |
+| CH7 | Bootstrap overlays (OLM/cosign + goose-runtime) | infra-bootstrap | — | shipped-with-stubs |
 | CH4 | Cross-tenant messageable_from + OpenFGA model | rebac-modeler | — | planned |
 | CH5 | Token-cost metering pipeline (design ADR first) | architect | — | planned |
 

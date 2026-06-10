@@ -9,8 +9,9 @@ depends:
   - ../../references/tilt-local-loop.md
   - ../../../dev/bootstrap/README.md
 related_skills: [plan-management, infra-bootstrap]
-status: planned
+status: shipped-with-stubs
 last_verified: 2026-06-10
+revisit_when_featuregate_effect_observable: true
 phase: CH7
 model_tier: sonnet
 depends_on: []

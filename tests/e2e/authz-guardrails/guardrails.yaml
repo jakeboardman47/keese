@@ -14,7 +14,7 @@
 #
 #   1. eh5-tenant   (scope: Tenant)    — a tenant-scoped binding that adds
 #      a tool restriction atop the cluster default. It declares NO
-#      spec.inherit; the cluster-default `keese-default` binding in
+#      spec.inherit; the cluster-default `keese.ai-default` binding in
 #      keese-system is inherited implicitly through the merge lattice, and
 #      the controller emits DefaultBindingMissing (warning) only when the
 #      cluster default is absent. With the bootstrap default present, the
