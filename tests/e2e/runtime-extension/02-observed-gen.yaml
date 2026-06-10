@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 02: assert observedGeneration tracks generation on the Ready
+# extension, then confirm the owner tuple landed in the LIVE OpenFGA store.
+#
+#   1. check-observed-gen.sh — status.observedGeneration == metadata.generation
+#      (rule 04.4; the controller sets ObservedGeneration = Generation on the
+#      Ready converge). kuttl's declarative assert cannot compare two live
+#      fields, hence a command step.
+#   2. check-extension-tuple.sh (MODE=present) — reads
+#      extension:rext-e2e#owner@tenant:ext-tenant from the real store via a
+#      one-shot fga CLI pod. Skips cleanly if the store is unseeded (the
+#      CR-status layer in 01-assert.yaml still proves the controller reached
+#      Ready, which only happens AFTER WriteExtensionOwner succeeds). This is
+#      what proves the OpenFGA writer ran, not the RuntimeNoopRebacWriter
+#      fallback — and it is the owner-LINK assertion the plan asked for
+#      (the controller writes no formal ownerRef; see README).
+#
+# namespaced: false — helpers target named namespaces (openfga,
+# runtime-extension-e2e), not kuttl's per-test namespace.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: ./check-observed-gen.sh
+    namespaced: false
+    skipLogOutput: false
+  - command: env EXTENSION=rext-e2e TENANT=ext-tenant MODE=present ../lib/check-extension-tuple.sh
+    namespaced: false
+    skipLogOutput: false

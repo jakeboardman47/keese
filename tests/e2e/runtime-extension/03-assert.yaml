@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 03 (assert): both RuntimeExtensions are gone — the rebac-cleanup
+# finalizer ran to completion and Kubernetes removed the objects.
+#
+# kuttl's `errors:` block fails the step if a named object STILL EXISTS; we
+# want them absent. A finalizer stuck open (e.g. OpenFGA unreachable during
+# DeleteAllExtensionTuples) would leave the object Terminating, tripping
+# this assert — exactly the failure mode the finalizer is meant to block on.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+errors:
+  - apiVersion: keese.ai/v1alpha1
+    kind: RuntimeExtension
+    metadata:
+      name: rext-e2e
+      namespace: runtime-extension-e2e
+  - apiVersion: keese.ai/v1alpha1
+    kind: RuntimeExtension
+    metadata:
+      name: rext-badref-e2e
+      namespace: runtime-extension-e2e

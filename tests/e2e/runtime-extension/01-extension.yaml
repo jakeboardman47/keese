@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 01 (apply): two RuntimeExtensions —
+#   1. rext-e2e — references the real agentruntime-e2e; the controller
+#      validates the ref, writes the owner tuple, and converges to Ready.
+#   2. rext-badref-e2e — references a missing AgentRuntime; the controller
+#      records ExtensionRuntimeRefInvalid and converges to Degraded. This is
+#      the negative path proving the runtimeRef validation actually gates.
+#
+# Both carry no formal ownerRef to the AgentRuntime: the shipped controller
+# deliberately does NOT set a cross-namespace ownerRef (AgentRuntime is
+# cluster-scoped, RuntimeExtension namespaced — K8s GC does not support that
+# edge); it tracks ownership via the OpenFGA owner tuple + a manual
+# reference check on delete (runtimeextension_controller.go §105-109). The
+# owner-link assertion is therefore the live owner TUPLE (step 02), not a
+# metadata.ownerReferences entry. See README "Plan vs. shipped reality".
+apiVersion: keese.ai/v1alpha1
+kind: RuntimeExtension
+metadata:
+  name: rext-e2e
+  namespace: runtime-extension-e2e
+  labels:
+    keese.ai/managed: "true"
+spec:
+  runtimeRef:
+    name: agentruntime-e2e
+  description: EH11 runtime-extension happy-path
+---
+apiVersion: keese.ai/v1alpha1
+kind: RuntimeExtension
+metadata:
+  name: rext-badref-e2e
+  namespace: runtime-extension-e2e
+  labels:
+    keese.ai/managed: "true"
+spec:
+  runtimeRef:
+    name: agentruntime-does-not-exist
+  description: EH11 runtime-extension negative path (missing runtimeRef)

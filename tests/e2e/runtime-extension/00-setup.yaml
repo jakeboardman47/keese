@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 runtime-extension step 00 (apply): the AgentRuntime the extension
+# references, plus a tenant-labeled namespace so the controller resolves a
+# real tenant for the owner tuple (resolveTenantName reads keese.ai/tenant;
+# falls back to "default" when absent).
+#
+# AgentRuntime is cluster-scoped; RuntimeExtension is namespaced. The
+# RuntimeExtensionReconciler validates runtimeRef.name resolves to an
+# existing AgentRuntime before writing the owner tuple and reaching Ready
+# (runtimeextension_controller.go §85). The minimal goose implementation
+# mirrors config/samples/runtime_v1alpha1_agentruntime.yaml.
+#
+# Prereq: a bootstrapped kind-keese cluster with the keese operator running.
+#   make kind-up && make bootstrap-infra
+# Do NOT run with `make test-e2e` without a live cluster.
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  name: agentruntime-e2e
+  labels:
+    keese.ai/managed: "true"
+spec:
+  implementation:
+    goose:
+      image: ghcr.io/block/goose:latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: runtime-extension-e2e
+  labels:
+    keese.ai/tenant: ext-tenant

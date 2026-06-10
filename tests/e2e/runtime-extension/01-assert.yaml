@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 01 (assert): the happy-path extension reaches Ready and the
+# bad-ref extension reaches Degraded.
+#
+# rext-e2e — SHIPPED Ready shape (runtimeextension_controller.go §145):
+#   - phase: Ready
+#   - boundWorkspaces: 0 (no enabled_in tuples bound yet — see README note on
+#     the workspace-binding path that this controller does NOT itself write)
+#   - Ready condition True with reason ExtensionTupleWritten (the controller
+#     reuses that reason on the converged Ready condition)
+#   - the rebac-cleanup finalizer is present (added before the tuple write).
+#
+# observedGeneration == generation is asserted in 02-observed-gen.yaml.
+apiVersion: keese.ai/v1alpha1
+kind: RuntimeExtension
+metadata:
+  name: rext-e2e
+  namespace: runtime-extension-e2e
+  finalizers:
+    - finalizers.runtimeextension.keese.ai/rebac-cleanup
+status:
+  phase: Ready
+  boundWorkspaces: 0
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: ExtensionTupleWritten
+---
+# rext-badref-e2e — SHIPPED Degraded shape (§85): runtimeRef not found.
+apiVersion: keese.ai/v1alpha1
+kind: RuntimeExtension
+metadata:
+  name: rext-badref-e2e
+  namespace: runtime-extension-e2e
+status:
+  phase: Degraded
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: ExtensionRuntimeRefInvalid

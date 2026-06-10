@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 00 (assert): the AgentRuntime exists so runtimeRef resolves.
+#
+# The RuntimeExtensionReconciler only does a Get on the AgentRuntime by name
+# (it does not gate on the runtime's phase), so the existence of the object
+# is the precondition this step confirms. The AgentRuntime's own lifecycle
+# is covered by the agentruntime-drain suite, not here.
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  name: agentruntime-e2e

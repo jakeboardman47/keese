@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 03 (teardown): delete both RuntimeExtensions and assert the
+# rebac-cleanup finalizer runs to completion, then confirm the owner tuple
+# is GONE from the live store.
+#
+# Deletion runs reconcileDelete() (runtimeextension_controller.go §160):
+# DeleteAllExtensionTuples removes the owner tuple (+ any enabled_in),
+# emits ExtensionTupleDeleted, then RemoveFinalizer lets Kubernetes
+# garbage-collect the object. The finalizer BLOCKS deletion until the tuple
+# delete succeeds (spec failure mode: OpenFGA down → retry), so a clean
+# blocking delete within the timeout IS the finalizer assertion.
+#
+# check-extension-tuple.sh (MODE=absent) is the live complement: it proves
+# the finalizer's DeleteAllExtensionTuples actually removed the owner tuple
+# from the real store (skips cleanly on an unseeded store — the CR removal
+# in 03-assert.yaml still proves the finalizer completed).
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: kubectl delete runtimeextension rext-e2e -n runtime-extension-e2e --timeout=120s --ignore-not-found
+    namespaced: false
+    skipLogOutput: false
+  - command: kubectl delete runtimeextension rext-badref-e2e -n runtime-extension-e2e --timeout=120s --ignore-not-found
+    namespaced: false
+    skipLogOutput: false
+  - command: env EXTENSION=rext-e2e TENANT=ext-tenant MODE=absent ../lib/check-extension-tuple.sh
+    namespaced: false
+    skipLogOutput: false
