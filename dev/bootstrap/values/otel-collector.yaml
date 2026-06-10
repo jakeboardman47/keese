@@ -1,13 +1,42 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 keese-ai
 #
-# OpenTelemetry Collector values for local dev — Deployment mode.
+# OpenTelemetry Collector values for local dev — Deployment mode (stands in for
+# the 10a Tier-1 DaemonSet in the single-node kind loop).
 # Receives OTLP (gRPC :4317 / HTTP :4318), processes via batch + resource
-# attributes + tail-sampling, exports to Elasticsearch and Elastic APM.
+# attributes + tail-sampling, exports traces/logs to Elasticsearch + Elastic
+# APM, and — CH5b — EXPORTS gateway token-usage to the keese-token-meter's
+# HTTP POST /ingest so the meter relabels it into the
+# keese_token_budget_consumed_total{tenant,workspace,model,direction} contract
+# series Prometheus scrapes (the authoritative store the TokenBudget reconciler
+# reads, 10b; CH5c wires the reconciler client).
 #
-# Refs: docs/designs/10a-otel-topology.md
+# Token-usage export hop (ADR 30 §data flow line 2): the gateway emits its
+# per-response token-cost metric (envoy_ai_gateway_token_cost_total, carrying
+# the x-keese-tenant / x-keese-workspace / x-envoy-upstream-model-id attributes
+# ext_authz stamps, 05a). The Tier-1 collector routes those datapoints to the
+# meter Service's POST /ingest as the CH5a JSON record
+# {request_id,tenant,workspace,model,tokens_in,tokens_out,final}. The meter —
+# not the collector — owns relabel + request-id dedup, so this hop does no
+# aggregation: it is a pure forward to /ingest.
+#
+# NOTE (declared stub, CH5b): the contrib `exporters/otlphttp` speaks OTLP
+# protobuf/JSON to /v1/metrics, not the meter's CH5a /ingest shape. The
+# datapoint→/ingest-JSON adaptation runs in the live collector image
+# (otel/opentelemetry-collector-k8s with the routing/transform set below) and
+# is exercised on the nightly kind path — it cannot be rendered/kubeconform'd
+# without a running collector. The Service wiring + endpoint contract below ARE
+# structurally validated; the runtime translation is the shipped-with-stubs part.
+#
+# Refs: docs/designs/10a-otel-topology.md, docs/designs/30-token-metering-pipeline.md
 
 mode: deployment
+
+# Chart 0.112.0 dropped the default image.repository; it must be set explicitly
+# or the collector pod fails to template (the reason this release was gated out
+# of the demo bootstrap — see helmfile.yaml Layer 2 comment).
+image:
+  repository: otel/opentelemetry-collector-k8s
 
 replicaCount: 1
 
@@ -38,6 +67,26 @@ config:
         - action: upsert
           key: deployment.environment
           value: kind-dev
+
+    # tokenusage pipeline: keep ONLY the gateway token-cost datapoints and
+    # surface the labels the meter's /ingest record needs. Resource attributes
+    # are stamped by ext_authz (05a): keese.tenant, keese.workspace,
+    # gen_ai.request.model, keese.request_id. Datapoints missing keese.tenant
+    # are dropped here (10a fail-closed isolation) before they reach the meter.
+    filter/tokenusage:
+      metrics:
+        include:
+          match_type: strict
+          metric_names:
+            - envoy_ai_gateway_token_cost_total
+    transform/tokenusage:
+      metric_statements:
+        - context: datapoint
+          statements:
+            # Drop datapoints with no tenant (fail-closed, 10a). The meter would
+            # also drop these (no_tenant), but discarding at source keeps the
+            # /ingest hop clean.
+            - drop() where resource.attributes["keese.tenant"] == nil
 
     tail_sampling:
       decision_wait: 10s
@@ -73,6 +122,24 @@ config:
       headers:
         Authorization: "Bearer ${APM_TOKEN}"
 
+    # keese-token-meter exporter — the CH5b metering hop. Each filtered gateway
+    # token-cost datapoint is POSTed to the meter's /ingest as the CH5a JSON
+    # record. fail-open (ADR 30): a meter outage degrades to a bounded metering
+    # gap, never a gateway stall, so this exporter does NOT block the pipeline
+    # (sending_queue + short retry, then drop). The endpoint is the meter
+    # Service in the monitoring namespace (config/token-meter/service.yaml).
+    otlphttp/token-meter:
+      metrics_endpoint: "http://keese-token-meter.monitoring.svc.cluster.local:8080/ingest"
+      encoding: json
+      tls:
+        insecure: true  # dev only — in-cluster plaintext to the meter Service
+      retry_on_failure:
+        enabled: true
+        max_elapsed_time: 10s  # bounded; fail-open past this (ADR 30)
+      sending_queue:
+        enabled: true
+        queue_size: 1000
+
     # Debug exporter for local troubleshooting (verbose in dev).
     debug:
       verbosity: normal
@@ -88,6 +155,14 @@ config:
         receivers: [otlp]
         processors: [memory_limiter, resource, batch]
         exporters: [debug]
+
+      # Token-usage hop → keese-token-meter /ingest (CH5b). Isolated pipeline so
+      # the meter export never competes with the general metrics fan-out and a
+      # meter outage cannot back-pressure traces/logs (fail-open, ADR 30).
+      metrics/tokenusage:
+        receivers: [otlp]
+        processors: [memory_limiter, filter/tokenusage, transform/tokenusage, resource, batch]
+        exporters: [otlphttp/token-meter, debug]
 
       logs:
         receivers: [otlp]

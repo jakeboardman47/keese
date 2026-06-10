@@ -261,9 +261,20 @@ releases:
   # otel-collector chart 0.112.0 requires `image.repository` to be set
   # explicitly (defaults dropped in upstream). Removed from the demo
   # bootstrap; OTEL wiring is a values-file fix tracked in
-  # docs/plans/demo/tech-debt.md. To re-enable, restore this release
-  # block and add `image: { repository: otel/opentelemetry-collector-k8s }`
-  # to values/otel-collector.yaml.
+  # docs/plans/demo/tech-debt.md. The image is now set in
+  # values/otel-collector.yaml (`image.repository:
+  # otel/opentelemetry-collector-k8s`), so re-enabling is just uncommenting
+  # this block and re-running `helmfile deps` to pin the chart in
+  # helmfile.lock.
+  #
+  # CH5b (ADR 30): this is the Tier-1 collector that EXPORTS gateway
+  # token-usage to the keese-token-meter's POST /ingest. Its values file now
+  # carries the `metrics/tokenusage` pipeline + the `otlphttp/token-meter`
+  # exporter (values/otel-collector.yaml). The meter Deployment + the dev
+  # metering Prometheus that scrapes it are applied unconditionally by
+  # `make bootstrap-infra` (dev/bootstrap/token-meter) so the contract series
+  # materializes locally even while this collector release stays gated on the
+  # tech-debt re-enable. CH5c reads that Prometheus.
   # - name: otel-collector
   #   namespace: observability
   #   createNamespace: true
