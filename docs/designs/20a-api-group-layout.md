@@ -7,7 +7,7 @@ category: api
 depends: [docs/plans/scaffolding-plan.md, docs/designs/01-tenancy-capsule.md]
 related_skills: [crd-authoring, doc-authoring]
 status: current
-last_verified: 2026-06-08
+last_verified: 2026-06-10
 rollback: Revert to prior commit; no migration plan required at v1alpha1 because no
   conversion webhooks exist yet. At v1beta1 promotion a migration plan in
   docs/plans/migration-<kind>.md is required before rollback of any group.
@@ -60,6 +60,61 @@ providers are cluster-wide). All other kinds enumerated here are namespace-scope
 Additional cluster-scoped kinds require an ADR in `docs/designs/`. (RAG kinds —
 D28's `KnowledgeBase` family — also live in `keese.ai`; see
 `docs/designs/28-rag-ingestion.md`.)
+
+## Why 3 groups, not 10
+
+Kubernetes itself runs ~25 kinds in `core/v1`. Splitting kinds into groups makes
+sense when a domain has its own RBAC boundary, its own controller-manager
+deployment, or its own SIG-style maintainership. Keese has none of those — every
+kind is reconciled by the same operator process, every group's RBAC was identical
+to every other group's, and the 10-group split actively hurt code organization
+(every cross-CRD reference was a different Go import alias).
+
+Three groups capture the only real responsibility split:
+
+- **core** — *what runs.* Workload primitives: tenants own workspaces; workspaces
+  own sessions, runtimes, recipes, memory, workflows, transports. Cluster scope and
+  namespace scope mix inside the group, exactly as `Namespace` and `Pod` do in
+  Kubernetes' `core/v1`.
+- **authz** — *who can do what.* Identity (OIDCProvider), cross-tenant trust
+  (CrossTenantAgreement), per-workspace tool policy (GuardrailBinding), tool naming
+  (ToolBinding / WorkspaceTool — feed the OpenFGA `Check` ext_authz path). Every
+  controller in this group writes ReBAC tuples or projects authz filters at the
+  gateway.
+- **policy** — *constraints.* Quotas and budgets (TokenBudget) and any future cost /
+  rate / regional kind. Distinct from authz because authz is binary (allow / deny)
+  and policy is quantitative (budget remaining, throttle rate).
+
+## Scope mix per group
+
+| Group | Cluster-scoped | Namespaced |
+|---|---|---|
+| core | Tenant, AgentRuntime | Workspace, WorkspaceSession, WorkspaceShare, Memory, SharedMemory, Recipe, RecipeSource, RuntimeExtension, Transport, Workflow, WorkflowRun |
+| authz | OIDCProvider, CrossTenantAgreement, ToolBinding | GuardrailBinding, WorkspaceTool |
+| policy | — | TokenBudget |
+
+Cluster-scoped kinds are platform/admin-owned (tenant identity, OIDC trust roots,
+allowed-tool catalogue, agent-runtime provider config). Namespaced kinds are
+tenant-owned workloads. Splitting cluster vs namespace into separate API groups is
+non-idiomatic — the precedent is `core/v1` housing both `Namespace` (cluster) and
+`Pod` (namespaced) in the same group.
+
+## Two ToolBinding kinds — cluster + namespaced
+
+`ToolBinding` (cluster-scoped) is the platform admin's catalogue of known LLM/MCP
+endpoints — `/anthropic/v1/messages` + `model=opus` → `tool:anthropic.messages.opus-4`.
+Long-lived, shared across tenants.
+
+`WorkspaceTool` (namespaced) is the tenant admin's per-workspace extension —
+register an internal API or MCP-tool the platform catalogue does not know about.
+Resolves into the per-namespace tool namespace `tool:<ns>.<name>` so it cannot
+collide with cluster-scoped names.
+
+Both kinds compile into the same in-memory routing trie inside the keese-authz
+ext_authz service (cluster matchers tried first; namespace matchers tried only
+against requests originating from that namespace's workspaces). See
+[`docs/designs/22-egress-toolbinding.md`](22-egress-toolbinding.md) for the
+request → tool-name resolution algorithm.
 
 ## Status Convention & Shared Types
 
