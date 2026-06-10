@@ -62,6 +62,7 @@ var _ = BeforeSuite(func() {
 	crdBasePath := filepath.Join("..", "..", "..", "config", "crd", "bases")
 	observabilityCRDs := []string{
 		"policy.keese.ai_tokenbudgets.yaml",
+		"policy.keese.ai_featuregates.yaml",
 	}
 	crdPaths := make([]string, 0, len(observabilityCRDs))
 	for _, f := range observabilityCRDs {
@@ -107,6 +108,19 @@ var _ = BeforeSuite(func() {
 		PromQuerier:   fakeQuerier,
 		NatsSignaler:  fakeNats,
 		RateLimitProj: fakeRateLimit,
+	}).SetupWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	// FeatureGate reconciler — projects effective gate values into the
+	// keese-features ConfigMap. Namespace is overridden to "default"
+	// because envtest does not create the canonical keese-system
+	// namespace; the always-present default namespace lets the
+	// projection write succeed without bootstrapping extra objects.
+	err = (&FeatureGateReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("feature-gate-controller"),
+		Namespace: featureGateTestNamespace,
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
