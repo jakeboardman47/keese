@@ -77,6 +77,30 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-10 — controller-hardening wave 1 (CH1/CH2/CH6) + CH9 finding
+
+- Fixed the two data races the e2e track surfaced: `FakeNatsSignaler`
+  (`internal/controller/policy/nats.go` — mutex + accessors, test-double only, CH1)
+  and `podexec.Exec`'s context-timeout race (`internal/runtime/podexec/` —
+  mutex-guarded `syncBuffer`, `Exec` contract preserved, CH2). Both `-race` clean.
+- `Workflow.status.runCount` now written (CH6) as a **derived live count** of
+  WorkflowRuns by `spec.workflowRef`, recomputed each reconcile (rule 04.4 — not
+  monotonic, never read back), kept fresh by a create/delete-only owner watch; the
+  primary watch uses `GenerationChangedPredicate` so the status write doesn't loop.
+  Unblocks EH9's `revisit_when_workflow_run_count_live`.
+- **New finding → CH9:** the `keese` integration test binary **won't compile** —
+  `ce2436e` merged 7 controllers into `package keese` but left 7 `*_suite_test.go`
+  each redeclaring `TestControllers`/`ctx`/`testEnv`/`k8sClient`, so
+  `go test -tags=integration ./internal/controller/keese/...` build-fails (the
+  integration CI job is red on a compile error). CH9 consolidates to one shared suite.
+- **Stash incident (resolved):** the CH6 agent ran a bare `git stash`/`pop` which —
+  because the Bash tool resets cwd to the repo root between calls — hit the SHARED
+  checkout, popping the ancient `stash@{0}` (base `2994872`) into main's working tree
+  as a repo-wide conflict. Aborted cleanly (HEAD restored, no work lost), salvaged
+  only the stash's accurate 3-group rationale sections into 20a, dropped the stash.
+  **Lesson: dispatched agents must never run bare `git stash`/`pop` — it lands on the
+  main checkout, not their worktree. Use `git -C <worktree>` or avoid stash entirely.**
+
 ### 2026-06-10 — e2e-hardening final wave (EH11–EH14): track complete (14/14)
 
 - `tests/e2e/recipe-source/` + `runtime-extension/` (EH11, shipped-with-stubs);

@@ -9,7 +9,7 @@ depends:
   - ../../../internal/runtime/podexec/podexec.go
   - ../../../internal/runtime/podexec/podexec_test.go
 related_skills: [plan-management, controller-authoring, testing]
-status: planned
+status: complete
 last_verified: 2026-06-10
 phase: CH2
 model_tier: sonnet

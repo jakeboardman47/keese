@@ -9,7 +9,7 @@ depends:
   - ../../../internal/controller/policy/nats.go
   - ../../../internal/controller/policy/tokenbudget_controller_test.go
 related_skills: [plan-management, controller-authoring, testing]
-status: planned
+status: complete
 last_verified: 2026-06-10
 phase: CH1
 model_tier: sonnet

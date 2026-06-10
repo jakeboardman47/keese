@@ -11,7 +11,7 @@ depends:
   - ../../../internal/controller/keese/workflow_controller.go
   - ../../../internal/controller/keese/workflowrun_controller.go
 related_skills: [plan-management, controller-authoring]
-status: planned
+status: complete
 last_verified: 2026-06-10
 phase: CH6
 model_tier: sonnet
