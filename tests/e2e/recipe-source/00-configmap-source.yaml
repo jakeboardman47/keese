@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 recipe-source step 00 (apply): the infra-free RecipeSource path.
+#
+# The ConfigMap source is the only RecipeSource type that reaches Synced
+# without any external infra (no OCI registry, no cosign, no git remote):
+# reconcileConfigMap() fetches an in-cluster ConfigMap and resolves a
+# digest of "configmap:<uid>" once the namespace carries keese.ai/env=dev
+# (the VAP/defensive dev-gate in recipesource_controller.go). We create that
+# dev-labeled namespace + the ConfigMap, then a RecipeSource referencing it.
+#
+# The controller only reconciles objects carrying keese.ai/managed=true
+# (SetupWithManager event filter), so the CR carries that label.
+#
+# Prereq: a bootstrapped kind-keese cluster with the keese operator running.
+#   make kind-up && make bootstrap-infra
+# Do NOT run with `make test-e2e` without a live cluster.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: recipe-source-e2e
+  labels:
+    keese.ai/env: dev
+    keese.ai/tenant: recipe-source-e2e
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recipe-bundle
+  namespace: recipe-source-e2e
+data:
+  recipe.yaml: |
+    version: "1.0"
+    title: e2e-configmap-recipe
+    instructions: A minimal recipe served from an in-cluster ConfigMap.
+---
+apiVersion: keese.ai/v1alpha1
+kind: RecipeSource
+metadata:
+  name: rs-configmap-e2e
+  namespace: recipe-source-e2e
+  labels:
+    keese.ai/managed: "true"
+spec:
+  configMap:
+    name: recipe-bundle
+    namespace: recipe-source-e2e

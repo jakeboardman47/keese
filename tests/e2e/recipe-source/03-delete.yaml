@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 03 (delete): delete both RecipeSources and assert the
+# cache-cleanup finalizer runs to completion — the objects are fully
+# removed, not wedged in Terminating.
+#
+# Deletion runs cleanup() (recipesource_controller.go §413): it emits the
+# RecipeCacheCleanup event, evicts the OCI cache entry (OCI source only —
+# git/configmap write no cache; the evict is idempotent), then
+# RemoveFinalizer lets Kubernetes garbage-collect the object. A finalizer
+# that never completes would leave the object Terminating and hang this
+# blocking delete — so a clean removal within the timeout IS the finalizer
+# assertion. We delete the OCI source first (it exercises the cache evict
+# branch) then the ConfigMap source.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: kubectl delete recipesource rs-oci-e2e -n recipe-source-e2e --timeout=120s --ignore-not-found
+    namespaced: false
+    skipLogOutput: false
+  - command: kubectl delete recipesource rs-configmap-e2e -n recipe-source-e2e --timeout=120s --ignore-not-found
+    namespaced: false
+    skipLogOutput: false

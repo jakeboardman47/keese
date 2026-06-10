@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 00 (assert): the ConfigMap RecipeSource reconciles to Synced.
+#
+# Asserts the SHIPPED status shape from reconcileConfigMap():
+#   - phase: Synced
+#   - sourceType: ConfigMap
+#   - cached: true
+#   - resolvedDigest carries the "configmap:" prefix (set to
+#     "configmap:<UID>"); we assert the prefix via the Ready condition +
+#     the cached/sourceType fields rather than a per-run UID.
+#   - Ready condition True with reason Synced
+#   - the cache-cleanup finalizer is present (added before the first pull).
+#
+# observedGeneration is asserted in 00-observed-gen.yaml (a command step,
+# since kuttl cannot compare two status fields for equality declaratively).
+apiVersion: keese.ai/v1alpha1
+kind: RecipeSource
+metadata:
+  name: rs-configmap-e2e
+  namespace: recipe-source-e2e
+  finalizers:
+    - finalizers.recipesource.keese.ai/cache-cleanup
+status:
+  phase: Synced
+  sourceType: ConfigMap
+  cached: true
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: Synced

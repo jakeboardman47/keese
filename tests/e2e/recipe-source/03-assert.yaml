@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 03 (assert): both RecipeSources are gone — the cache-cleanup
+# finalizer ran to completion and Kubernetes removed the objects.
+#
+# kuttl's `errors:` block fails the step if a named object STILL EXISTS; we
+# want them absent. A finalizer stuck open (e.g. a cache evict that returned
+# a fatal error) would leave the object in Terminating, tripping this assert.
+# The controller treats an evict failure as non-fatal (logs + event, then
+# removes the finalizer anyway), so a clean delete is the expected outcome.
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+errors:
+  - apiVersion: keese.ai/v1alpha1
+    kind: RecipeSource
+    metadata:
+      name: rs-oci-e2e
+      namespace: recipe-source-e2e
+  - apiVersion: keese.ai/v1alpha1
+    kind: RecipeSource
+    metadata:
+      name: rs-configmap-e2e
+      namespace: recipe-source-e2e

@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 01: assert the spec/status coupling the controller maintains.
+#
+# kuttl's declarative assert can pin a literal field but cannot compare two
+# live fields (status.observedGeneration == metadata.generation) nor assert
+# a value-prefix. This command step does both with kubectl jsonpath:
+#
+#   1. status.observedGeneration tracks metadata.generation (rule 04.4 —
+#      every status carries observedGeneration; reconcileConfigMap sets it).
+#   2. status.resolvedDigest starts with "configmap:" — proving the digest
+#      was computed from the real ConfigMap UID, not a placeholder.
+#
+# namespaced: false — we target the named recipe-source-e2e namespace
+# explicitly, not kuttl's per-test namespace.
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: ./check-observed-gen.sh
+    namespaced: false
+    skipLogOutput: false

@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 02 (apply): an OCI RecipeSource + the real-registry prereq gate.
+#
+# The deployed operator wires the RecipeSourceReconciler with the default
+# (nil → FakeOCIFetcher) fetcher, so the OCI pull/verify sequence
+# (reconcileOCI: Pull → cosign Verify → Synced) runs end-to-end against the
+# in-tree fake and reaches Synced/Ready with a deterministic digest. That is
+# real reconcile coverage of the OCI status path; 02-assert.yaml gates it.
+#
+# A REAL registry + cosign verify is infra the bootstrap does not ship;
+# check-oci-registry.sh skips that assertion cleanly unless OCI_REGISTRY_LIVE=1
+# (revisit_when_oci_registry_live).
+#
+# We pin a digest (prod-safe form) so the fake's Pull echoes a stable digest.
+apiVersion: keese.ai/v1alpha1
+kind: RecipeSource
+metadata:
+  name: rs-oci-e2e
+  namespace: recipe-source-e2e
+  labels:
+    keese.ai/managed: "true"
+spec:
+  oci:
+    registry: ghcr.io
+    repository: keese-ai/recipes/e2e-recipe
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - command: ../lib/check-oci-registry.sh
+    namespaced: false
+    skipLogOutput: false

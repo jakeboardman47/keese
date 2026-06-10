@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# EH11 step 02 (assert): the OCI RecipeSource reaches Synced via the wired
+# fetcher (FakeOCIFetcher on the default bootstrap).
+#
+# Asserts the SHIPPED reconcileOCI() status shape:
+#   - phase: Synced
+#   - sourceType: OCI
+#   - cached: true (set only AFTER cosign Verify passes — fail-closed)
+#   - Ready condition True with reason Synced
+#   - Progressing condition False with reason Synced
+#   - the cache-cleanup finalizer is present (the OCI path is the only one
+#     with a local cache entry, so its finalizer eviction is exercised on
+#     delete in step 03).
+apiVersion: keese.ai/v1alpha1
+kind: RecipeSource
+metadata:
+  name: rs-oci-e2e
+  namespace: recipe-source-e2e
+  finalizers:
+    - finalizers.recipesource.keese.ai/cache-cleanup
+status:
+  phase: Synced
+  sourceType: OCI
+  cached: true
+  conditions:
+    - type: Progressing
+      status: "False"
+      reason: Synced
+    - type: Ready
+      status: "True"
+      reason: Synced
