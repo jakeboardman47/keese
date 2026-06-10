@@ -39,7 +39,7 @@ test-only e2e track, every phase gets a harder diff review, SSA-only writes
 | CH1 | Fix FakeNatsSignaler data race (unblock -race CI) | controller-author | — | complete |
 | CH2 | Fix podexec context-timeout data race | controller-author | — | complete |
 | CH6 | Write Workflow.status.runCount | controller-author | — | complete |
-| CH9 | Dedup the keese envtest harness (suite won't compile) | test-engineer | — | planned |
+| CH9 | Dedup the keese envtest harness (suite won't compile) | test-engineer | — | complete |
 | CH8 | Fix default GuardrailBinding name mismatch | controller-author | — | planned |
 | CH3 | Wire enabled_in tuple on workspace bind | controller-author | — | planned |
 | CH7 | Bootstrap overlays (OLM/cosign + goose-runtime) | infra-bootstrap | — | planned |

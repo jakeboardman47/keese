@@ -100,6 +100,18 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   only the stash's accurate 3-group rationale sections into 20a, dropped the stash.
   **Lesson: dispatched agents must never run bare `git stash`/`pop` — it lands on the
   main checkout, not their worktree. Use `git -C <worktree>` or avoid stash entirely.**
+- **CH9 — keese envtest harness deduped:** `ce2436e`'s 7 duplicate `*_suite_test.go`
+  collapsed into one `internal/controller/keese/suite_test.go`; the suite compiles +
+  `-race -tags=integration ./internal/controller/keese/...` is **117/117 green**.
+  Only Memory/SharedMemory run a background reconciler in the suite manager — every
+  other keese controller is driven by per-spec manual `Reconcile()` (a background copy
+  would race the spec's own fake). The suite must register
+  keese+authz+policy+capsule+gateway(v1,v1beta1)+knative+batch schemes, and needs the
+  vendored Gateway-API ReferenceGrant CRD (`hack/testdata/gateway-api/`).
+- **Worktree-pool gotcha:** dispatched worktrees keep arriving with ~50 spurious
+  uncommitted files (incl. a smart-quote-corrupted `config/crd/bases/keese.ai_recipes.yaml`
+  that breaks envtest CRD install). `main`'s committed copy is clean — the corruption is
+  pool-seeding noise only; `git -C <wt> checkout -- .` before merge clears it.
 
 ### 2026-06-10 — e2e-hardening final wave (EH11–EH14): track complete (14/14)
 
