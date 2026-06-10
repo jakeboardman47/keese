@@ -77,6 +77,25 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-10 — controller-hardening CH5: ADR 30 token-metering pipeline (design)
+
+- [ADR 30](docs/designs/30-token-metering-pipeline.md) (draft, iter-1 95): the EH7
+  over-budget gap was the **missing producer hop**, not the loop (10b/05a already lock
+  metric→OTEL→Prom→reconciler PromQL→NATS-KV→ext_authz→429). The AI Gateway emits
+  `envoy_ai_gateway_token_cost_total{model,tenant}` — wrong name, missing
+  `workspace`/`direction` — so consumed read 0. Fix = a stateless `keese-token-meter`
+  OTEL processor that relabels into `keese_token_budget_consumed_total{tenant,workspace,
+  model,direction}`. No CRD/store/migration.
+- **Budgets fail OPEN** when metering is down (a spend cap is cost control, not a
+  security boundary — security is OpenFGA `can_call` + cred injection, which fail
+  closed independently); already-tripped signals stay closed; the short-window
+  `BackendTrafficPolicy` cap keeps enforcing meterless. Retry double-count avoided by
+  emitting only the final response keyed on Envoy `x-request-id`.
+- **Seeded build wave (not yet dispatched):** CH5a (meter processor `cmd/token-meter/`,
+  implementer) → CH5b (collector/bootstrap wiring, infra-bootstrap) → CH5c (un-stub the
+  TokenBudget reconciler vs live series, controller-author) → CH5d (flip EH7's
+  over-budget e2e, test-engineer). Sequential.
+
 ### 2026-06-10 — controller-hardening CH4: cross-tenant ext_authz decision
 
 - ext_authz now authorizes cross-tenant A2A messaging. Discriminator: the 09 a2a

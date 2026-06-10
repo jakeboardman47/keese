@@ -10,7 +10,7 @@ depends:
   - ../../designs/10a-otel-topology.md
   - ../../../internal/controller/policy/ratelimit.go
 related_skills: [plan-management, doc-authoring]
-status: planned
+status: complete
 last_verified: 2026-06-10
 phase: CH5
 model_tier: opus
