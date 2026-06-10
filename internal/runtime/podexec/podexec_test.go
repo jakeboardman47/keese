@@ -47,6 +47,19 @@ type execScript struct {
 	stdout   string
 	stderr   string
 	exitCode int // 0 => StatusSuccess; non-zero => NonZeroExitCode status
+
+	// streamForever, when true, makes the handler keep writing to stdout in a
+	// loop after the initial stdout/stderr bytes and never send a final status.
+	// This models a long-running remote command whose output is still flowing
+	// when the client's context deadline fires mid-stream: remotecommand's copy
+	// goroutine is actively writing the destination buffer at the moment
+	// StreamWithContext returns the context error. It exercises the cancel
+	// data race fixed in CH2 (podexec.go syncBuffer).
+	streamForever bool
+	// flowing, if non-nil, is closed by the handler once the first post-initial
+	// chunk has been written, so the test can wait for genuine mid-stream flow
+	// (no sleeps) before letting the deadline fire.
+	flowing chan struct{}
 }
 
 type serverStreams struct {
@@ -78,6 +91,25 @@ func newFakeExecServer(t *testing.T, script *execScript) *httptest.Server {
 		}
 		if script.stderr != "" && streams.stderrW != nil {
 			_, _ = io.WriteString(streams.stderrW, script.stderr)
+		}
+
+		if script.streamForever {
+			// Keep the stdout stream hot: write small chunks in a loop and never
+			// send a final status. The client's copy goroutine stays busy writing
+			// the destination buffer until the client context deadline fires and
+			// it tears the connection down (Write then errors and we return).
+			// This is the mid-stream cancel the data-race fix targets.
+			signaled := false
+			for streams.stdoutW != nil {
+				if _, err := io.WriteString(streams.stdoutW, "."); err != nil {
+					return
+				}
+				if !signaled && script.flowing != nil {
+					close(script.flowing)
+					signaled = true
+				}
+			}
+			return
 		}
 
 		if script.exitCode == 0 {
@@ -308,10 +340,9 @@ func TestExecTimeout(t *testing.T) {
 	// A normal, responsive fake server: the deadline, not the server, ends the
 	// call. We pass an already-expired context so remotecommand's SPDY executor
 	// aborts during connection setup and returns the context error *before* it
-	// spawns the stdout/stderr copy goroutines. (Letting the deadline fire
-	// mid-stream instead would race those leaked goroutines against Exec's
-	// buffer read at podexec.go:65 — a real production property documented in
-	// the SUMMARY, not something we can assert race-clean here.)
+	// spawns the stdout/stderr copy goroutines. This is the setup-time cancel;
+	// TestExecMidStreamTimeout covers the harder mid-stream cancel where the
+	// copy goroutine is actively writing the buffer Exec then reads.
 	srv := newFakeExecServer(t, &execScript{stdout: "ignored", exitCode: 0})
 	defer srv.Close()
 	e := executorForServer(t, srv)
@@ -337,6 +368,57 @@ func TestExecTimeout(t *testing.T) {
 		strings.Contains(err.Error(), "timeout")
 	if !timedOut {
 		t.Errorf("expected a timeout error, got %v", err)
+	}
+}
+
+// TestExecMidStreamTimeout exercises the mid-stream cancel path: the fake
+// server streams stdout bytes continuously while remotecommand's copy goroutine
+// writes them into Exec's destination buffer, and the client context deadline
+// fires *while bytes are flowing*. StreamWithContext returns the context error,
+// but a copy goroutine may flush one last chunk after it returns; Exec then
+// reads the buffer to honor its "partial output + error" contract. Before the
+// CH2 fix (a sync-guarded buffer) that concurrent late Write vs. Exec's Bytes
+// read was a data race the detector flagged deterministically. This test must
+// run race-clean under `go test -race`.
+func TestExecMidStreamTimeout(t *testing.T) {
+	flowing := make(chan struct{})
+	srv := newFakeExecServer(t, &execScript{
+		stdout:        "boot",
+		streamForever: true,
+		flowing:       flowing,
+	})
+	defer srv.Close()
+	e := executorForServer(t, srv)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Cancel only once the server has confirmed bytes are genuinely streaming
+	// (no sleeps — we wait on the handler's signal). This guarantees the copy
+	// goroutine is mid-flight when the deadline/cancel hits, which is the
+	// condition that used to race.
+	go func() {
+		<-flowing
+		cancel()
+	}()
+
+	stdout, _, err := e.Exec(ctx, "ns", "pod", "agent", []string{"tail", "-f", "/var/log/agent"})
+	if err == nil {
+		t.Fatal("Exec: expected cancel/timeout error, got nil")
+	}
+	if !strings.Contains(err.Error(), "podexec: stream") {
+		t.Errorf("error not wrapped by podexec stream path: %v", err)
+	}
+	// Contract: whatever partial output was captured before cancel is returned
+	// (here a prefix of "boot" followed by streamed dots). Exactly how many
+	// bytes the copy goroutine had flushed when the deadline fired is inherently
+	// nondeterministic — the point of this test is that *reading* those bytes
+	// (Exec's `so.Bytes()` after StreamWithContext returns, concurrent with a
+	// possible late background Write) is race-clean. The `-race` detector is the
+	// real assertion; the byte check just confirms whatever came back is a
+	// well-formed prefix of the stream and never contains foreign data.
+	if got := string(stdout); got != "" && !strings.HasPrefix("boot"+strings.Repeat(".", len(got)), got) {
+		t.Errorf("stdout: got %q, want a prefix of the streamed bytes (boot + dots)", got)
 	}
 }
 
