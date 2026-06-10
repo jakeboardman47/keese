@@ -11,12 +11,13 @@
 # (`keese-tb-<tokenbudget-uid>-<model>`, see ratelimit_client.go) whose
 # LocalRateLimit ceiling tracks RemainingTokens.
 #
-# `limits[].totalTokens` is intentionally small so that, ONCE the token-cost
-# metering pipeline is live (check-metering.sh), a short request loop drives
-# consumed past the cap → RemainingTokens 0 → gateway 429. With metering
-# absent (local bootstrap) consumed stays 0, RemainingTokens stays at the
-# cap, and the in-budget 200 path is what we assert (the over-budget step
-# skips — revisit_when_token_metering_live).
+# `limits[].totalTokens` is intentionally small so that, ONCE the full
+# token-cost metering path is live (check-metering-fully-live.sh), a short
+# request loop drives consumed past the cap → exceeded signal → gateway 429
+# with x-keese-limit-source: token-budget. With the path absent (local
+# bootstrap — CH5b's :dev meter image + collector OTLP→/ingest shaping still
+# stubbed) consumed stays 0 and the in-budget 200 path is what we assert (the
+# over-budget step skips — revisit_when_metering_fully_live).
 #
 # windowDuration is short (1h, the schema minimum) so the window-reset step
 # can observe windowStart/windowEnd advance without a 30-day wait.
