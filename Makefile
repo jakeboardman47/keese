@@ -28,6 +28,7 @@ IMG             ?= ghcr.io/keese-ai/keese:dev
 GOOSE_RUNTIME_IMG ?= ghcr.io/keese-ai/goose-runtime:dev
 BUNDLE_IMG      ?= ghcr.io/keese-ai/keese-bundle:dev
 COSIGN_WEBHOOK_IMG ?= ghcr.io/keese-ai/keese-cosign-webhook:dev
+TOKEN_METER_IMG ?= ghcr.io/keese-ai/keese-token-meter:dev
 
 # Kubernetes versions (used by envtest + kubeconform + pluto)
 K8S_VERSION     ?= 1.30.x
@@ -262,9 +263,17 @@ goose-runtime-build:  ## build goose-runtime image (block/goose + keese-drain) f
 goose-runtime-load: goose-runtime-build  ## kind load the goose-runtime image into the dev cluster
 	@kind load docker-image $(GOOSE_RUNTIME_IMG) --name=$(KIND_CLUSTER)
 
+.PHONY: token-meter-build
+token-meter-build:  ## build keese-token-meter image (ADR 30 metering hop) for local kind
+	@docker build -t $(TOKEN_METER_IMG) -f cmd/token-meter/Dockerfile .
+
+.PHONY: token-meter-load
+token-meter-load: token-meter-build  ## kind load the keese-token-meter image into the dev cluster (CH5b metering hop)
+	@kind load docker-image $(TOKEN_METER_IMG) --name=$(KIND_CLUSTER)
+
 .PHONY: e2e-images-load
-e2e-images-load: goose-runtime-load cosign-webhook-load  ## build + kind-load the dev-only images the e2e gates need (EH8 cosign-webhook, EH10 goose-runtime)
-	@echo "==> e2e images loaded: goose-runtime (EH10 real drain) + cosign-webhook (EH8 admission flip)"
+e2e-images-load: goose-runtime-load cosign-webhook-load token-meter-load  ## build + kind-load the dev-only images the e2e gates need (EH8 cosign-webhook, EH10 goose-runtime, CH5b token-meter)
+	@echo "==> e2e images loaded: goose-runtime (EH10 real drain) + cosign-webhook (EH8 admission flip) + token-meter (CH5b metering hop)"
 
 # ==== Deploy / install (delegated) ======================================
 
@@ -322,6 +331,14 @@ bootstrap-infra:  ## helmfile sync dev/bootstrap/ + apply aigateway CRs
 	@kubectl wait --for=condition=Available deployment/keese-cosign-webhook \
 	  -n keese-system --timeout=120s || \
 	  echo "    (webhook not yet Available — run 'make cosign-webhook-load' to load the image; EH8 admission-flip stays gated until then)"
+	@echo "==> applying token-meter metering hop + dev Prometheus (CH5b; ADR 30)"
+	@kubectl apply --server-side --force-conflicts -k $(DEV_DIR)/bootstrap/token-meter
+	@echo "==> waiting for dev metering Prometheus"
+	@kubectl wait --for=condition=Available deployment/prometheus \
+	  -n monitoring --timeout=120s || true
+	@kubectl wait --for=condition=Available deployment/keese-token-meter \
+	  -n monitoring --timeout=120s || \
+	  echo "    (token-meter not yet Available — run 'make token-meter-load' to load the image; the consumed series stays empty until then — CH5b)"
 	@echo "==> bootstrap-infra complete"
 
 .PHONY: tilt-up
