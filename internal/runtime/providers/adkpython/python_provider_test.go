@@ -37,25 +37,26 @@ func testInput() PodInput {
 func TestADKPythonProvider_PodRender(t *testing.T) {
 	spec := BuildPodSpec(testInput())
 
-	if len(spec.Containers) != 1 {
-		t.Fatalf("container count: got %d, want 1 (single-container increment)", len(spec.Containers))
+	// E1b T3: the pod now has TWO containers — the ADK runtime plus the
+	// a2a-bridge sidecar. Both must be hardened with zero credential env.
+	if len(spec.Containers) != 2 {
+		t.Fatalf("container count: got %d, want 2 (adk-python + a2a-bridge sidecar)", len(spec.Containers))
 	}
-	c := spec.Containers[0]
-	if c.Name != ContainerName {
-		t.Errorf("container name: got %q, want %q", c.Name, ContainerName)
-	}
+	c := containerByName(t, spec, ContainerName)
 
-	t.Run("zero credential env vars", func(t *testing.T) {
-		for _, e := range c.Env {
-			if secretEnvPattern.MatchString(e.Name) {
-				t.Errorf("env name %q matches credential pattern (rule 05.2)", e.Name)
-			}
-			if secretEnvPattern.MatchString(e.Value) {
-				t.Errorf("env %q value %q matches credential pattern (rule 05.2)", e.Name, e.Value)
-			}
-			// No env may carry secret material via secretKeyRef (rule 05.7).
-			if e.ValueFrom != nil && e.ValueFrom.SecretKeyRef != nil {
-				t.Errorf("env %q uses secretKeyRef — forbidden (rule 05.7)", e.Name)
+	t.Run("zero credential env — every container (rule 05.2)", func(t *testing.T) {
+		for _, ctr := range spec.Containers {
+			for _, e := range ctr.Env {
+				if secretEnvPattern.MatchString(e.Name) {
+					t.Errorf("container %q env name %q matches credential pattern (rule 05.2)", ctr.Name, e.Name)
+				}
+				if secretEnvPattern.MatchString(e.Value) {
+					t.Errorf("container %q env %q value %q matches credential pattern (rule 05.2)", ctr.Name, e.Name, e.Value)
+				}
+				// No env may carry secret material via secretKeyRef (rule 05.7).
+				if e.ValueFrom != nil && e.ValueFrom.SecretKeyRef != nil {
+					t.Errorf("container %q env %q uses secretKeyRef — forbidden (rule 05.7)", ctr.Name, e.Name)
+				}
 			}
 		}
 	})
@@ -104,22 +105,71 @@ func TestADKPythonProvider_PodRender(t *testing.T) {
 		}
 	})
 
-	t.Run("hardened security context", func(t *testing.T) {
-		sc := c.SecurityContext
-		if sc == nil {
-			t.Fatal("container SecurityContext is nil (rule 05.11)")
+	t.Run("hardened security context — every container (rule 05.11)", func(t *testing.T) {
+		for _, ctr := range spec.Containers {
+			sc := ctr.SecurityContext
+			if sc == nil {
+				t.Fatalf("container %q SecurityContext is nil (rule 05.11)", ctr.Name)
+			}
+			if sc.ReadOnlyRootFilesystem == nil || !*sc.ReadOnlyRootFilesystem {
+				t.Errorf("container %q: readOnlyRootFilesystem must be true (rule 05.11)", ctr.Name)
+			}
+			if sc.RunAsNonRoot == nil || !*sc.RunAsNonRoot {
+				t.Errorf("container %q: runAsNonRoot must be true (rule 05.11)", ctr.Name)
+			}
+			if sc.AllowPrivilegeEscalation == nil || *sc.AllowPrivilegeEscalation {
+				t.Errorf("container %q: allowPrivilegeEscalation must be false (rule 05.11)", ctr.Name)
+			}
+			if sc.Capabilities == nil || len(sc.Capabilities.Drop) != 1 || sc.Capabilities.Drop[0] != "ALL" {
+				t.Errorf("container %q: capabilities.drop must be [ALL], got %+v", ctr.Name, sc.Capabilities)
+			}
 		}
-		if sc.ReadOnlyRootFilesystem == nil || !*sc.ReadOnlyRootFilesystem {
-			t.Error("readOnlyRootFilesystem must be true (rule 05.11)")
+	})
+
+	t.Run("a2a-bridge sidecar present, hardened, no keys (E1b T3)", func(t *testing.T) {
+		b := containerByName(t, spec, BridgeContainerName)
+
+		// The bridge fronts peer ingress on A2ABridgePort.
+		var sawPort bool
+		for _, p := range b.Ports {
+			if p.ContainerPort == A2ABridgePort {
+				sawPort = true
+			}
 		}
-		if sc.RunAsNonRoot == nil || !*sc.RunAsNonRoot {
-			t.Error("runAsNonRoot must be true (rule 05.11)")
+		if !sawPort {
+			t.Errorf("bridge must expose port %d, got %+v", A2ABridgePort, b.Ports)
 		}
-		if sc.AllowPrivilegeEscalation == nil || *sc.AllowPrivilegeEscalation {
-			t.Error("allowPrivilegeEscalation must be false (rule 05.11)")
+
+		// Rule 05.2: the bridge carries NO env at all (no keys, no secrets).
+		if len(b.Env) != 0 {
+			t.Errorf("bridge must have zero env vars (rule 05.2), got %+v", b.Env)
 		}
-		if sc.Capabilities == nil || len(sc.Capabilities.Drop) != 1 || sc.Capabilities.Drop[0] != "ALL" {
-			t.Errorf("capabilities.drop must be [ALL], got %+v", sc.Capabilities)
+
+		// The bridge mounts the projected MCP ConfigMap read-only and nothing
+		// else (no PVC, no SA token, no CA bundle).
+		if len(b.VolumeMounts) != 1 || b.VolumeMounts[0].MountPath != mcpConfigMountPath || !b.VolumeMounts[0].ReadOnly {
+			t.Errorf("bridge must mount only %q read-only, got %+v", mcpConfigMountPath, b.VolumeMounts)
+		}
+
+		// The ADK container's localhost A2A port must NOT be the peer-facing one.
+		if A2APort == A2ABridgePort {
+			t.Error("ADK localhost port and bridge peer port must differ")
+		}
+	})
+
+	t.Run("mcp-config volume optional (E6 populates)", func(t *testing.T) {
+		var found bool
+		for _, v := range spec.Volumes {
+			if v.Name != "mcp-config" {
+				continue
+			}
+			found = true
+			if v.ConfigMap == nil || v.ConfigMap.Optional == nil || !*v.ConfigMap.Optional {
+				t.Errorf("mcp-config volume must be an optional ConfigMap, got %+v", v.VolumeSource)
+			}
+		}
+		if !found {
+			t.Error("mcp-config volume not present")
 		}
 	})
 
@@ -198,4 +248,40 @@ func TestADKPythonProvider_PodInputFromCRs(t *testing.T) {
 	if in.ServiceAccountName != "ksa-x" || in.SessionPVCName != "pvc-x" {
 		t.Errorf("sa/pvc: got %q/%q", in.ServiceAccountName, in.SessionPVCName)
 	}
+}
+
+// TestADKPythonProvider_BridgeImageFallback asserts the a2a-bridge sidecar uses
+// the dev fallback image when BridgeImage is empty, and the injected
+// (digest-pinned, prod) image when set (rule 05.12).
+func TestADKPythonProvider_BridgeImageFallback(t *testing.T) {
+	t.Run("empty falls back to dev tag", func(t *testing.T) {
+		spec := BuildPodSpec(testInput())
+		b := containerByName(t, spec, BridgeContainerName)
+		if b.Image != defaultBridgeImage {
+			t.Errorf("bridge image: got %q, want fallback %q", b.Image, defaultBridgeImage)
+		}
+	})
+
+	t.Run("injected digest-pinned image used", func(t *testing.T) {
+		in := testInput()
+		in.BridgeImage = "ghcr.io/keese-ai/a2a-bridge@sha256:feedface"
+		spec := BuildPodSpec(in)
+		b := containerByName(t, spec, BridgeContainerName)
+		if b.Image != "ghcr.io/keese-ai/a2a-bridge@sha256:feedface" {
+			t.Errorf("bridge image: got %q, want injected digest", b.Image)
+		}
+	})
+}
+
+// containerByName returns the container with the given name, failing the test if
+// absent.
+func containerByName(t *testing.T, spec corev1.PodSpec, name string) corev1.Container {
+	t.Helper()
+	for _, c := range spec.Containers {
+		if c.Name == name {
+			return c
+		}
+	}
+	t.Fatalf("container %q not found in pod spec", name)
+	return corev1.Container{}
 }

@@ -31,13 +31,37 @@ import (
 //     allowPrivilegeEscalation:false, drop ALL capabilities.
 
 const (
-	// ContainerName is the single ADK Python container's name in the pod.
+	// ContainerName is the ADK Python container's name in the pod.
 	ContainerName = "adk-python"
 
-	// A2APort is the inbound A2A port the ADK server listens on. The A2A
-	// bridge sidecar (E1b) fronts this; at E1a the ADK server binds it
-	// directly for the single-container increment.
+	// BridgeContainerName is the A2A bridge sidecar's name (E1b T3).
+	BridgeContainerName = "a2a-bridge"
+
+	// A2APort is the in-pod port the ADK Python server listens on. It is
+	// localhost-only: the a2a-bridge sidecar (E1b) is the sole peer-facing
+	// ingress (A2ABridgePort) and forwards inbound A2A traffic here.
 	A2APort = 8080
+
+	// A2ABridgePort is the peer-facing A2A ingress the bridge sidecar listens
+	// on. Peer workspace pods connect here; the bridge forwards to A2APort on
+	// localhost. E1c's NetworkPolicy gates ingress at exactly this port.
+	A2ABridgePort = 8081
+
+	// defaultBridgeImage is the dev fallback for the a2a-bridge sidecar when
+	// PodInput.BridgeImage is empty. In production the controller injects the
+	// operator-adjacent, digest-pinned image ($(OPERATOR_IMAGE_BASE)/a2a-bridge)
+	// via the RELATED_IMAGE_A2A_BRIDGE env var (rule 05.12: digest-pinned in prod).
+	defaultBridgeImage = "ghcr.io/keese-ai/a2a-bridge:dev"
+
+	// mcpConfigMountPath is where the projected MCP-server-list ConfigMap is
+	// mounted read-only for the bridge. Empty until E6 (GuardrailBinding); the
+	// bridge treats a missing/empty file as non-fatal.
+	mcpConfigMountPath = "/var/run/keese/mcp-config"
+
+	// mcpConfigMapName is the in-namespace ConfigMap the GuardrailBinding
+	// reconciler (E6) renders the MCP server list into. Optional so a missing
+	// ConfigMap never blocks pod creation before E6 ships.
+	mcpConfigMapName = "keese-mcp-config"
 
 	// EnvoyAIGatewayURL is the in-cluster Envoy AI Gateway service endpoint.
 	// All model traffic egresses here; the gateway terminates the SA token,
@@ -76,6 +100,10 @@ const (
 type PodInput struct {
 	// Image is the ADK Python OCI reference (ADKPythonSpec.Image).
 	Image string
+	// BridgeImage is the a2a-bridge sidecar OCI reference. Empty falls back to
+	// defaultBridgeImage (dev tag); production injects the digest-pinned
+	// $(OPERATOR_IMAGE_BASE)/a2a-bridge via RELATED_IMAGE_A2A_BRIDGE (rule 05.12).
+	BridgeImage string
 	// WorkspaceName is the parent Workspace .metadata.name.
 	WorkspaceName string
 	// TenantName scopes the egress SA token audience: keese-egress-<tenant>.
@@ -113,54 +141,119 @@ func BuildPodSpec(in PodInput) corev1.PodSpec {
 		},
 		Volumes: podVolumes(in, tokenExpiry),
 		Containers: []corev1.Container{
-			{
-				Name:            ContainerName,
-				Image:           in.Image,
-				ImagePullPolicy: corev1.PullIfNotPresent,
-				Command:         []string{"/opt/venv/bin/python"},
-				Args: []string{
-					"-m", "adk.serve",
-					"--workspace", "$(KEESE_WORKSPACE_NAME)",
-					"--a2a-port", fmt.Sprintf("%d", A2APort),
-					"--gateway", "$(ENVOY_AI_GATEWAY_URL)",
-				},
-				Ports: []corev1.ContainerPort{
-					{Name: "a2a", ContainerPort: A2APort, Protocol: corev1.ProtocolTCP},
-				},
-				Env:          podEnv(),
-				VolumeMounts: podVolumeMounts(),
-				SecurityContext: &corev1.SecurityContext{
-					RunAsNonRoot:             ptr(true),
-					ReadOnlyRootFilesystem:   ptr(true),
-					AllowPrivilegeEscalation: ptr(false),
-					Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
-				},
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("2"),
-						corev1.ResourceMemory: resource.MustParse("2Gi"),
-					},
-				},
-				// preStop drain: keese-drain checkpoints session state to the PVC
-				// before the kubelet deletes the pod (rule 06.2). The binary ships
-				// in the ADK image (Dockerfile.adk-python stage 2).
-				Lifecycle: &corev1.Lifecycle{
-					PreStop: &corev1.LifecycleHandler{
-						Exec: &corev1.ExecAction{
-							Command: []string{
-								"/usr/local/bin/keese-drain",
-								"--pvc-root=" + sessionMountPath,
-								"--timeout=90s",
-							},
-						},
+			adkContainer(in),
+			bridgeContainer(in),
+		},
+	}
+}
+
+// adkContainer renders the primary ADK Python runtime container. The ADK server
+// binds A2APort on localhost only; the a2a-bridge sidecar is the sole
+// peer-facing ingress (rule 05.4 single egress/ingress path).
+func adkContainer(in PodInput) corev1.Container {
+	return corev1.Container{
+		Name:            ContainerName,
+		Image:           in.Image,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         []string{"/opt/venv/bin/python"},
+		Args: []string{
+			"-m", "adk.serve",
+			"--workspace", "$(KEESE_WORKSPACE_NAME)",
+			"--a2a-port", fmt.Sprintf("%d", A2APort),
+			"--gateway", "$(ENVOY_AI_GATEWAY_URL)",
+		},
+		Ports: []corev1.ContainerPort{
+			{Name: "adk", ContainerPort: A2APort, Protocol: corev1.ProtocolTCP},
+		},
+		Env:             podEnv(),
+		VolumeMounts:    podVolumeMounts(),
+		SecurityContext: hardenedSecurityContext(),
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("256Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("2"),
+				corev1.ResourceMemory: resource.MustParse("2Gi"),
+			},
+		},
+		// preStop drain: keese-drain checkpoints session state to the PVC
+		// before the kubelet deletes the pod (rule 06.2). The binary ships
+		// in the ADK image (Dockerfile.adk-python stage 2).
+		Lifecycle: &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/usr/local/bin/keese-drain",
+						"--pvc-root=" + sessionMountPath,
+						"--timeout=90s",
 					},
 				},
 			},
 		},
+	}
+}
+
+// bridgeContainer renders the a2a-bridge sidecar (E1b T3). It listens on
+// A2ABridgePort for inbound A2A traffic from peer workspaces and forwards to the
+// ADK server on localhost:A2APort, reading the projected MCP ConfigMap.
+//
+// Security parity with the ADK container (rules 05.2 / 05.11): the bridge
+// carries NO env vars at all — no API keys, no secrets, no kubeconfig — and runs
+// under the same hardened SecurityContext (runAsNonRoot, readOnlyRootFilesystem,
+// drop ALL, allowPrivilegeEscalation:false). Its only inputs are in-pod
+// localhost traffic and a read-only projected ConfigMap.
+func bridgeContainer(in PodInput) corev1.Container {
+	image := in.BridgeImage
+	if image == "" {
+		image = defaultBridgeImage
+	}
+	return corev1.Container{
+		Name:            BridgeContainerName,
+		Image:           image,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		// The bridge binary is the image entrypoint; no args needed (ports +
+		// paths are compile-time constants in internal/runtime/a2a/bridge).
+		Ports: []corev1.ContainerPort{
+			{Name: "a2a", ContainerPort: A2ABridgePort, Protocol: corev1.ProtocolTCP},
+		},
+		// Rule 05.2: explicitly NO env — the bridge needs no credentials and no
+		// configuration values. Leaving Env nil keeps the zero-API-key invariant
+		// trivially true and asserted by TestADKPythonProvider_PodRender.
+		VolumeMounts:    bridgeVolumeMounts(),
+		SecurityContext: hardenedSecurityContext(),
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("25m"),
+				corev1.ResourceMemory: resource.MustParse("32Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+		},
+	}
+}
+
+// hardenedSecurityContext is the rule 05.11 container SecurityContext shared by
+// every container in the ADK Python pod: non-root, read-only root filesystem,
+// no privilege escalation, all capabilities dropped.
+func hardenedSecurityContext() *corev1.SecurityContext {
+	return &corev1.SecurityContext{
+		RunAsNonRoot:             ptr(true),
+		ReadOnlyRootFilesystem:   ptr(true),
+		AllowPrivilegeEscalation: ptr(false),
+		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+	}
+}
+
+// bridgeVolumeMounts are the bridge sidecar's mounts: the projected MCP-config
+// ConfigMap (read-only; empty until E6) and nothing else. The bridge needs no
+// PVC, no SA token (it proxies localhost), and no CA bundle.
+func bridgeVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{Name: "mcp-config", MountPath: mcpConfigMountPath, ReadOnly: true},
 	}
 }
 
@@ -244,6 +337,21 @@ func podVolumes(in PodInput, tokenExpiry int64) []corev1.Volume {
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: gatewayCAConfigMapName,
+					},
+					Optional: ptr(true),
+				},
+			},
+		},
+		{
+			// MCP server list for the a2a-bridge sidecar (E1b T3). Rendered by
+			// the GuardrailBinding reconciler (E6); Optional so a missing
+			// ConfigMap never blocks pod creation before E6 ships — the bridge
+			// treats a missing/empty config.json as non-fatal.
+			Name: "mcp-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: mcpConfigMapName,
 					},
 					Optional: ptr(true),
 				},
