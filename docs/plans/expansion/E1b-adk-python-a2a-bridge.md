@@ -9,8 +9,9 @@ depends:
   - E1a-adk-python-image-provider.md
   - ../../specs/egress-authz-protocol.md
 related_skills: [plan-management, signal-handling]
-status: planned
-last_verified: 2026-06-10
+status: shipped-with-stubs
+last_verified: 2026-06-11
+revisit_when_bridge_image_built: true
 phase: E1b
 model_tier: sonnet
 depends_on: [E1a]

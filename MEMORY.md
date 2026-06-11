@@ -77,6 +77,26 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-11 — expansion E1b: ADK Python A2A bridge sidecar
+
+- The adkPython pod is now **two containers**: `adk-python` (8080, localhost-only) +
+  `a2a-bridge` (8081, peer-facing). Bridge (`internal/runtime/a2a/bridge/bridge.go`,
+  `package main`) reverse-proxies `:8081`→`localhost:8080`, re-stamps W3C trace headers,
+  reads MCP config from a projected ConfigMap (non-fatal if absent — empty until E6),
+  **fail-closed** (502, no panic), **rule-06 SIGTERM** drain (30s budget, structured
+  shutdown event, exit 0). Sidecar shares `hardenedSecurityContext()` + zero env keys;
+  prod image via `RELATED_IMAGE_A2A_BRIDGE` (rule 05.12).
+- **`a2a_callable_by` relation** documented in `egress-authz-protocol.md` §4 but **NOT
+  enforced** — the bridge forwards unconditionally; **E2 enforces** (adds the ext_authz
+  Check + the `+keese:rebac-tuple` marker on the `Workspace.spec.a2a.callableBy` field E2
+  introduces). `check-rebac-markers.sh` stays green (scans `api/**/*_types.go`; no field yet).
+- **Stub** (`revisit_when_bridge_image_built`): the `a2a-bridge` image needs a Dockerfile
+  + the controller must plumb `RELATED_IMAGE_A2A_BRIDGE` into `PodInputFromCRs`.
+- **Gotcha:** `check-signal-handling.sh` scans `cmd/**/main.go`; the bridge `main` lives in
+  `internal/runtime/a2a/bridge/`, so it's uncovered by that hook — SIGTERM is still tested.
+  Adding a `main` outside `cmd/` invalidates E1a's container-count test (E1b surgically
+  fixed `workspacesession_adk_discriminator_test.go`, test-only).
+
 ### 2026-06-11 — expansion E1a: ADK Python pod template + discriminator
 
 - First increment of the decomposed E1 (ADK Python runtime). `internal/runtime/providers/
