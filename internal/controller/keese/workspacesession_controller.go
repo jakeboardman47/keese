@@ -26,6 +26,7 @@ import (
 
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
 	policyv1alpha1 "github.com/keese-ai/keese/api/policy/v1alpha1"
+	"github.com/keese-ai/keese/internal/runtime/providers/adkpython"
 )
 
 const (
@@ -702,121 +703,163 @@ func shortUID(uid string) string {
 }
 
 // buildSessionPodObject constructs the Pod SSA object for a session.
-// The pod runs the goose runtime image referenced by the AgentRuntime, with
-// projected SA token + session/memory PVC mounts. Upstream credentials never
-// land on this pod (rule 05.2); the gateway injects them via BSP. Memory is
-// stored under a subPath of the session PVC for the demo path; replacing this
-// with a Memory-CR-resolved PVC is tracked in TD-P1-09.
+//
+// Runtime discriminator (E1 T5): when the resolved AgentRuntime selects the
+// ADK Python provider (spec.implementation.adkPython != nil), the PodSpec is
+// rendered by internal/runtime/providers/adkpython; otherwise the goose path
+// runs unchanged. The ObjectMeta (name, namespace, labels, owner ref) is
+// provider-agnostic and shared, so SSA ownership + GC behave identically.
+//
+// The pod (either provider) never carries upstream credentials (rule 05.2);
+// the gateway injects them via BSP. Memory is stored under a subPath of the
+// session PVC for the demo path; replacing this with a Memory-CR-resolved PVC
+// is tracked in TD-P1-09.
 func buildSessionPodObject(
 	sess *keesev1alpha1.WorkspaceSession,
 	ws *keesev1alpha1.Workspace,
 	ar *keesev1alpha1.AgentRuntime,
 	podName string,
 ) *corev1.Pod {
+	tenantName := ws.Spec.TenantRef.Name
+	meta := sessionPodObjectMeta(sess, ws, podName, tenantName)
+
+	// E1 T5 discriminator: the ADK Python provider gets its own single-
+	// container pod template (non-secret env, projected egress token, CA
+	// bundle, hardened SecurityContext — rule 05). goose (and every other
+	// provider) falls through to the unchanged goose path below.
+	if ar.Spec.Implementation.AdkPython != nil {
+		return &corev1.Pod{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+			ObjectMeta: meta,
+			Spec: adkpython.BuildPodSpec(adkpython.PodInputFromCRs(
+				ws, ar, serviceAccountName(ws), sessionPVCName(ws),
+			)),
+		}
+	}
+
+	return &corev1.Pod{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+		ObjectMeta: meta,
+		Spec:       buildGooseSessionPodSpec(sess, ws, ar, tenantName),
+	}
+}
+
+// sessionPodObjectMeta builds the provider-agnostic Pod ObjectMeta (labels +
+// owner ref) shared by every runtime's pod template.
+func sessionPodObjectMeta(
+	sess *keesev1alpha1.WorkspaceSession,
+	ws *keesev1alpha1.Workspace,
+	podName, tenantName string,
+) metav1.ObjectMeta {
+	return metav1.ObjectMeta{
+		Name:      podName,
+		Namespace: sess.Namespace,
+		Labels: map[string]string{
+			"keese.ai/workspace":           ws.Name,
+			"keese.ai/session":             sess.Name,
+			"keese.ai/session-mode":        string(sess.Spec.Mode),
+			"keese.ai/tenant":              tenantName,
+			"app.kubernetes.io/managed-by": sessionFieldOwner,
+		},
+		// Owner reference keeps the pod garbage-collected when the WorkspaceSession is deleted.
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion:         keesev1alpha1.GroupVersion.String(),
+				Kind:               "WorkspaceSession",
+				Name:               sess.Name,
+				UID:                sess.UID,
+				Controller:         ptr(true),
+				BlockOwnerDeletion: ptr(true),
+			},
+		},
+	}
+}
+
+// buildGooseSessionPodSpec renders the goose runtime PodSpec — the original,
+// unchanged goose single-container template. Split out of buildSessionPodObject
+// so the T5 discriminator routes ADK Python to its own renderer without
+// touching the goose path.
+func buildGooseSessionPodSpec(
+	sess *keesev1alpha1.WorkspaceSession,
+	ws *keesev1alpha1.Workspace,
+	ar *keesev1alpha1.AgentRuntime,
+	tenantName string,
+) corev1.PodSpec {
 	saName := serviceAccountName(ws)
 	pvcName := sessionPVCName(ws)
-	tenantName := ws.Spec.TenantRef.Name
 
 	tgps := int64(60) // align with operator drain budget (design 18)
 	saTokenExpiry := int64(saTokenExpirationSeconds)
 
-	return &corev1.Pod{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Pod",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: sess.Namespace,
-			Labels: map[string]string{
-				"keese.ai/workspace":           ws.Name,
-				"keese.ai/session":             sess.Name,
-				"keese.ai/session-mode":        string(sess.Spec.Mode),
-				"keese.ai/tenant":              tenantName,
-				"app.kubernetes.io/managed-by": sessionFieldOwner,
-			},
-			// Owner reference keeps the pod garbage-collected when the WorkspaceSession is deleted.
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         keesev1alpha1.GroupVersion.String(),
-					Kind:               "WorkspaceSession",
-					Name:               sess.Name,
-					UID:                sess.UID,
-					Controller:         ptr(true),
-					BlockOwnerDeletion: ptr(true),
-				},
+	return corev1.PodSpec{
+		RestartPolicy:                 corev1.RestartPolicyNever,
+		ServiceAccountName:            saName,
+		AutomountServiceAccountToken:  ptr(false), // SA token comes via projected volume only
+		TerminationGracePeriodSeconds: &tgps,
+		SecurityContext: &corev1.PodSecurityContext{
+			RunAsNonRoot: ptr(true),
+			// Explicit numeric UID — kubelet's runAsNonRoot check
+			// rejects non-numeric image users like "goose". 1000 is
+			// the conventional non-root demo UID and matches the
+			// upstream goose image's named user.
+			RunAsUser:  ptr(int64(1000)),
+			RunAsGroup: ptr(int64(1000)),
+			FSGroup:    ptr(int64(1000)),
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		},
-		Spec: corev1.PodSpec{
-			RestartPolicy:                 corev1.RestartPolicyNever,
-			ServiceAccountName:            saName,
-			AutomountServiceAccountToken:  ptr(false), // SA token comes via projected volume only
-			TerminationGracePeriodSeconds: &tgps,
-			SecurityContext: &corev1.PodSecurityContext{
-				RunAsNonRoot: ptr(true),
-				// Explicit numeric UID — kubelet's runAsNonRoot check
-				// rejects non-numeric image users like "goose". 1000 is
-				// the conventional non-root demo UID and matches the
-				// upstream goose image's named user.
-				RunAsUser:  ptr(int64(1000)),
-				RunAsGroup: ptr(int64(1000)),
-				FSGroup:    ptr(int64(1000)),
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
+		Volumes:        sessionPodVolumes(sess, ws, pvcName, tenantName, saTokenExpiry),
+		InitContainers: sessionInitContainers(ws, ar),
+		Containers: []corev1.Container{
+			{
+				Name:            "agent",
+				Image:           ar.Spec.Implementation.Goose.Image,
+				ImagePullPolicy: corev1.PullIfNotPresent,
+				// Command + Args branch on interactive vs non-interactive:
+				//   - interactive (Workspace.spec.interactive == true): keep
+				//     the container alive with `sleep infinity` so a user
+				//     can `kubectl exec` and run goose interactively. The
+				//     ACP bridge (TD-P1-02 follow-on) will replace this.
+				//   - non-interactive (interactive == false && recipeRef != nil):
+				//     run `goose run --recipe …` as PID 1 so the pod exits
+				//     PodSucceeded on completion and the controller can
+				//     mark Phase=Completed.
+				Command:      sessionAgentCommand(ws),
+				Args:         sessionAgentArgs(ws),
+				Env:          sessionPodEnv(sess, ws, tenantName),
+				VolumeMounts: sessionPodVolumeMounts(ws),
+				SecurityContext: &corev1.SecurityContext{
+					RunAsNonRoot:             ptr(true),
+					ReadOnlyRootFilesystem:   ptr(true),
+					AllowPrivilegeEscalation: ptr(false),
+					Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 				},
-			},
-			Volumes:        sessionPodVolumes(sess, ws, pvcName, tenantName, saTokenExpiry),
-			InitContainers: sessionInitContainers(ws, ar),
-			Containers: []corev1.Container{
-				{
-					Name:            "agent",
-					Image:           ar.Spec.Implementation.Goose.Image,
-					ImagePullPolicy: corev1.PullIfNotPresent,
-					// Command + Args branch on interactive vs non-interactive:
-					//   - interactive (Workspace.spec.interactive == true): keep
-					//     the container alive with `sleep infinity` so a user
-					//     can `kubectl exec` and run goose interactively. The
-					//     ACP bridge (TD-P1-02 follow-on) will replace this.
-					//   - non-interactive (interactive == false && recipeRef != nil):
-					//     run `goose run --recipe …` as PID 1 so the pod exits
-					//     PodSucceeded on completion and the controller can
-					//     mark Phase=Completed.
-					Command:      sessionAgentCommand(ws),
-					Args:         sessionAgentArgs(ws),
-					Env:          sessionPodEnv(sess, ws, tenantName),
-					VolumeMounts: sessionPodVolumeMounts(ws),
-					SecurityContext: &corev1.SecurityContext{
-						RunAsNonRoot:             ptr(true),
-						ReadOnlyRootFilesystem:   ptr(true),
-						AllowPrivilegeEscalation: ptr(false),
-						Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
 					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("256Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("2"),
-							corev1.ResourceMemory: resource.MustParse("2Gi"),
-						},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("2Gi"),
 					},
-					// Drain hook: write the SQLite checkpoint and JSON marker file to
-					// the session PVC before kubelet deletes the pod (TD-P1-02).
-					// /usr/local/bin/keese-drain is the runtime-drain sidecar
-					// entrypoint bundled into the goose runtime image.
-					// Mirrors AgentRuntime.Drain: checkpoints WAL, writes
-					// /var/run/keese/session/sessions/<uid>/draining atomically.
-					// Budget: 25 s (terminationGracePeriodSeconds 60 − 30 s for
-					// goose SIGTERM drain − 5 s kubelet buffer).
-					Lifecycle: &corev1.Lifecycle{
-						PreStop: &corev1.LifecycleHandler{
-							Exec: &corev1.ExecAction{
-								Command: []string{
-									"/usr/local/bin/keese-drain",
-									"--pvc-root=/var/run/keese/session",
-									"--timeout=25s",
-								},
+				},
+				// Drain hook: write the SQLite checkpoint and JSON marker file to
+				// the session PVC before kubelet deletes the pod (TD-P1-02).
+				// /usr/local/bin/keese-drain is the runtime-drain sidecar
+				// entrypoint bundled into the goose runtime image.
+				// Mirrors AgentRuntime.Drain: checkpoints WAL, writes
+				// /var/run/keese/session/sessions/<uid>/draining atomically.
+				// Budget: 25 s (terminationGracePeriodSeconds 60 − 30 s for
+				// goose SIGTERM drain − 5 s kubelet buffer).
+				Lifecycle: &corev1.Lifecycle{
+					PreStop: &corev1.LifecycleHandler{
+						Exec: &corev1.ExecAction{
+							Command: []string{
+								"/usr/local/bin/keese-drain",
+								"--pvc-root=/var/run/keese/session",
+								"--timeout=25s",
 							},
 						},
 					},
