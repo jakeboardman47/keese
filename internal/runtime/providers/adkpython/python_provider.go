@@ -388,6 +388,24 @@ func PodInputFromCRs(
 	}
 }
 
+// NetworkPolicyInputFromCRs marshals the NetworkPolicy-render inputs from the
+// reconcile CRs. Kept in the provider package (alongside PodInputFromCRs) so the
+// network contract lives in one place; the controller (T4) calls this then
+// BuildNetworkPolicy. The caller supplies the deterministic policy name + the
+// provenance labels (shared with the pod object so SSA ownership is consistent).
+func NetworkPolicyInputFromCRs(
+	ws *keesev1alpha1.Workspace,
+	namespace, name string,
+	labels map[string]string,
+) NetworkPolicyInput {
+	return NetworkPolicyInput{
+		Name:          name,
+		Namespace:     namespace,
+		WorkspaceName: ws.Name,
+		Labels:        labels,
+	}
+}
+
 // ptr returns a pointer to v.
 func ptr[T any](v T) *T { return &v }
 

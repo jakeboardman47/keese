@@ -11,6 +11,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,6 +92,7 @@ type WorkspaceSessionReconciler struct {
 // +kubebuilder:rbac:groups=keese.ai,resources=workspacesessions/finalizers,verbs=update
 // +kubebuilder:rbac:groups=keese.ai,resources=workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=policy.keese.ai,resources=tokenbudgets,verbs=get;list;watch
 
@@ -431,6 +433,12 @@ func (r *WorkspaceSessionReconciler) ensurePod(
 }
 
 // applySessionPod issues a Server-Side Apply for the session-backing Pod.
+//
+// E1c T4: on the adkPython branch ONLY, it also SSA-applies the fail-closed ADK
+// NetworkPolicy (applySessionNetworkPolicy). The goose path is untouched — its
+// network isolation is owned by the Workspace controller's default-deny + egress
+// policies. The pod apply runs first so a NetworkPolicy failure never blocks
+// pod provisioning before this point; both writes use the same fieldOwner.
 func (r *WorkspaceSessionReconciler) applySessionPod(
 	ctx context.Context,
 	sess *keesev1alpha1.WorkspaceSession,
@@ -439,9 +447,74 @@ func (r *WorkspaceSessionReconciler) applySessionPod(
 	podName string,
 ) error {
 	pod := buildSessionPodObject(sess, ws, ar, podName)
-	return r.Client.Patch(ctx, pod, client.Apply,
+	if err := r.Client.Patch(ctx, pod, client.Apply,
+		client.FieldOwner(sessionFieldOwner),
+		client.ForceOwnership); err != nil {
+		return err
+	}
+
+	// adkPython branch only: lock down the pod's network fail-closed (rule
+	// 04.17 + 05.4 + 05.5). The goose path STAYS UNTOUCHED.
+	if ar.Spec.Implementation.AdkPython != nil {
+		if err := r.applySessionNetworkPolicy(ctx, sess, ws); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// applySessionNetworkPolicy issues a Server-Side Apply for the ADK Python
+// session pod's fail-closed NetworkPolicy. Called ONLY on the adkPython branch.
+//
+// The policy is rendered by internal/runtime/providers/adkpython.BuildNetworkPolicy:
+// default-deny ingress+egress, then exact allows only (gateway:443, NATS:4222,
+// peer A2A ingress/egress on 8081). No wildcards (rule 05.5). The object name is
+// deterministic per workspace so SSA re-applies are stable across reconciles.
+func (r *WorkspaceSessionReconciler) applySessionNetworkPolicy(
+	ctx context.Context,
+	sess *keesev1alpha1.WorkspaceSession,
+	ws *keesev1alpha1.Workspace,
+) error {
+	np := buildSessionNetworkPolicyObject(sess, ws)
+	return r.Client.Patch(ctx, np, client.Apply,
 		client.FieldOwner(sessionFieldOwner),
 		client.ForceOwnership)
+}
+
+// adkSessionNetworkPolicyName returns the deterministic NetworkPolicy name for
+// the ADK Python session pods of a workspace.
+func adkSessionNetworkPolicyName(ws *keesev1alpha1.Workspace) string {
+	return "keese-ws-" + string(ws.UID) + "-adk-netpol"
+}
+
+// buildSessionNetworkPolicyObject constructs the ADK Python NetworkPolicy SSA
+// object, reusing the provider renderer and the shared pod-provenance labels so
+// SSA ownership + selectors line up with the pod's keese.ai/workspace label.
+func buildSessionNetworkPolicyObject(
+	sess *keesev1alpha1.WorkspaceSession,
+	ws *keesev1alpha1.Workspace,
+) *networkingv1.NetworkPolicy {
+	tenantName := ws.Spec.TenantRef.Name
+	labels := map[string]string{
+		"keese.ai/workspace":           ws.Name,
+		"keese.ai/tenant":              tenantName,
+		"app.kubernetes.io/managed-by": sessionFieldOwner,
+	}
+	np := adkpython.BuildNetworkPolicy(adkpython.NetworkPolicyInputFromCRs(
+		ws, sess.Namespace, adkSessionNetworkPolicyName(ws), labels,
+	))
+	// Owner reference keeps the policy garbage-collected with the session.
+	np.OwnerReferences = []metav1.OwnerReference{
+		{
+			APIVersion:         keesev1alpha1.GroupVersion.String(),
+			Kind:               "WorkspaceSession",
+			Name:               sess.Name,
+			UID:                sess.UID,
+			Controller:         ptr(true),
+			BlockOwnerDeletion: ptr(true),
+		},
+	}
+	return np
 }
 
 // cleanupSession runs when DeletionTimestamp is set.
