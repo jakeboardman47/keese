@@ -17,6 +17,7 @@ depends_on: [E1b]
 agent: controller-author
 outputs:
   - internal/runtime/providers/adkpython/
+  - internal/controller/keese/workspacesession_controller.go
 ---
 
 # E1c — ADK Python NetworkPolicy + envtest hardening
@@ -27,8 +28,10 @@ pod's network and completes the envtest suite. When this merges, **mark E1
 
 ## Scope — E1 tasks T4, T7 (completion)
 
-- **T4 NetworkPolicy** — SSA-apply a fail-closed NetworkPolicy in the workspace
-  namespace when runtime is `adkPython` (`fieldOwner: keese-workspacesession-controller`):
+- **T4 NetworkPolicy** — render it in `adkpython.BuildNetworkPolicy(...)` and wire the
+  SSA apply into `workspacesession_controller.go` (a new `applySessionNetworkPolicy`,
+  **adkPython branch only** — `applySessionPod` applies only the pod today, so the goose
+  path stays untouched). `fieldOwner: keese-workspacesession-controller`. Fail-closed:
   default-deny all ingress+egress (rule 04.17 + 05.4), then **exact** allows only —
   egress to `envoy-ai-gateway.keese-system:443`, egress to NATS `:4222`, ingress from
   peer workspace pods on `:8081`, egress to peer workspace pods on `:8081`. **No
