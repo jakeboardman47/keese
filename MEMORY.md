@@ -77,6 +77,28 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-11 — expansion E2 authz core: A2A a2a_callable_by (shipped-with-stubs)
+
+- Workspace `spec.a2a` (Enabled/Scope/Port) + the `a2a_callable_by` OpenFGA relation
+  (04a iter-7, **additive**). ext_authz Check `Check(workspace:W_from, a2a_callable_by,
+  workspace:W_to)` via `x-keese-a2a-call` discriminator → `authorizeA2AEndpoint`
+  (`internal/authz/extauth/crosstenant.go`), fail-closed. Intra-tenant writes a self
+  tuple; cross-tenant writes a per-peer tuple ONLY after an Approved non-expired CTA.
+  Tuples are **reconcile-derived with pruning** (`A2ARebacReconciler.ReconcileA2A` reads
+  live via OpenFGA Read, deletes the live−desired diff) — disable/CTA-revoke revoke the
+  grant on the SAME reconcile, not at teardown. The shared `WorkspaceRebacWriter.Sync`
+  stays write-only; only A2A grants get read+prune. Tuple: `workspace:W_to#a2a_callable_by@workspace:W_from`.
+- **Process win:** the 2-lens adversarial verify caught a real hole the impl self-report +
+  green tests missed — orphaned grants on disable + CTA-revoke (write-only Sync; CTA
+  controller had no a2a cleanup). Fix = derived pruning; round-2 rebac confirmed SECURE
+  (closes finding, no churn gap, no prune-on-error hole, scoped). **Lesson: for authz
+  tuple-lifecycle, an independent rebac-modeler pass is worth it — happy-path tests don't
+  cover revocation.** Recovered the impl from an ECONNRESET via the saved T1 patch.
+- **Stubs (`revisit_when_a2a_wiring`):** T2 (bridge sidecar injection on spec.a2a.enabled),
+  T3 (Envoy `/a2a/v1/{workspace}/**` route in config/aigateway/), T5 (cross-tenant
+  admission webhook `CrossTenantA2ARequiresCTA` — currently enforced at authz layer, not
+  admission). E2 unblocks Wave 3 (E5–E8 CRD fan-out).
+
 ### 2026-06-11 — expansion E1 SHIPPED (E1c NetworkPolicy closes the ADK Python runtime)
 
 - E1c: `internal/runtime/providers/adkpython/networkpolicy.go` (`BuildNetworkPolicy`) +

@@ -50,7 +50,7 @@ kagent integration is explicitly out of scope; keese remains standalone.
 | E1a | [· image + provider + discriminator](E1a-adk-python-image-provider.md) | 4 d | E0 | yes | shipped-with-stubs |
 | E1b | [· A2A bridge sidecar](E1b-adk-python-a2a-bridge.md) | 3 d | E1a | yes | shipped-with-stubs |
 | E1c | [· NetworkPolicy + envtest](E1c-adk-python-networkpolicy-envtest.md) | 3 d | E1b | yes | complete |
-| E2 | [A2A protocol on Workspace](E2-a2a-protocol.md) | 1 w | E1 | yes | planned |
+| E2 | [A2A protocol on Workspace](E2-a2a-protocol.md) | 1 w | E1 | yes | shipped-with-stubs |
 | E3 | [ADK Go runtime](E3-adk-go-runtime.md) | 2 w | E0 | yes | planned |
 | E4 | [Context compaction](E4-context-compaction.md) | 3 d | E1 | yes | planned |
 | E5 | [ModelProvider CRD](E5-model-provider-config.md) | 3 d | E2 | parallel | planned |

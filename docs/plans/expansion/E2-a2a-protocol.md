@@ -15,8 +15,9 @@ depends:
   - ../../designs/25-cross-tenant-agreement.md
   - ../../specs/egress-authz-protocol.md
 related_skills: [plan-management, controller-authoring, crd-authoring]
-status: planned
-last_verified: 2026-05-13
+status: shipped-with-stubs
+last_verified: 2026-06-11
+revisit_when_a2a_wiring: true
 phase: E2
 model_tier: sonnet
 depends_on: [E1]
