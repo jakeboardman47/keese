@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
@@ -182,6 +183,61 @@ func TestBuildSessionPod_ADKIdempotency(t *testing.T) {
 		next := buildSessionPodObject(adkSession(), ws, adkRuntime(), "ws-adk-pod")
 		if !reflect.DeepEqual(first.Spec, next.Spec) {
 			t.Fatalf("ADK pod render %d differs from first — not idempotent", i+1)
+		}
+	}
+}
+
+// TestBuildSessionNetworkPolicy_ADK asserts the controller-side ADK
+// NetworkPolicy object (E1c T4): default-deny ingress+egress, scoped to the
+// workspace, owner-referenced for GC, and carrying the shared managed-by label
+// so SSA ownership lines up with the pod. The wildcard/exact-allow assertions
+// live in the provider test (TestADKPythonProvider_NetworkPolicy); here we cover
+// the controller's object-meta wiring.
+func TestBuildSessionNetworkPolicy_ADK(t *testing.T) {
+	ws := adkDiscriminatorWorkspace()
+	np := buildSessionNetworkPolicyObject(adkSession(), ws)
+
+	if np.Namespace != "default" {
+		t.Errorf("namespace: got %q, want default", np.Namespace)
+	}
+	if np.Name != adkSessionNetworkPolicyName(ws) {
+		t.Errorf("name: got %q, want %q", np.Name, adkSessionNetworkPolicyName(ws))
+	}
+	if np.Spec.PodSelector.MatchLabels["keese.ai/workspace"] != ws.Name {
+		t.Errorf("podSelector must scope to workspace %q, got %+v", ws.Name, np.Spec.PodSelector.MatchLabels)
+	}
+
+	var sawIngress, sawEgress bool
+	for _, pt := range np.Spec.PolicyTypes {
+		switch pt {
+		case networkingv1.PolicyTypeIngress:
+			sawIngress = true
+		case networkingv1.PolicyTypeEgress:
+			sawEgress = true
+		}
+	}
+	if !sawIngress || !sawEgress {
+		t.Errorf("PolicyTypes must include BOTH Ingress+Egress (fail-closed), got %+v", np.Spec.PolicyTypes)
+	}
+
+	if np.Labels["app.kubernetes.io/managed-by"] != sessionFieldOwner {
+		t.Errorf("managed-by label: got %q, want %q", np.Labels["app.kubernetes.io/managed-by"], sessionFieldOwner)
+	}
+	if len(np.OwnerReferences) != 1 || np.OwnerReferences[0].Kind != "WorkspaceSession" {
+		t.Errorf("owner ref must point at the WorkspaceSession, got %+v", np.OwnerReferences)
+	}
+}
+
+// TestBuildSessionNetworkPolicy_ADKIdempotency asserts the controller-side
+// NetworkPolicy render is deterministic across 3 builds — required for ≤3
+// reconcile SSA convergence with no churn (rule 06.6).
+func TestBuildSessionNetworkPolicy_ADKIdempotency(t *testing.T) {
+	ws := adkDiscriminatorWorkspace()
+	first := buildSessionNetworkPolicyObject(adkSession(), ws)
+	for i := 0; i < 3; i++ {
+		next := buildSessionNetworkPolicyObject(adkSession(), ws)
+		if !reflect.DeepEqual(first, next) {
+			t.Fatalf("ADK NetworkPolicy render %d differs from first — not idempotent", i+1)
 		}
 	}
 }
