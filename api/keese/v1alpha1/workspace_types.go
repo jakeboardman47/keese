@@ -122,6 +122,63 @@ type WorkspaceSpec struct {
 	// `tool:<name>#can_call@<subject>` per request.
 	// +optional
 	Egress *WorkspaceEgressSpec `json:"egress,omitempty"`
+
+	// A2A enables the agent-to-agent (A2A) HTTP/SSE endpoint on this
+	// Workspace and selects its trust scope. When unset, the Workspace
+	// exposes no A2A endpoint (the default-deny posture). See E2.
+	// +optional
+	A2A *WorkspaceA2AConfig `json:"a2a,omitempty"`
+}
+
+// WorkspaceA2AScope selects the trust boundary for inbound A2A calls into
+// this Workspace.
+//
+//   - intra-tenant: any peer Workspace owned by the same Tenant may call.
+//     The reconciler writes the self tuple `workspace:W#a2a_callable_by@
+//     workspace:W` unconditionally when A2A is enabled.
+//   - cross-tenant: peers in other tenants may call ONLY when an Approved
+//     CrossTenantAgreement (D25/D29) references both tenants. The reconciler
+//     writes the `a2a_callable_by` tuple per approved peer; absent a CTA it
+//     writes nothing and ext_authz fails closed.
+//
+// +kubebuilder:validation:Enum=intra-tenant;cross-tenant
+type WorkspaceA2AScope string
+
+const (
+	// WorkspaceA2AScopeIntraTenant restricts A2A callers to same-tenant peers.
+	WorkspaceA2AScopeIntraTenant WorkspaceA2AScope = "intra-tenant"
+	// WorkspaceA2AScopeCrossTenant permits cross-tenant callers gated by an
+	// Approved CrossTenantAgreement.
+	WorkspaceA2AScopeCrossTenant WorkspaceA2AScope = "cross-tenant"
+)
+
+// WorkspaceA2AConfig is the per-workspace A2A endpoint + authz config.
+type WorkspaceA2AConfig struct {
+	// Enabled turns the A2A endpoint on. When true and scope is
+	// intra-tenant, the Workspace controller writes the self ReBAC tuple
+	// `workspace:W#a2a_callable_by@workspace:W`; the keese-authz ext_authz
+	// service then resolves `workspace:W#a2a_callable_by@workspace:<caller>`
+	// per inbound A2A request (fail-closed). Cross-tenant scope additionally
+	// requires an Approved CrossTenantAgreement before any tuple is written.
+	//
+	// +optional
+	// +kubebuilder:default=false
+	// +keese:rebac-tuple=a2a_callable_by
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Scope selects the trust boundary for inbound A2A calls.
+	// +optional
+	// +kubebuilder:default=intra-tenant
+	Scope WorkspaceA2AScope `json:"scope,omitempty"`
+
+	// Port is the A2A HTTP/SSE listener port served by the bridge sidecar.
+	// Must be in the unprivileged range 1024–65535. Defaults to 8080.
+	//
+	// +optional
+	// +kubebuilder:default=8080
+	// +kubebuilder:validation:Minimum=1024
+	// +kubebuilder:validation:Maximum=65535
+	Port *int32 `json:"port,omitempty"`
 }
 
 // WorkspaceEgressSpec is the per-workspace egress authz config.

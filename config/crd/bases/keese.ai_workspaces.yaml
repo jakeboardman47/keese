@@ -57,6 +57,40 @@ spec:
           spec:
             description: WorkspaceSpec defines the desired state of Workspace.
             properties:
+              a2a:
+                description: |-
+                  A2A enables the agent-to-agent (A2A) HTTP/SSE endpoint on this
+                  Workspace and selects its trust scope. When unset, the Workspace
+                  exposes no A2A endpoint (the default-deny posture). See E2.
+                properties:
+                  enabled:
+                    default: false
+                    description: |-
+                      Enabled turns the A2A endpoint on. When true and scope is
+                      intra-tenant, the Workspace controller writes the self ReBAC tuple
+                      `workspace:W#a2a_callable_by@workspace:W`; the keese-authz ext_authz
+                      service then resolves `workspace:W#a2a_callable_by@workspace:<caller>`
+                      per inbound A2A request (fail-closed). Cross-tenant scope additionally
+                      requires an Approved CrossTenantAgreement before any tuple is written.
+                    type: boolean
+                  port:
+                    default: 8080
+                    description: |-
+                      Port is the A2A HTTP/SSE listener port served by the bridge sidecar.
+                      Must be in the unprivileged range 1024–65535. Defaults to 8080.
+                    format: int32
+                    maximum: 65535
+                    minimum: 1024
+                    type: integer
+                  scope:
+                    default: intra-tenant
+                    description: Scope selects the trust boundary for inbound A2A
+                      calls.
+                    enum:
+                    - intra-tenant
+                    - cross-tenant
+                    type: string
+                type: object
               attachGrace:
                 default: 30s
                 description: AttachGrace is the time to wait before considering a
