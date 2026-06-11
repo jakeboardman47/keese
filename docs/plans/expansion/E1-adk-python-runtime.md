@@ -14,8 +14,8 @@ depends:
   - ../../designs/05a-envoy-ai-gateway-topology.md
   - ../../designs/05b-credential-injection-patterns.md
 related_skills: [plan-management, controller-authoring]
-status: planned
-last_verified: 2026-06-10
+status: shipped
+last_verified: 2026-06-11
 phase: E1
 dispatch: manual
 model_tier: sonnet

@@ -77,6 +77,25 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-11 — expansion E1 SHIPPED (E1c NetworkPolicy closes the ADK Python runtime)
+
+- E1c: `internal/runtime/providers/adkpython/networkpolicy.go` (`BuildNetworkPolicy`) +
+  `applySessionNetworkPolicy` in the workspacesession controller (**adkPython branch only**;
+  pod applied first, so a netpol failure can't regress provisioning). **Fail-closed**:
+  default-deny (both PolicyTypes) + EXACT allows only — egress gateway:443, NATS:4222, peer
+  :8081; ingress peer:8081. NO wildcards / no IPBlock (rule 05.5). SSA via `client.Apply` +
+  `FieldOwner(keese-workspacesession-controller)` + `ForceOwnership`; OwnerReference for GC.
+- **Built+verified via a Workflow** (implement → adversarial `security-reviewer` pass):
+  the verdict refuted wildcards/fail-open/goose-regression/non-SSA → `secure:true`. Pattern
+  worth reusing for security-critical phases (NetworkPolicy/authz/secrets).
+- **Follow-up (`revisit_when_netpol_provider_scoped`):** the policy `podSelector` is
+  *workspace*-scoped (`keese.ai/workspace=<name>`), not *provider*-scoped — so it also
+  covers a co-located goose pod in the same workspace. Strictly MORE restrictive
+  (fail-closed, goose code untouched), but tighten to a provider/session label later.
+- **E1 (ADK Python runtime) is SHIPPED** — E1a+E1b+E1c done. Unblocks **Wave 2**: E2 (A2A
+  ext_authz enforcement of `a2a_callable_by`) + the leaves E3/E4/E11/E12. Remaining E1 stubs
+  are image-build only (`revisit_when_image_built`, `revisit_when_bridge_image_built`).
+
 ### 2026-06-11 — expansion E1b: ADK Python A2A bridge sidecar
 
 - The adkPython pod is now **two containers**: `adk-python` (8080, localhost-only) +

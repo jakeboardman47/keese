@@ -9,8 +9,9 @@ depends:
   - E1b-adk-python-a2a-bridge.md
   - ../../designs/05a-envoy-ai-gateway-topology.md
 related_skills: [plan-management, controller-authoring]
-status: planned
-last_verified: 2026-06-10
+status: complete
+last_verified: 2026-06-11
+revisit_when_netpol_provider_scoped: true
 phase: E1c
 model_tier: sonnet
 depends_on: [E1b]
