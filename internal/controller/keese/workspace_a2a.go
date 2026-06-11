@@ -47,6 +47,27 @@ func a2aCrossTenantPeerTuple(ws *keesev1alpha1.Workspace, peerWorkspace string) 
 	}
 }
 
+// noopA2ARebacReconciler is the A2ARebacReconciler used when OpenFGA is not
+// configured (dev/local run without OPENFGA_API_URL). With no store to read, it
+// cannot discover stale tuples, so it falls back to the write-only behavior:
+// the desired grants are pushed through the WorkspaceRebacWriter and nothing is
+// pruned. Pruning only matters against a live authz store, which this path lacks.
+type noopA2ARebacReconciler struct {
+	writer WorkspaceRebacWriter
+}
+
+func (n noopA2ARebacReconciler) ReconcileA2A(ctx context.Context, _ string, desired []WorkspaceRebacTuple) (int, int, error) {
+	if len(desired) == 0 {
+		return 0, 0, nil
+	}
+	if err := n.writer.Sync(ctx, desired); err != nil {
+		return 0, 0, err
+	}
+	return len(desired), 0, nil
+}
+
+var _ A2ARebacReconciler = noopA2ARebacReconciler{}
+
 // A2ACrossTenantResolver answers: which cross-tenant peer workspaces may call
 // this workspace's A2A endpoint? A peer is eligible only when an Approved,
 // non-expired CrossTenantAgreement references both tenants and its frozen
@@ -143,6 +164,59 @@ func isCTAExpired(cta *authzv1alpha1.CrossTenantAgreement, now time.Time) bool {
 
 var _ A2ACrossTenantResolver = &k8sA2ACrossTenantResolver{}
 
+// A2ARebacReconciler reconciles the LIVE a2a_callable_by tuples on a single
+// callee workspace object to a DESIRED set, pruning stale grants. It exists
+// separately from the write-only WorkspaceRebacWriter because pruning requires
+// READING the live tuple set from OpenFGA (Sync/Delete are blind writes that
+// cannot discover a grant the controller no longer wants).
+//
+// This closes the revocation hole (rule 04.4 derived-state, rule 05.9 revocation
+// SLO): on disable or CTA-revoke the desired set shrinks (to empty, or minus a
+// peer), and ReconcileA2A DELETEs the now-stale tuples on the SAME reconcile —
+// no waiting for Workspace teardown.
+type A2ARebacReconciler interface {
+	// ReconcileA2A reads every existing tuple with relation a2a_callable_by on
+	// object workspaceObj, then converges the live set to desired: it writes the
+	// tuples in desired that are absent, and deletes the live a2a_callable_by
+	// tuples on workspaceObj that are not in desired. desired MUST contain only
+	// a2a_callable_by tuples whose Object == workspaceObj. Returns the number of
+	// tuples written and deleted (for status/debuggability). Idempotent: a second
+	// call with the same desired set writes 0 and deletes 0.
+	ReconcileA2A(ctx context.Context, workspaceObj string, desired []WorkspaceRebacTuple) (written, deleted int, err error)
+}
+
+// reconcileA2ATuples is the shared pruning algorithm used by both the OpenFGA
+// implementation and the test fake. live is the current a2a_callable_by tuple
+// set on workspaceObj (as read from the store); desired is the target set. It
+// returns the tuples to write (desired minus live) and to delete (live minus
+// desired). Pure — does no I/O, so it is unit-testable and identical across
+// implementations.
+func reconcileA2ATuples(workspaceObj string, live, desired []WorkspaceRebacTuple) (toWrite, toDelete []WorkspaceRebacTuple) {
+	desiredSet := make(map[WorkspaceRebacTuple]struct{}, len(desired))
+	for _, d := range desired {
+		desiredSet[d] = struct{}{}
+	}
+	liveSet := make(map[WorkspaceRebacTuple]struct{}, len(live))
+	for _, l := range live {
+		// Defense-in-depth: only ever prune a2a_callable_by tuples on THIS
+		// workspace object. Read filters by object+relation, but guard anyway so
+		// a mis-scoped read can never delete an unrelated grant.
+		if l.Object != workspaceObj || l.Relation != a2aCallableByRelation {
+			continue
+		}
+		liveSet[l] = struct{}{}
+		if _, ok := desiredSet[l]; !ok {
+			toDelete = append(toDelete, l)
+		}
+	}
+	for _, d := range desired {
+		if _, ok := liveSet[d]; !ok {
+			toWrite = append(toWrite, d)
+		}
+	}
+	return toWrite, toDelete
+}
+
 // a2aTuplesFor computes the desired a2a_callable_by tuples for the workspace.
 //
 //   - A2A disabled (or spec.a2a nil) → no tuples.
@@ -152,8 +226,10 @@ var _ A2ACrossTenantResolver = &k8sA2ACrossTenantResolver{}
 //     resolver error is returned so the caller fails the reconcile rather than
 //     writing a partial/empty grant set over a transient API error.
 //
-// The returned tuples are merged with rebacTuplesFor's set and synced together,
-// so a2a tuples participate in the same idempotent Sync + cleanup Delete.
+// The returned set is the DESIRED state handed to A2ARebacReconciler.ReconcileA2A,
+// which reads the live set and prunes the difference. This is what makes disable
+// and CTA-revoke take effect immediately (the desired set shrinks; the stale
+// tuples are deleted on the same reconcile) rather than only at teardown.
 func a2aTuplesFor(ctx context.Context, ws *keesev1alpha1.Workspace, resolver A2ACrossTenantResolver) ([]WorkspaceRebacTuple, error) {
 	if ws.Spec.A2A == nil || !ws.Spec.A2A.Enabled {
 		return nil, nil

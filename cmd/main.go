@@ -41,11 +41,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	argov1alpha1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
-	capsulev1beta2 "github.com/projectcapsule/capsule/api/v1beta2"
 	envoyaigatewayv1alpha1 "github.com/envoyproxy/ai-gateway/api/v1alpha1"
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	kyvernov2 "github.com/kyverno/kyverno/api/kyverno/v2"
+	capsulev1beta2 "github.com/projectcapsule/capsule/api/v1beta2"
 	eventingv1 "knative.dev/eventing/pkg/apis/eventing/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -244,6 +244,10 @@ func main() {
 		memoryRebac    keesecontroller.MemoryRebacWriter
 		runtimeRebac   keesecontroller.RuntimeRebacWriter
 		workflowRebac  keesecontroller.WorkflowRebacWriter
+		// workspaceA2ARebac reconciles (read+prune) the a2a_callable_by tuples.
+		// nil when OpenFGA is not configured; the controller then falls back to a
+		// write-only no-op (no live store to prune against).
+		workspaceA2ARebac keesecontroller.A2ARebacReconciler
 	)
 	if rebacCfg.APIURL != "" {
 		client, rebacErr := rebac.New(rebacCfg)
@@ -256,6 +260,7 @@ func main() {
 			tenantRebac = &keesecontroller.TenantOpenFGARebacWriter{Client: client}
 			ctaRebac = &authzcontroller.CTAOpenFGARebacWriter{Client: client}
 			workspaceRebac = &keesecontroller.WorkspaceOpenFGARebacWriter{Client: client}
+			workspaceA2ARebac = &keesecontroller.WorkspaceA2AOpenFGAReconciler{Client: client}
 			recipeRebac = &keesecontroller.RecipeOpenFGARebacWriter{Client: client}
 			guardrailRebac = &authzcontroller.GuardrailOpenFGARebacWriter{Client: client}
 			memoryRebac = &keesecontroller.MemoryOpenFGARebacWriter{Client: client}
@@ -270,6 +275,7 @@ func main() {
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
 		Rebac:            workspaceRebac,
+		A2ARebac:         workspaceA2ARebac,
 		RuntimeRebac:     runtimeRebac,
 		GatewayNamespace: os.Getenv("KEESE_GATEWAY_NS"),
 	}).SetupWithManager(mgr); err != nil {

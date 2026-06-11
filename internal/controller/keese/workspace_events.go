@@ -21,6 +21,7 @@ const (
 
 	// ReBAC events.
 	ReasonRebacTupleWritten      = "RebacTupleWritten"
+	ReasonRebacTupleDeleted      = "RebacTupleDeleted"
 	ReasonRebacTupleDeleteFailed = "RebacTupleDeleteFailed"
 
 	// Runtime bootstrap.

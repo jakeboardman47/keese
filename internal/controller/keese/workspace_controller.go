@@ -66,10 +66,29 @@ type WorkspaceReconciler struct {
 	// spec.a2a.enabled && spec.a2a.scope == cross-tenant. See workspace_a2a.go.
 	A2ACTA A2ACrossTenantResolver
 
+	// A2ARebac reconciles the LIVE a2a_callable_by tuples on this workspace to the
+	// DESIRED set, PRUNING grants that no longer apply (disable, CTA-revoke) on
+	// the same reconcile rather than only at teardown (rule 04.4, rule 05.9).
+	// Unlike Rebac (write-only Sync/Delete), this reads the live set first.
+	// Defaulted in SetupWithManager: OpenFGA-backed when a *rebac.Client is wired,
+	// else a write-only no-op over Rebac. See workspace_a2a.go.
+	A2ARebac A2ARebacReconciler
+
 	// GatewayNamespace overrides the namespace where the Envoy AI Gateway +
 	// NATS services live. Empty → gatewayServiceNamespaceDefault. Wired from
 	// the KEESE_GATEWAY_NS env var in cmd/main.go.
 	GatewayNamespace string
+}
+
+// a2aRebac returns the A2A reconciler, defaulting to a write-only no-op over the
+// configured WorkspaceRebacWriter when A2ARebac is nil. This keeps Reconcile/
+// cleanup safe for callers that construct the reconciler directly (e.g. unit
+// tests) and never ran SetupWithManager's defaulting.
+func (r *WorkspaceReconciler) a2aRebac() A2ARebacReconciler {
+	if r.A2ARebac != nil {
+		return r.A2ARebac
+	}
+	return noopA2ARebacReconciler{writer: r.Rebac}
 }
 
 // gatewayNamespace returns the configured gateway namespace, or the default.
@@ -88,7 +107,7 @@ func (r *WorkspaceReconciler) gatewayNamespace() string {
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=keese.ai,resources=runtimeextensions,verbs=get;list;watch
-// +kubebuilder:rbac:groups=authz.keese.ai,resources=crosstenanagreements,verbs=get;list;watch
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=crosstenantagreements,verbs=get;list;watch
 
 // Reconcile implements the main reconciliation loop for Workspace.
 // Idiom: fetch → deepcopy for status patch → handle deletion → ensure desired state → update status.
@@ -209,26 +228,46 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// path is the canonical wire-up.
 
 	// --- ReBAC tuples ---
+	// The static tuple set (owner/editor/viewer/tool) is write-only and never
+	// shrinks for a live workspace, so a blind Sync is correct for it.
 	tuples := rebacTuplesFor(&ws)
-	// A2A endpoint grants (E2 / 04a iter-7). Intra-tenant writes the self tuple;
-	// cross-tenant writes one tuple per Approved-CTA peer. A resolver error fails
-	// the reconcile (fail-closed: we never write a partial grant set over a
-	// transient API error). Merged into the same idempotent Sync.
-	a2aTuples, err := a2aTuplesFor(ctx, &ws, r.A2ACTA)
-	if err != nil {
-		log.Error(err, "failed to resolve A2A cross-tenant peers")
-		r.setProgressing(&ws, "A2ACTAResolveFailed", err.Error())
-		return ctrl.Result{RequeueAfter: requeueAfterBackoff}, r.patchStatus(ctx, &ws, orig)
-	}
-	tuples = append(tuples, a2aTuples...)
 	if err := r.Rebac.Sync(ctx, tuples); err != nil {
 		log.Error(err, "failed to sync ReBAC tuples")
 		r.setProgressing(&ws, "RebacSyncFailed", err.Error())
 		return ctrl.Result{RequeueAfter: requeueAfterBackoff}, r.patchStatus(ctx, &ws, orig)
 	}
+
+	// A2A endpoint grants (E2 / 04a iter-7) are DERIVED STATE that can shrink:
+	// disabling spec.a2a, or a peer's CTA being revoked/expired, must REVOKE the
+	// corresponding a2a_callable_by grant on this same reconcile (rule 04.4 derived
+	// state, rule 05.9 revocation SLO) — not at Workspace teardown. So we compute
+	// the desired set and hand it to ReconcileA2A, which reads the live tuples and
+	// prunes the difference. Intra-tenant enabled → the self tuple; cross-tenant →
+	// one tuple per Approved-CTA peer; disabled → empty (everything pruned). A
+	// resolver error fails the reconcile (fail-closed: never prune-to-empty or
+	// write a partial set over a transient API error).
+	a2aDesired, err := a2aTuplesFor(ctx, &ws, r.A2ACTA)
+	if err != nil {
+		log.Error(err, "failed to resolve A2A cross-tenant peers")
+		r.setProgressing(&ws, "A2ACTAResolveFailed", err.Error())
+		return ctrl.Result{RequeueAfter: requeueAfterBackoff}, r.patchStatus(ctx, &ws, orig)
+	}
+	a2aWritten, a2aDeleted, err := r.a2aRebac().ReconcileA2A(ctx, "workspace:"+ws.Name, a2aDesired)
+	if err != nil {
+		log.Error(err, "failed to reconcile A2A a2a_callable_by tuples")
+		r.setProgressing(&ws, "A2ARebacReconcileFailed", err.Error())
+		return ctrl.Result{RequeueAfter: requeueAfterBackoff}, r.patchStatus(ctx, &ws, orig)
+	}
+	if a2aDeleted > 0 {
+		r.Recorder.Eventf(&ws, corev1.EventTypeNormal, ReasonRebacTupleDeleted,
+			"%d stale a2a_callable_by tuple(s) pruned", a2aDeleted)
+	}
+
+	totalTuples := len(tuples) + len(a2aDesired)
 	r.Recorder.Eventf(&ws, corev1.EventTypeNormal, ReasonRebacTupleWritten,
-		"%d ReBAC tuples synced", len(tuples))
-	ws.Status.RebacTupleCount = int32(len(tuples)) //nolint:gosec
+		"%d ReBAC tuples synced (%d A2A grants, %d A2A writes, %d A2A prunes)",
+		totalTuples, len(a2aDesired), a2aWritten, a2aDeleted)
+	ws.Status.RebacTupleCount = int32(totalTuples) //nolint:gosec
 
 	// --- RuntimeExtension enabled_in tuples ---
 	// Write extension:E#enabled_in@workspace:W for every RuntimeExtension
@@ -297,18 +336,23 @@ func (r *WorkspaceReconciler) cleanup(ctx context.Context, ws *keesev1alpha1.Wor
 	r.Recorder.Eventf(ws, corev1.EventTypeNormal, ReasonWorkspaceTerminating,
 		"Workspace %s is terminating", ws.Name)
 
-	// Delete ReBAC tuples (including the A2A endpoint grants this workspace
-	// owns — the self tuple and, for cross-tenant, any per-peer tuples still
-	// resolvable from an Approved CTA). Cross-tenant tuples whose CTA was already
-	// revoked are the CTA controller's cleanup responsibility (it deletes
-	// a2a_callable_by tuples on revoke), so a resolver error here is logged but
-	// does not block finalizer removal indefinitely beyond the normal retry.
-	tuples := rebacTuplesFor(ws)
-	if a2aTuples, aerr := a2aTuplesFor(ctx, ws, r.A2ACTA); aerr != nil {
-		log.Error(aerr, "failed to resolve A2A peers during cleanup; deleting known tuples only")
-	} else {
-		tuples = append(tuples, a2aTuples...)
+	// Prune ALL A2A endpoint grants this workspace owns by reconciling to an
+	// empty desired set. ReconcileA2A reads the live a2a_callable_by tuples on
+	// workspace:W (the self tuple and every per-peer tuple, including peers whose
+	// CTA was already revoked) and deletes them — no dependence on the CTA
+	// resolver, which may no longer resolve a revoked peer. This is exhaustive
+	// where the old resolver-derived delete leaked any tuple the resolver could
+	// not reconstruct.
+	if _, _, aerr := r.a2aRebac().ReconcileA2A(ctx, "workspace:"+ws.Name, nil); aerr != nil {
+		log.Error(aerr, "failed to prune A2A tuples; will retry")
+		r.Recorder.Eventf(ws, corev1.EventTypeWarning, ReasonRebacTupleDeleteFailed,
+			"A2A tuple pruning failed: %v", aerr)
+		_ = r.patchStatus(ctx, ws, orig)
+		return ctrl.Result{RequeueAfter: requeueAfterBackoff}, nil
 	}
+
+	// Delete the static ReBAC tuples (owner/editor/viewer/tool/tenant).
+	tuples := rebacTuplesFor(ws)
 	if err := r.Rebac.Delete(ctx, tuples); err != nil {
 		log.Error(err, "failed to delete ReBAC tuples; will retry")
 		r.Recorder.Eventf(ws, corev1.EventTypeWarning, ReasonRebacTupleDeleteFailed,
@@ -402,6 +446,15 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	if r.A2ACTA == nil {
 		r.A2ACTA = NewK8sA2ACrossTenantResolver(mgr.GetClient())
+	}
+	if r.A2ARebac == nil {
+		// No OpenFGA-backed pruning reconciler wired (dev/local without
+		// OPENFGA_API_URL, or a test that did not inject one). Fall back to a
+		// write-only no-op over the configured WorkspaceRebacWriter: desired
+		// grants are still written; pruning is a no-op because there is no live
+		// store to read. main.go wires WorkspaceA2AOpenFGAReconciler when a
+		// *rebac.Client exists.
+		r.A2ARebac = noopA2ARebacReconciler{writer: r.Rebac}
 	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("workspace-controller")
