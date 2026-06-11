@@ -36,6 +36,13 @@
 #   - tenant.uses_oidc_provider: [oidc_provider] — written by Tenant controller per
 #     Tenant.spec.oidc.allowedProviders[]; ext_authz checks before validating tokens
 #     from any issuer for a given tenant
+#
+# 04a iter-7 (E2) additive change for synchronous A2A HTTP/SSE endpoint authz (2026-06-11):
+#   - workspace.a2a_callable_by: [workspace] — inbound A2A endpoint grant, distinct from
+#     messageable_from (NATS). Written by the Workspace controller on spec.a2a.enabled:
+#     self tuple for intra-tenant; per-peer tuple gated by an Approved CrossTenantAgreement
+#     for cross-tenant. ext_authz Checks workspace:W_to#a2a_callable_by@workspace:W_from.
+#   ADDITIVE ONLY: no prior relation removed or altered; all iter-1..6 tuples stay valid.
 
 model
   schema 1.1
@@ -91,6 +98,20 @@ type workspace
     # cartesian product of from.workspaceSelector × to.workspaceSelector. ext_authz at the
     # NATS / a2a transport (design 09) calls Check before subscribe + first publish.
     define messageable_from: [workspace]
+    # a2a_callable_by: inbound A2A HTTP/SSE endpoint grant (E2 / 04a iter-7).
+    # Tuple shape: workspace:W_to#a2a_callable_by@workspace:W_from. Distinct from
+    # messageable_from (NATS publish/subscribe): a2a_callable_by gates the synchronous
+    # A2A HTTP/SSE call into W_to's a2a-bridge endpoint (design 09 / E1b bridge).
+    # Written by the Workspace controller (workspace_controller.go a2aTuplesFor) when
+    # spec.a2a.enabled:
+    #   - intra-tenant: self tuple workspace:W#a2a_callable_by@workspace:W; same-tenant
+    #     peers are admitted by the self grant (the controller opens the endpoint).
+    #   - cross-tenant: one tuple per peer workspace, written ONLY after an Approved
+    #     CrossTenantAgreement (D25/D29) references both tenants. Absent a CTA no tuple is
+    #     written and the ext_authz Check fails closed (rule 05.4).
+    # ext_authz (internal/authz/extauth) calls
+    # Check(user=workspace:W_from, relation=a2a_callable_by, object=workspace:W_to).
+    define a2a_callable_by: [workspace]
 
 type tool
   relations

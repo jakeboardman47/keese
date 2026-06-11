@@ -60,6 +60,12 @@ type WorkspaceReconciler struct {
 	// SetupWithManager when nil. See workspace_extensions.go for the linkage.
 	RuntimeRebac RuntimeRebacWriter
 
+	// A2ACTA resolves the Approved-CrossTenantAgreement-gated peers allowed to
+	// call this workspace's cross-tenant A2A endpoint (E2 / 04a iter-7). Defaulted
+	// to a K8s-backed resolver in SetupWithManager when nil. Only consulted when
+	// spec.a2a.enabled && spec.a2a.scope == cross-tenant. See workspace_a2a.go.
+	A2ACTA A2ACrossTenantResolver
+
 	// GatewayNamespace overrides the namespace where the Envoy AI Gateway +
 	// NATS services live. Empty → gatewayServiceNamespaceDefault. Wired from
 	// the KEESE_GATEWAY_NS env var in cmd/main.go.
@@ -82,6 +88,7 @@ func (r *WorkspaceReconciler) gatewayNamespace() string {
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=keese.ai,resources=runtimeextensions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=authz.keese.ai,resources=crosstenanagreements,verbs=get;list;watch
 
 // Reconcile implements the main reconciliation loop for Workspace.
 // Idiom: fetch → deepcopy for status patch → handle deletion → ensure desired state → update status.
@@ -203,6 +210,17 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// --- ReBAC tuples ---
 	tuples := rebacTuplesFor(&ws)
+	// A2A endpoint grants (E2 / 04a iter-7). Intra-tenant writes the self tuple;
+	// cross-tenant writes one tuple per Approved-CTA peer. A resolver error fails
+	// the reconcile (fail-closed: we never write a partial grant set over a
+	// transient API error). Merged into the same idempotent Sync.
+	a2aTuples, err := a2aTuplesFor(ctx, &ws, r.A2ACTA)
+	if err != nil {
+		log.Error(err, "failed to resolve A2A cross-tenant peers")
+		r.setProgressing(&ws, "A2ACTAResolveFailed", err.Error())
+		return ctrl.Result{RequeueAfter: requeueAfterBackoff}, r.patchStatus(ctx, &ws, orig)
+	}
+	tuples = append(tuples, a2aTuples...)
 	if err := r.Rebac.Sync(ctx, tuples); err != nil {
 		log.Error(err, "failed to sync ReBAC tuples")
 		r.setProgressing(&ws, "RebacSyncFailed", err.Error())
@@ -279,8 +297,18 @@ func (r *WorkspaceReconciler) cleanup(ctx context.Context, ws *keesev1alpha1.Wor
 	r.Recorder.Eventf(ws, corev1.EventTypeNormal, ReasonWorkspaceTerminating,
 		"Workspace %s is terminating", ws.Name)
 
-	// Delete ReBAC tuples.
+	// Delete ReBAC tuples (including the A2A endpoint grants this workspace
+	// owns — the self tuple and, for cross-tenant, any per-peer tuples still
+	// resolvable from an Approved CTA). Cross-tenant tuples whose CTA was already
+	// revoked are the CTA controller's cleanup responsibility (it deletes
+	// a2a_callable_by tuples on revoke), so a resolver error here is logged but
+	// does not block finalizer removal indefinitely beyond the normal retry.
 	tuples := rebacTuplesFor(ws)
+	if a2aTuples, aerr := a2aTuplesFor(ctx, ws, r.A2ACTA); aerr != nil {
+		log.Error(aerr, "failed to resolve A2A peers during cleanup; deleting known tuples only")
+	} else {
+		tuples = append(tuples, a2aTuples...)
+	}
 	if err := r.Rebac.Delete(ctx, tuples); err != nil {
 		log.Error(err, "failed to delete ReBAC tuples; will retry")
 		r.Recorder.Eventf(ws, corev1.EventTypeWarning, ReasonRebacTupleDeleteFailed,
@@ -371,6 +399,9 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	if r.RuntimeRebac == nil {
 		r.RuntimeRebac = RuntimeNoopRebacWriter{}
+	}
+	if r.A2ACTA == nil {
+		r.A2ACTA = NewK8sA2ACrossTenantResolver(mgr.GetClient())
 	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorderFor("workspace-controller")

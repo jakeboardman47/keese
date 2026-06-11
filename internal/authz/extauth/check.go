@@ -59,7 +59,17 @@ const (
 // dependencies passed in; the gRPC server wires the deps once and
 // calls this per request.
 func Authorize(ctx context.Context, req *HTTPRequest, resolver *Resolver, fga FGAChecker) *Decision {
-	// Step 0: cross-tenant a2a message requests carry the x-keese-a2a-scope
+	// Step 0a: synchronous A2A HTTP/SSE endpoint calls (E2) carry the
+	// x-keese-a2a-call discriminator. They are NOT tool calls — they resolve
+	// against `workspace:<W_to>#a2a_callable_by@workspace:<W_from>` instead of
+	// `tool:<name>#can_call`. Checked before the NATS messageable_from path so a
+	// request carrying both headers is treated as an endpoint call (the bridge
+	// only stamps x-keese-a2a-call on the HTTP/SSE path). Fail-closed inside.
+	if isA2AEndpointCall(req) {
+		return authorizeA2AEndpoint(ctx, req, fga)
+	}
+
+	// Step 0b: cross-tenant a2a message requests carry the x-keese-a2a-scope
 	// discriminator (see crosstenant.go). They are NOT tool calls — they
 	// never match a ToolBinding — so they are resolved against the
 	// cross-tenant trust tuple `workspace:<W_to>#messageable_from@workspace:

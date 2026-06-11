@@ -71,6 +71,14 @@ rules:
 - apiGroups:
   - authz.keese.ai
   resources:
+  - crosstenanagreements
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - authz.keese.ai
+  resources:
   - crosstenantagreements
   - guardrailbindings
   - oidcproviders

@@ -30,16 +30,26 @@ const (
 	// decision path triggers only when its value is A2AScopeCrossTenant.
 	HeaderA2AScope = "x-keese-a2a-scope"
 	// HeaderA2APeerWorkspace carries the destination ("to") peer workspace
-	// — the FGA object of the messageable_from Check. Format: the bare
-	// workspace identifier the CrossTenantAgreement controller writes its
-	// tuples with (the Workspace UID; see crosstenanagreement_rebac.go
-	// craMessageableFromTuples), optionally prefixed `<namespace>/`.
+	// — the FGA object of the messageable_from / a2a_callable_by Check. Format:
+	// the bare workspace identifier the controller writes its tuples with (the
+	// Workspace UID), optionally prefixed `<namespace>/`.
 	HeaderA2APeerWorkspace = "x-keese-a2a-peer-workspace"
+
+	// HeaderA2ACall marks a synchronous A2A HTTP/SSE endpoint call (E2). When
+	// its value is A2ACallTrue the request routes to the a2a_callable_by Check
+	// (authorizeA2AEndpoint) instead of the NATS messageable_from path. Stamped
+	// by the Envoy AI Gateway A2A route (E2.T3, deferred) in front of the peer
+	// workspace's a2a-bridge endpoint.
+	HeaderA2ACall = "x-keese-a2a-call"
 
 	// A2AScopeCrossTenant is the only HeaderA2AScope value that triggers a
 	// messageable_from Check. Any other value (including intra-tenant) is a
 	// non-cross-tenant request and never reaches the cross-tenant Check.
 	A2AScopeCrossTenant = "cross-tenant"
+
+	// A2ACallTrue is the only HeaderA2ACall value that triggers the
+	// a2a_callable_by Check.
+	A2ACallTrue = "true"
 )
 
 // Cross-tenant reason codes (extend the DENY allowlist in check.go). Kept
@@ -53,6 +63,12 @@ const (
 	// ReasonA2ADenied is the OpenFGA-denied outcome for messageable_from
 	// (no Approved CrossTenantAgreement covers the pair, or it was revoked).
 	ReasonA2ADenied = "messageable_from_denied"
+	// ReasonA2AEndpointDenied is the OpenFGA-denied outcome for a2a_callable_by
+	// (the peer workspace did not enable A2A for this caller, or — cross-tenant —
+	// no Approved CrossTenantAgreement covers the pair). Distinct from
+	// ReasonA2ADenied so audit + metrics separate the synchronous A2A endpoint
+	// path from NATS messaging.
+	ReasonA2AEndpointDenied = "a2a_callable_by_denied"
 )
 
 // isCrossTenantA2A reports whether the request carries the cross-tenant a2a
@@ -60,6 +76,16 @@ const (
 // envoyRequestToHTTPRequest, matching the const definitions.
 func isCrossTenantA2A(req *HTTPRequest) bool {
 	return req.Headers[HeaderA2AScope] == A2AScopeCrossTenant
+}
+
+// isA2AEndpointCall reports whether the request is a synchronous A2A HTTP/SSE
+// endpoint call (E2), routed to the a2a_callable_by Check. This is the inbound
+// peer-call path (E1b a2a-bridge), distinct from the NATS messageable_from path
+// (isCrossTenantA2A). Both intra- and cross-tenant A2A endpoint calls carry this
+// header; the trust scope is encoded in the tuples the Workspace controller wrote
+// (self for intra-tenant; CTA-gated per-peer for cross-tenant), not re-derived here.
+func isA2AEndpointCall(req *HTTPRequest) bool {
+	return req.Headers[HeaderA2ACall] == A2ACallTrue
 }
 
 // normalizeWorkspaceRef turns a peer-workspace header value into the FGA
@@ -132,6 +158,71 @@ func authorizeCrossTenant(ctx context.Context, req *HTTPRequest, fga FGAChecker)
 		d.Reason = ReasonAllowed
 	} else {
 		d.Reason = ReasonA2ADenied
+	}
+	return d
+}
+
+// authorizeA2AEndpoint resolves a synchronous A2A HTTP/SSE endpoint call (E2).
+//
+// Direction (rule 05.9): the caller (W_from, derived from the projected SA
+// token via subject.go ExtractSubject — same shape as the egress path) is the
+// FGA *user*; the destination peer workspace from HeaderA2APeerWorkspace
+// (W_to) is the FGA *object*. The Check resolves the EXACT tuple the Workspace
+// controller writes — `workspace:<W_to>#a2a_callable_by@workspace:<W_from>`:
+//
+//   - intra-tenant: the controller wrote the self tuple
+//     `workspace:W#a2a_callable_by@workspace:W`, so a same-workspace call (or any
+//     caller granted via the self relation) is admitted.
+//   - cross-tenant: the controller wrote `workspace:W_to#a2a_callable_by@
+//     workspace:W_from` ONLY after an Approved CrossTenantAgreement covered the
+//     pair; absent that tuple this Check returns false → deny.
+//
+// Fail-closed (rule 05.4): a missing/malformed SA token (no subject), a missing
+// peer header, an FGA transport error, or an FGA deny all yield Allowed=false
+// (the gRPC server maps a non-Allowed Decision to a 403). No token or body is
+// ever logged (rule 05.10); only the validated workspace ids form the tuple.
+func authorizeA2AEndpoint(ctx context.Context, req *HTTPRequest, fga FGAChecker) *Decision {
+	// Caller (W_from): the request's own workspace, from the projected SA token.
+	subj, err := ExtractSubject(req, "", "", "")
+	if err != nil {
+		return &Decision{Reason: ReasonSubjectError, CrossTenant: true}
+	}
+
+	peer := normalizeWorkspaceRef(req.Headers[HeaderA2APeerWorkspace])
+	if peer == "" {
+		return &Decision{
+			Reason:          ReasonA2APeerMissing,
+			CrossTenant:     true,
+			User:            subj.User,
+			Workspace:       subj.Workspace,
+			CallerWorkspace: subj.Workspace.UID,
+		}
+	}
+
+	fromObj := "workspace:" + subj.Workspace.UID // W_from = FGA user
+	toObj := "workspace:" + peer                 // W_to   = FGA object
+	d := &Decision{
+		CrossTenant:     true,
+		User:            subj.User,
+		Workspace:       subj.Workspace,
+		CallerWorkspace: subj.Workspace.UID,
+		PeerWorkspace:   peer,
+		// Tuple recorded for audit (rule 05.10): object#relation@user.
+		Tuple: toObj + "#a2a_callable_by@" + fromObj,
+	}
+
+	// Direction: Check(user=W_from, relation=a2a_callable_by, object=W_to).
+	allowed, err := fga.Check(ctx, fromObj, "a2a_callable_by", toObj)
+	if err != nil {
+		// Fail-closed: FGA unreachable → deny 403 (rule 05.4).
+		d.Reason = ReasonFGAError
+		return d
+	}
+	d.Allowed = allowed
+	if allowed {
+		d.Reason = ReasonAllowed
+	} else {
+		d.Reason = ReasonA2AEndpointDenied
 	}
 	return d
 }

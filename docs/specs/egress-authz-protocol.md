@@ -116,17 +116,28 @@ Single `Check` per request; `HIGHER_CONSISTENCY` always.
 | Force-revoke admission | `workspace:<name>#can_revoke@<subject>` | ≤ 15 ms (1-hop) |
 | NATS intra-tenant subscribe | No Check — topic existence IS authz | — |
 | NATS cross-tenant subscribe | `workspace:<W_to>#messageable_from@workspace:<W_from>` | ≤ 25 ms |
-| A2A direct call (E2+) | `workspace:<W>#a2a_callable_by@workspace:<caller>` | ≤ 25 ms |
+| A2A direct call (E2) | `workspace:<W_to>#a2a_callable_by@workspace:<W_from>` | ≤ 25 ms |
 
 Cross-tenant NATS check enforced by 09 NATS bridge at subscribe + first-publish.
 Tuple written by CRA controller (25) only after bilateral approval.
 
-`a2a_callable_by` is **documented at E1b but NOT yet enforced**: the E1b
-a2a-bridge sidecar (`internal/runtime/a2a/bridge`) forwards inbound `:8081` peer
-traffic unconditionally (E1c's NetworkPolicy gates *which* peers reach `:8081`).
-**E2** adds the `Check` above and the `// +keese:rebac-tuple=a2a_callable_by`
-marker on the Workspace field (`spec.a2a.callableBy`) the reconciler writes the
-tuple from; audit reuses the `from_workspace`/`to_workspace` pair (§6).
+### A2A direct call (`a2a_callable_by`) — E2
+
+Synchronous A2A HTTP/SSE endpoint calls (E1b a2a-bridge) are gated by
+`a2a_callable_by` — distinct from NATS `messageable_from`. Discriminator
+`x-keese-a2a-call: true` routes to `authorizeA2AEndpoint`
+(`internal/authz/extauth/crosstenant.go`). Direction (rule 05.9): caller W_from (projected
+SA token via `subject.go`) is the FGA **user**; peer header `x-keese-a2a-peer-workspace`
+(W_to) is the FGA **object** — `Check(workspace:W_from, a2a_callable_by, workspace:W_to)`.
+
+Tuples are written by the Workspace controller (`workspace_a2a.go`), keyed on
+`spec.a2a.enabled` (the `// +keese:rebac-tuple=a2a_callable_by` marker): **intra-tenant** →
+self tuple `workspace:W#a2a_callable_by@workspace:W` (admits same-tenant peers);
+**cross-tenant** → one tuple `workspace:W_to#a2a_callable_by@workspace:W_from` per peer,
+written **only** after an Approved, non-expired CrossTenantAgreement (D25/D29) pairs the
+peer with this callee in `status.workspaceSnapshot` — absent a CTA, no tuple, Check fails
+closed (rule 05.4). Audit reuses `from_workspace`/`to_workspace` (§6). Relation added
+additively at 04a iter-7.
 
 ## 5. Decision metadata
 

@@ -74,6 +74,16 @@ constrained by the workflow's owning tenant).
   enforces via `Check(workspace:W_to#messageable_from@workspace:W_from)`
   before subscribe + first publish.
 
+**A2A endpoint relation (E2 / iter-7, additive).** `workspace.a2a_callable_by:
+[workspace]` gates the **synchronous A2A HTTP/SSE** endpoint call (E1b a2a-bridge),
+distinct from `messageable_from` (NATS publish/subscribe). Written by the **Workspace
+controller** (`workspace_a2a.go`) keyed on `spec.a2a.enabled`: intra-tenant → self tuple
+`workspace:W#a2a_callable_by@workspace:W`; cross-tenant → one tuple per peer
+`workspace:W_to#a2a_callable_by@workspace:W_from`, written **only** after an Approved
+CrossTenantAgreement (D29 / design 25) pairs the peer with this callee. ext_authz enforces
+via `Check(workspace:W_to#a2a_callable_by@workspace:W_from)`; absent the tuple it fails
+closed (rule 05.4). Additive: no prior relation changed.
+
 **`extension` — justification.** A RuntimeExtension CR (D7) bundles N tools. `tool.owner: [extension]` (not `[tenant]`) preserves the D7 SPI boundary; sole writer is the RuntimeExtension controller. One ConfigMap update enables/disables an entire extension. Impact on D7: extension-to-tool registration protocol flagged.
 
 **`credential` — justification.** `Check(credential:C#can_use@SA)` gives the credential broker (D17) a single authz call. Every `credential.can_use` decision emits a token-accounting event consumed by `TokenBudget` per D10b. Impact on D5a, D5b, D10b, D17: each must cross-reference this tuple shape.
@@ -103,6 +113,7 @@ constrained by the workflow's owning tenant).
 | `tenant:T_to#allows_messaging@tenant:T_from` | CrossTenantAgreement controller (D29) | CRA reaches phase Approved |
 | `workspace:W_to#messageable_from@workspace:W_from` | CrossTenantAgreement controller (D29) | Per (from × to) workspace pair on Approved |
 | `tenant:T#uses_oidc_provider@oidc_provider:P` | Tenant controller (D24) | Per entry in `Tenant.spec.oidc.allowedProviders[]` |
+| `workspace:W#a2a_callable_by@workspace:W` (intra) / `workspace:W_to#a2a_callable_by@workspace:W_from` (cross) | Workspace controller (E2) | `spec.a2a.enabled`; cross-tenant per Approved-CTA peer |
 
 ## Check semantics and latency tiers
 
@@ -196,3 +207,5 @@ consistency, result}`, `keese_rebac_check_errors_total{check_type}`,
 ### Iter-5 2026-04-21 — 97 SHIP (D29 spot-fix). Added `tenant.allows_messaging` + `workspace.messageable_from` relations + 2 tuple shapes for cross-tenant messaging. `status: current` retained. Detail + score table: [04a-iii-iter-log.md](04a-iii-iter-log.md).
 
 ### Iter-6 2026-04-21 — 97 SHIP (D28 spot-fix). Added `oidc_provider` type + `tenant.uses_oidc_provider` relation + 1 tuple shape for per-tenant OIDC allow-list gating. `status: current` retained. Detail + score table: [04a-iii-iter-log.md](04a-iii-iter-log.md).
+
+### Iter-7 2026-06-11 — SHIP (E2 spot-fix, additive only). Added `workspace.a2a_callable_by: [workspace]` relation + 1 tuple shape gating the synchronous A2A HTTP/SSE endpoint (E1b bridge), distinct from `messageable_from`. Written by the Workspace controller on `spec.a2a.enabled`: self tuple (intra-tenant) / per-Approved-CTA-peer tuple (cross-tenant). No prior relation removed or altered; all iter-1..6 tuples remain valid. `status: current` retained.
