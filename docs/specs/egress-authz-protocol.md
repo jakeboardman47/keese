@@ -16,7 +16,7 @@ depends:
   - ../designs/25-cross-tenant-agreement.md
 related_skills: [controller-authoring, test-engineer]
 status: current
-last_verified: 2026-04-21
+last_verified: 2026-06-11
 regression_lock: false
 tests:
   unit:
@@ -116,9 +116,17 @@ Single `Check` per request; `HIGHER_CONSISTENCY` always.
 | Force-revoke admission | `workspace:<name>#can_revoke@<subject>` | ≤ 15 ms (1-hop) |
 | NATS intra-tenant subscribe | No Check — topic existence IS authz | — |
 | NATS cross-tenant subscribe | `workspace:<W_to>#messageable_from@workspace:<W_from>` | ≤ 25 ms |
+| A2A direct call (E2+) | `workspace:<W>#a2a_callable_by@workspace:<caller>` | ≤ 25 ms |
 
 Cross-tenant NATS check enforced by 09 NATS bridge at subscribe + first-publish.
 Tuple written by CRA controller (25) only after bilateral approval.
+
+`a2a_callable_by` is **documented at E1b but NOT yet enforced**: the E1b
+a2a-bridge sidecar (`internal/runtime/a2a/bridge`) forwards inbound `:8081` peer
+traffic unconditionally (E1c's NetworkPolicy gates *which* peers reach `:8081`).
+**E2** adds the `Check` above and the `// +keese:rebac-tuple=a2a_callable_by`
+marker on the Workspace field (`spec.a2a.callableBy`) the reconciler writes the
+tuple from; audit reuses the `from_workspace`/`to_workspace` pair (§6).
 
 ## 5. Decision metadata
 
