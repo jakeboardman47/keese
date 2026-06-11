@@ -61,18 +61,35 @@ func gooseRuntime() *keesev1alpha1.AgentRuntime {
 }
 
 // TestBuildSessionPod_ADKDiscriminator asserts the T5 discriminator routes an
-// adkPython AgentRuntime to the ADK Python single-container pod template, with
-// every rule-05 invariant satisfied on the rendered pod.
+// adkPython AgentRuntime to the ADK Python pod template, with every rule-05
+// invariant satisfied on the rendered pod.
+//
+// E1b T3: the ADK pod now has TWO containers — the adk-python runtime and the
+// a2a-bridge sidecar. The ADK container is selected by name (order-independent).
 func TestBuildSessionPod_ADKDiscriminator(t *testing.T) {
 	ws := adkDiscriminatorWorkspace()
 	pod := buildSessionPodObject(adkSession(), ws, adkRuntime(), "ws-adk-pod")
 
-	if len(pod.Spec.Containers) != 1 {
-		t.Fatalf("container count: got %d, want 1 (single-container ADK increment)", len(pod.Spec.Containers))
+	if len(pod.Spec.Containers) != 2 {
+		t.Fatalf("container count: got %d, want 2 (adk-python + a2a-bridge sidecar)", len(pod.Spec.Containers))
 	}
-	c := pod.Spec.Containers[0]
-	if c.Name != adkpython.ContainerName {
-		t.Errorf("container name: got %q, want %q (ADK path)", c.Name, adkpython.ContainerName)
+	var c corev1.Container
+	var sawADK, sawBridge bool
+	for _, ctr := range pod.Spec.Containers {
+		switch ctr.Name {
+		case adkpython.ContainerName:
+			c, sawADK = ctr, true
+		case adkpython.BridgeContainerName:
+			sawBridge = true
+		}
+	}
+	if !sawADK {
+		t.Fatalf("ADK container %q not found, got %+v", adkpython.ContainerName,
+			containerNames(pod.Spec.Containers))
+	}
+	if !sawBridge {
+		t.Errorf("a2a-bridge sidecar %q not found (E1b T3), got %+v",
+			adkpython.BridgeContainerName, containerNames(pod.Spec.Containers))
 	}
 	if c.Image != "ghcr.io/keese/adk-python@sha256:cafe" {
 		t.Errorf("image: got %q, want the adkPython image", c.Image)
@@ -82,13 +99,15 @@ func TestBuildSessionPod_ADKDiscriminator(t *testing.T) {
 		t.Errorf("ADK pod must have no init containers, got %d", len(pod.Spec.InitContainers))
 	}
 
-	t.Run("zero credential env (rule 05.2)", func(t *testing.T) {
-		for _, e := range c.Env {
-			if secretEnvPattern.MatchString(e.Name) || secretEnvPattern.MatchString(e.Value) {
-				t.Errorf("env %q=%q matches credential pattern", e.Name, e.Value)
-			}
-			if e.ValueFrom != nil && e.ValueFrom.SecretKeyRef != nil {
-				t.Errorf("env %q uses secretKeyRef — forbidden (rule 05.7)", e.Name)
+	t.Run("zero credential env — every container incl. sidecar (rule 05.2)", func(t *testing.T) {
+		for _, ctr := range pod.Spec.Containers {
+			for _, e := range ctr.Env {
+				if secretEnvPattern.MatchString(e.Name) || secretEnvPattern.MatchString(e.Value) {
+					t.Errorf("container %q env %q=%q matches credential pattern", ctr.Name, e.Name, e.Value)
+				}
+				if e.ValueFrom != nil && e.ValueFrom.SecretKeyRef != nil {
+					t.Errorf("container %q env %q uses secretKeyRef — forbidden (rule 05.7)", ctr.Name, e.Name)
+				}
 			}
 		}
 	})
