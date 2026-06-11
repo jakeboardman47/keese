@@ -38,21 +38,6 @@ rules:
   - apiGroups: [""]
     resources: [configmaps]
     verbs: [get, list, watch]
-  # ---- keese.ai/crosstenantagreements ----
-  # The kubebuilder:rbac marker on crosstenanagreement_controller.go uses the
-  # typo'd plural "crosstenanagreements" (missing 't'). The actual CRD plural
-  # is "crosstenantagreements". Until the marker is corrected and regenerated
-  # the controller cannot list its own kind without these supplemental rules.
-  # TODO(TD-P1): rename marker + identifier to match CRD plural.
-  - apiGroups: [keese.ai]
-    resources: [crosstenantagreements]
-    verbs: [get, list, watch, create, update, patch, delete]
-  - apiGroups: [keese.ai]
-    resources: [crosstenantagreements/status]
-    verbs: [get, update, patch]
-  - apiGroups: [keese.ai]
-    resources: [crosstenantagreements/finalizers]
-    verbs: [update]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
