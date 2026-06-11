@@ -63,6 +63,7 @@ var _ = Describe("WorkspaceReconciler A2A (E2 T4/T6)", func() {
 	var (
 		nsn  types.NamespacedName
 		rec  *WorkspaceFakeRebacWriter
+		a2a  *fakeA2ARebacReconciler
 		cta  *fakeA2ACTAResolver
 		r    *WorkspaceReconciler
 		name string
@@ -70,12 +71,14 @@ var _ = Describe("WorkspaceReconciler A2A (E2 T4/T6)", func() {
 
 	newReconciler := func() *WorkspaceReconciler {
 		rec = &WorkspaceFakeRebacWriter{}
+		a2a = newFakeA2ARebacReconciler()
 		cta = newFakeA2ACTAResolver()
 		return &WorkspaceReconciler{
 			Client:   k8sClient,
 			Scheme:   k8sClient.Scheme(),
 			Recorder: &noopRecorder{},
 			Rebac:    rec,
+			A2ARebac: a2a,
 			A2ACTA:   cta,
 		}
 	}
@@ -106,7 +109,7 @@ var _ = Describe("WorkspaceReconciler A2A (E2 T4/T6)", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			wsObj := "workspace:" + name
-			Expect(hasTuple(rec.Synced, wsObj, "a2a_callable_by", wsObj)).To(BeTrue(),
+			Expect(hasTuple(a2a.liveTuples(wsObj), wsObj, "a2a_callable_by", wsObj)).To(BeTrue(),
 				"intra-tenant enabled workspace must write the self a2a_callable_by tuple")
 		})
 
@@ -123,8 +126,40 @@ var _ = Describe("WorkspaceReconciler A2A (E2 T4/T6)", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			wsObj := "workspace:" + name
-			Expect(hasTuple(rec.Synced, wsObj, "a2a_callable_by", wsObj)).To(BeFalse(),
-				"disabled A2A must not write any a2a_callable_by tuple")
+			Expect(a2a.liveTuples(wsObj)).To(BeEmpty(),
+				"disabled A2A must leave no live a2a_callable_by tuple")
+		})
+
+		It("PRUNES the self tuple when A2A is disabled on a live workspace (revoke without teardown)", func() {
+			name = fmt.Sprintf("ws-a2a-disable-%d", GinkgoRandomSeed())
+			ws := makeA2AWorkspace("default", name, "acme-tenant", true, keesev1alpha1.WorkspaceA2AScopeIntraTenant)
+			Expect(k8sClient.Create(ctx, ws)).To(Succeed())
+			nsn = mustNamespacedName(ws.Namespace, ws.Name)
+			r = newReconciler()
+
+			// Provision with A2A enabled → self tuple present.
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
+			Expect(err).NotTo(HaveOccurred())
+			wsObj := "workspace:" + name
+			Expect(hasTuple(a2a.liveTuples(wsObj), wsObj, "a2a_callable_by", wsObj)).To(BeTrue(),
+				"precondition: self tuple present while enabled")
+
+			// Flip spec.a2a.enabled → false on the LIVE workspace (no deletion).
+			var fresh keesev1alpha1.Workspace
+			Expect(k8sClient.Get(ctx, nsn, &fresh)).To(Succeed())
+			fresh.Spec.A2A.Enabled = false
+			Expect(k8sClient.Update(ctx, &fresh)).To(Succeed())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
+			Expect(err).NotTo(HaveOccurred())
+
+			// The grant must be GONE on the same reconcile — not waiting for teardown.
+			Expect(a2a.liveTuples(wsObj)).To(BeEmpty(),
+				"disabling A2A must PRUNE the self a2a_callable_by tuple immediately")
+			Expect(hasTuple(a2a.Deleted, wsObj, "a2a_callable_by", wsObj)).To(BeTrue(),
+				"prune must have issued a delete for the self tuple")
 		})
 
 		It("deletes the self tuple on workspace deletion (tuple removed → call fails)", func() {
@@ -136,14 +171,20 @@ var _ = Describe("WorkspaceReconciler A2A (E2 T4/T6)", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
 			Expect(err).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
+			Expect(err).NotTo(HaveOccurred())
+			wsObj := "workspace:" + name
+			Expect(hasTuple(a2a.liveTuples(wsObj), wsObj, "a2a_callable_by", wsObj)).To(BeTrue(),
+				"precondition: self tuple present before deletion")
 
 			// Trigger deletion: the finalizer keeps the object for cleanup.
 			Expect(k8sClient.Delete(ctx, ws)).To(Succeed())
 			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
 			Expect(err).NotTo(HaveOccurred())
 
-			wsObj := "workspace:" + name
-			Expect(hasTuple(rec.Deleted, wsObj, "a2a_callable_by", wsObj)).To(BeTrue(),
+			Expect(a2a.liveTuples(wsObj)).To(BeEmpty(),
+				"cleanup must prune the self a2a_callable_by tuple")
+			Expect(hasTuple(a2a.Deleted, wsObj, "a2a_callable_by", wsObj)).To(BeTrue(),
 				"cleanup must delete the self a2a_callable_by tuple")
 		})
 	})
@@ -164,11 +205,8 @@ var _ = Describe("WorkspaceReconciler A2A (E2 T4/T6)", func() {
 
 			wsObj := "workspace:" + name
 			// No self tuple (cross-tenant does not self-grant) and no peer tuple.
-			for _, tp := range rec.Synced {
-				Expect(tp.Relation == "a2a_callable_by").To(BeFalse(),
-					"cross-tenant without CTA must write no a2a_callable_by tuple, got %s#%s@%s", tp.Object, tp.Relation, tp.User)
-			}
-			Expect(hasTuple(rec.Synced, wsObj, "a2a_callable_by", "workspace:peer-ws")).To(BeFalse())
+			Expect(a2a.liveTuples(wsObj)).To(BeEmpty(),
+				"cross-tenant without CTA must leave no live a2a_callable_by tuple")
 		})
 
 		It("writes the peer tuple once an Approved CTA exists (cross-tenant call allowed)", func() {
@@ -186,8 +224,39 @@ var _ = Describe("WorkspaceReconciler A2A (E2 T4/T6)", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			wsObj := "workspace:" + name
-			Expect(hasTuple(rec.Synced, wsObj, "a2a_callable_by", "workspace:peer-ws")).To(BeTrue(),
+			Expect(hasTuple(a2a.liveTuples(wsObj), wsObj, "a2a_callable_by", "workspace:peer-ws")).To(BeTrue(),
 				"approved-CTA peer must get a per-peer a2a_callable_by tuple")
+		})
+
+		It("PRUNES the peer tuple when the CTA is revoked (peer no longer Approved → grant GONE without teardown)", func() {
+			name = fmt.Sprintf("ws-a2a-xt-revoke-%d", GinkgoRandomSeed())
+			ws := makeA2AWorkspace("default", name, "acme-tenant", true, keesev1alpha1.WorkspaceA2AScopeCrossTenant)
+			Expect(k8sClient.Create(ctx, ws)).To(Succeed())
+			nsn = mustNamespacedName(ws.Namespace, ws.Name)
+			r = newReconciler()
+
+			// Approved CTA grants peer-ws → reconcile writes the per-peer tuple.
+			cta.approve("acme-tenant", name, "peer-ws")
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
+			Expect(err).NotTo(HaveOccurred())
+			wsObj := "workspace:" + name
+			Expect(hasTuple(a2a.liveTuples(wsObj), wsObj, "a2a_callable_by", "workspace:peer-ws")).To(BeTrue(),
+				"precondition: peer tuple present while CTA Approved")
+
+			// CTA is revoked: the resolver no longer returns the peer (no spec
+			// change on the Workspace — the grant source went away).
+			cta.peers = map[string][]string{}
+
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: nsn})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Peer grant must be GONE on the same reconcile — not at teardown.
+			Expect(a2a.liveTuples(wsObj)).To(BeEmpty(),
+				"CTA revoke must PRUNE the per-peer a2a_callable_by tuple immediately")
+			Expect(hasTuple(a2a.Deleted, wsObj, "a2a_callable_by", "workspace:peer-ws")).To(BeTrue(),
+				"prune must have issued a delete for the revoked peer tuple")
 		})
 
 		It("fails the reconcile (fail-closed) when the CTA resolver errors", func() {
@@ -207,10 +276,15 @@ var _ = Describe("WorkspaceReconciler A2A (E2 T4/T6)", func() {
 			Expect(res.RequeueAfter).To(BeNumerically(">", 0),
 				"resolver error must requeue rather than write a partial grant set")
 			wsObj := "workspace:" + name
-			for _, tp := range rec.Synced {
-				Expect(tp.Object == wsObj && tp.Relation == "a2a_callable_by").To(BeFalse(),
-					"no a2a tuple may be synced when the CTA resolver errors")
-			}
+			// The resolver error aborts before ReconcileA2A is called: no a2a
+			// tuple is written, and crucially none is PRUNED (we must not delete a
+			// live grant on a transient CTA-API error — that would be fail-OPEN
+			// removal, the opposite of what we want).
+			Expect(a2a.Written).To(BeEmpty(),
+				"no a2a tuple may be written when the CTA resolver errors")
+			Expect(a2a.Deleted).To(BeEmpty(),
+				"no a2a tuple may be pruned when the CTA resolver errors (no fail-open revoke)")
+			Expect(a2a.liveTuples(wsObj)).To(BeEmpty())
 		})
 	})
 

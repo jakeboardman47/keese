@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+#
+# OpenFGA model test assertions for the workspace.a2a_callable_by relation
+# (E2 / 04a iter-7). This is the inbound A2A HTTP/SSE endpoint grant the
+# ext_authz Check resolves per request:
+#   Check(user=workspace:W_from, relation=a2a_callable_by, object=workspace:W_to).
+#
+# Run with: fga model test --tests tests/openfga/a2a-callable-by.yaml
+#
+# The relation is a DIRECT grant ([workspace] only, no computed userset), so a
+# call is allowed iff the Workspace controller wrote the matching tuple. This
+# test fixes the tuple set in the store and asserts the Check verdict — the
+# controller-side test (workspace_a2a_test.go) asserts which tuples get written
+# and PRUNED; together they cover the full grant lifecycle.
+#
+# Assertions:
+#   1. ALLOW  workspace:callee#a2a_callable_by@workspace:callee
+#             — intra-tenant SELF grant: an enabled same-tenant workspace admits
+#               its own resolved caller.
+#   2. ALLOW  workspace:callee#a2a_callable_by@workspace:peer-approved
+#             — cross-tenant peer covered by an Approved CTA (controller wrote the
+#               per-peer tuple).
+#   3. DENY   workspace:callee#a2a_callable_by@workspace:peer-ungranted
+#             — no tuple for this caller; ext_authz must deny (no Approved CTA, or
+#               grant pruned after disable/CTA-revoke).
+#   4. DENY   workspace:other#a2a_callable_by@workspace:peer-approved
+#             — a grant on workspace:callee must NOT bleed to a different callee;
+#               grants are per-callee-object.
+
+name: a2a-callable-by-gating
+model_path: ../../dev/bootstrap/openfga/model.fga
+
+tuples:
+  # intra-tenant self grant (Workspace controller, A2A enabled, intra-tenant scope)
+  - user: workspace:callee
+    relation: a2a_callable_by
+    object: workspace:callee
+  # cross-tenant per-peer grant (Workspace controller, Approved CTA for peer-approved)
+  - user: workspace:peer-approved
+    relation: a2a_callable_by
+    object: workspace:callee
+
+tests:
+  - name: allow - intra-tenant self grant admits the workspace's own caller
+    check:
+      user: workspace:callee
+      relation: a2a_callable_by
+      object: workspace:callee
+    expectation: true
+
+  - name: allow - approved-CTA cross-tenant peer is callable
+    check:
+      user: workspace:peer-approved
+      relation: a2a_callable_by
+      object: workspace:callee
+    expectation: true
+
+  - name: deny - ungranted caller (no Approved CTA / pruned grant) is rejected
+    check:
+      user: workspace:peer-ungranted
+      relation: a2a_callable_by
+      object: workspace:callee
+    expectation: false
+
+  - name: deny - a grant on callee does not bleed to a different callee object
+    check:
+      user: workspace:peer-approved
+      relation: a2a_callable_by
+      object: workspace:other
+    expectation: false
