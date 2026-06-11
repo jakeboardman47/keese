@@ -17,7 +17,7 @@ depends_on: [E1a]
 agent: implementer
 outputs:
   - internal/runtime/a2a/bridge/
-  - internal/runtime/providers/adk/
+  - internal/runtime/providers/adkpython/
   - docs/specs/egress-authz-protocol.md
 ---
 

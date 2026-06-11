@@ -16,7 +16,7 @@ model_tier: sonnet
 depends_on: [E1b]
 agent: controller-author
 outputs:
-  - internal/runtime/providers/adk/
+  - internal/runtime/providers/adkpython/
 ---
 
 # E1c — ADK Python NetworkPolicy + envtest hardening

@@ -22,7 +22,7 @@ model_tier: sonnet
 depends_on: [E0]
 agent: controller-author
 outputs:
-  - internal/runtime/providers/adk/
+  - internal/runtime/providers/adkpython/
   - internal/controller/keese/workspacesession_controller.go
   - internal/runtime/a2a/bridge/
   - Dockerfile.adk-python

@@ -77,6 +77,25 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-11 — expansion E1a: ADK Python pod template + discriminator
+
+- First increment of the decomposed E1 (ADK Python runtime). `internal/runtime/providers/
+  adkpython/BuildPodSpec` renders a single-container ADK pod: **zero credential env**
+  (no `secretKeyRef`/`*API_KEY*`; gateway base-URLs only — rule 05.2), projected egress
+  SA token (`keese-egress-<tenant>`, 600s, `AutomountServiceAccountToken:false` — rule
+  05.7), hardened SecurityContext (RO root FS, drop ALL, non-root 65532 — rule 05.11).
+  `workspacesession_controller.go` discriminates on `spec.implementation.adkPython`
+  (else the verbatim-extracted `buildGooseSessionPodSpec`); goose untouched, 121 specs green.
+- **Path reality:** the provider package is `internal/runtime/providers/adkpython/`
+  (registry key `adkPython`), NOT `adk/` — E0 created it there. Fixed all E1/E1a/E1b/E1c
+  `outputs:` to `adkpython/`. (E3's ADK Go provider will need its own path, e.g. `adkgo/`
+  — revisit the E1/E3 "shared adk/" conflict claim when E3 is dispatched.)
+- **Stub:** `docker build` can't run in-worktree → `revisit_when_image_built` (CI pins
+  the `sha256:` on first build). `Dockerfile.adk-python` already on main (pre-existing).
+- **Env gotcha:** `make lint` can't run — repo `.golangci.yml` is v1-format but the
+  installed `golangci-lint` is v2.10.1 ("unsupported config version"); agents substitute
+  `gofmt`+`go vet`. Pre-existing; migrate the config or pin the linter in the flake.
+
 ### 2026-06-10 — controller-hardening CH5d: metering e2e (track complete)
 
 - `tests/e2e/token-budget/` (CH5d, shipped-with-stubs): the over-budget step drives real

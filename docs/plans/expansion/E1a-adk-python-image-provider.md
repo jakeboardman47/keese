@@ -10,15 +10,16 @@ depends:
   - ../../../internal/runtime/providers/goose/goose.go
   - ../../designs/05a-envoy-ai-gateway-topology.md
 related_skills: [plan-management, controller-authoring]
-status: planned
-last_verified: 2026-06-10
+status: shipped-with-stubs
+last_verified: 2026-06-11
+revisit_when_image_built: true
 phase: E1a
 model_tier: sonnet
 depends_on: [E0]
 agent: controller-author
 outputs:
   - Dockerfile.adk-python
-  - internal/runtime/providers/adk/
+  - internal/runtime/providers/adkpython/
   - internal/controller/keese/workspacesession_controller.go
 ---
 
