@@ -27,6 +27,7 @@ import (
 
 	keesev1alpha1 "github.com/keese-ai/keese/api/keese/v1alpha1"
 	policyv1alpha1 "github.com/keese-ai/keese/api/policy/v1alpha1"
+	"github.com/keese-ai/keese/internal/runtime/providers/adkgo"
 	"github.com/keese-ai/keese/internal/runtime/providers/adkpython"
 )
 
@@ -453,10 +454,16 @@ func (r *WorkspaceSessionReconciler) applySessionPod(
 		return err
 	}
 
-	// adkPython branch only: lock down the pod's network fail-closed (rule
-	// 04.17 + 05.4 + 05.5). The goose path STAYS UNTOUCHED.
-	if ar.Spec.Implementation.AdkPython != nil {
+	// ADK branches only: lock down the pod's network fail-closed (rule
+	// 04.17 + 05.4 + 05.5). The goose path STAYS UNTOUCHED. adkPython and
+	// adkGo each render their own (byte-identical-shaped) policy.
+	switch {
+	case ar.Spec.Implementation.AdkPython != nil:
 		if err := r.applySessionNetworkPolicy(ctx, sess, ws); err != nil {
+			return err
+		}
+	case ar.Spec.Implementation.AdkGo != nil:
+		if err := r.applyADKGoSessionNetworkPolicy(ctx, sess, ws); err != nil {
 			return err
 		}
 	}
@@ -481,10 +488,36 @@ func (r *WorkspaceSessionReconciler) applySessionNetworkPolicy(
 		client.ForceOwnership)
 }
 
+// applyADKGoSessionNetworkPolicy issues a Server-Side Apply for the ADK Go
+// session pod's fail-closed NetworkPolicy. Called ONLY on the adkGo branch.
+//
+// The policy is rendered by internal/runtime/providers/adkgo.BuildNetworkPolicy:
+// default-deny ingress+egress, then exact allows only (gateway:443, NATS:4222,
+// peer A2A ingress/egress on 8081). No wildcards (rule 05.5). The object name is
+// deterministic per workspace so SSA re-applies are stable across reconciles.
+func (r *WorkspaceSessionReconciler) applyADKGoSessionNetworkPolicy(
+	ctx context.Context,
+	sess *keesev1alpha1.WorkspaceSession,
+	ws *keesev1alpha1.Workspace,
+) error {
+	np := buildADKGoSessionNetworkPolicyObject(sess, ws)
+	return r.Client.Patch(ctx, np, client.Apply,
+		client.FieldOwner(sessionFieldOwner),
+		client.ForceOwnership)
+}
+
 // adkSessionNetworkPolicyName returns the deterministic NetworkPolicy name for
 // the ADK Python session pods of a workspace.
 func adkSessionNetworkPolicyName(ws *keesev1alpha1.Workspace) string {
 	return "keese-ws-" + string(ws.UID) + "-adk-netpol"
+}
+
+// adkGoSessionNetworkPolicyName returns the deterministic NetworkPolicy name for
+// the ADK Go session pods of a workspace. Distinct from the adkPython name so a
+// workspace that switches runtimes never leaves a stale policy owning the pod
+// selector — each provider owns a uniquely-named object.
+func adkGoSessionNetworkPolicyName(ws *keesev1alpha1.Workspace) string {
+	return "keese-ws-" + string(ws.UID) + "-adk-go-netpol"
 }
 
 // buildSessionNetworkPolicyObject constructs the ADK Python NetworkPolicy SSA
@@ -502,6 +535,38 @@ func buildSessionNetworkPolicyObject(
 	}
 	np := adkpython.BuildNetworkPolicy(adkpython.NetworkPolicyInputFromCRs(
 		ws, sess.Namespace, adkSessionNetworkPolicyName(ws), labels,
+	))
+	// Owner reference keeps the policy garbage-collected with the session.
+	np.OwnerReferences = []metav1.OwnerReference{
+		{
+			APIVersion:         keesev1alpha1.GroupVersion.String(),
+			Kind:               "WorkspaceSession",
+			Name:               sess.Name,
+			UID:                sess.UID,
+			Controller:         ptr(true),
+			BlockOwnerDeletion: ptr(true),
+		},
+	}
+	return np
+}
+
+// buildADKGoSessionNetworkPolicyObject constructs the ADK Go NetworkPolicy SSA
+// object, reusing the adkgo provider renderer and the shared pod-provenance
+// labels so SSA ownership + selectors line up with the pod's keese.ai/workspace
+// label. Mirrors buildSessionNetworkPolicyObject (adkPython) with the adkgo
+// renderer + the adkGo-specific object name.
+func buildADKGoSessionNetworkPolicyObject(
+	sess *keesev1alpha1.WorkspaceSession,
+	ws *keesev1alpha1.Workspace,
+) *networkingv1.NetworkPolicy {
+	tenantName := ws.Spec.TenantRef.Name
+	labels := map[string]string{
+		"keese.ai/workspace":           ws.Name,
+		"keese.ai/tenant":              tenantName,
+		"app.kubernetes.io/managed-by": sessionFieldOwner,
+	}
+	np := adkgo.BuildNetworkPolicy(adkgo.NetworkPolicyInputFromCRs(
+		ws, sess.Namespace, adkGoSessionNetworkPolicyName(ws), labels,
 	))
 	// Owner reference keeps the policy garbage-collected with the session.
 	np.OwnerReferences = []metav1.OwnerReference{
@@ -805,6 +870,20 @@ func buildSessionPodObject(
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
 			ObjectMeta: meta,
 			Spec: adkpython.BuildPodSpec(adkpython.PodInputFromCRs(
+				ws, ar, serviceAccountName(ws), sessionPVCName(ws),
+			)),
+		}
+	}
+
+	// E3 T5 discriminator: the ADK Go provider renders its own single-
+	// container pod template, mirroring the adkPython security posture exactly
+	// (rule 05). goose stays on the unchanged path below; adkPython is handled
+	// above. Both ADK branches share the provider-agnostic ObjectMeta (meta).
+	if ar.Spec.Implementation.AdkGo != nil {
+		return &corev1.Pod{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+			ObjectMeta: meta,
+			Spec: adkgo.BuildPodSpec(adkgo.PodInputFromCRs(
 				ws, ar, serviceAccountName(ws), sessionPVCName(ws),
 			)),
 		}
