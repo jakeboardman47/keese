@@ -85,17 +85,40 @@ spec:
                 description: Model specifies the provider and model ID.
                 properties:
                   modelID:
-                    description: ModelID is the provider-specific model identifier.
+                    description: |-
+                      ModelID is the provider-specific model identifier. Literal form;
+                      mutually exclusive with modelProviderRef.
                     minLength: 1
                     type: string
+                  modelProviderRef:
+                    description: |-
+                      ModelProviderRef references a ModelProvider CR in the Recipe's namespace
+                      that owns the model endpoint and credential source. Reference form;
+                      mutually exclusive with the literal provider+modelID fields.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   provider:
-                    description: Provider is the model provider name, e.g. "anthropic".
+                    description: |-
+                      Provider is the model provider name, e.g. "anthropic". Literal form;
+                      mutually exclusive with modelProviderRef.
                     minLength: 1
                     type: string
-                required:
-                - modelID
-                - provider
                 type: object
+                x-kubernetes-validations:
+                - message: 'set exactly one model form: literal (provider+modelID)
+                    or modelProviderRef (RecipeModelEitherForm)'
+                  rule: 'has(self.modelProviderRef) ? (!has(self.provider) && !has(self.modelID))
+                    : (has(self.provider) && has(self.modelID))'
               parameters:
                 description: Parameters defines typed arguments injected as env vars
                   into the workspace.

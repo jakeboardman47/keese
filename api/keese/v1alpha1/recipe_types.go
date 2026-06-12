@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -27,14 +28,33 @@ type RecipeTool struct {
 	Name string `json:"name"`
 }
 
-// RecipeModel specifies the model provider and ID.
+// RecipeModel selects the model for a recipe in exactly one of two forms:
+//
+//   - Literal:  set provider + modelID (the original, backwards-compatible form).
+//   - Reference: set modelProviderRef to point at a ModelProvider CR in the same
+//     namespace, which owns the endpoint + credential source (E5).
+//
+// The RecipeModelEitherForm CEL rule enforces the one-of: literal requires both
+// provider and modelID; the reference form requires modelProviderRef and forbids
+// the literal fields. Existing Recipes that set provider+modelID keep working.
+//
+// +kubebuilder:validation:XValidation:rule="has(self.modelProviderRef) ? (!has(self.provider) && !has(self.modelID)) : (has(self.provider) && has(self.modelID))",message="set exactly one model form: literal (provider+modelID) or modelProviderRef (RecipeModelEitherForm)"
 type RecipeModel struct {
-	// Provider is the model provider name, e.g. "anthropic".
+	// Provider is the model provider name, e.g. "anthropic". Literal form;
+	// mutually exclusive with modelProviderRef.
 	// +kubebuilder:validation:MinLength=1
-	Provider string `json:"provider"`
-	// ModelID is the provider-specific model identifier.
+	// +optional
+	Provider string `json:"provider,omitempty"`
+	// ModelID is the provider-specific model identifier. Literal form;
+	// mutually exclusive with modelProviderRef.
 	// +kubebuilder:validation:MinLength=1
-	ModelID string `json:"modelID"`
+	// +optional
+	ModelID string `json:"modelID,omitempty"`
+	// ModelProviderRef references a ModelProvider CR in the Recipe's namespace
+	// that owns the model endpoint and credential source. Reference form;
+	// mutually exclusive with the literal provider+modelID fields.
+	// +optional
+	ModelProviderRef *corev1.LocalObjectReference `json:"modelProviderRef,omitempty"`
 }
 
 // RecipeHook is a pre/post-flight hook. Exactly one of cel or shellRef must be set.
