@@ -376,6 +376,66 @@ metadata:
         },
         {
           "apiVersion": "keese.ai/v1alpha1",
+          "kind": "ModelProvider",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese",
+              "keese.ai/managed": "true"
+            },
+            "name": "modelprovider-gemini",
+            "namespace": "default"
+          },
+          "spec": {
+            "credentialSecretRef": {
+              "name": "gemini-api-credential"
+            },
+            "provider": "gemini"
+          }
+        },
+        {
+          "apiVersion": "keese.ai/v1alpha1",
+          "kind": "ModelProvider",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese",
+              "keese.ai/managed": "true"
+            },
+            "name": "modelprovider-ollama",
+            "namespace": "default"
+          },
+          "spec": {
+            "discoveryEnabled": true,
+            "discoveryInterval": "30m",
+            "endpoint": "http://ollama.keese-system:11434",
+            "model": "llama3.1",
+            "provider": "ollama"
+          }
+        },
+        {
+          "apiVersion": "keese.ai/v1alpha1",
+          "kind": "ModelProvider",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese",
+              "keese.ai/managed": "true"
+            },
+            "name": "modelprovider-sapaicore",
+            "namespace": "default"
+          },
+          "spec": {
+            "credentialSecretRef": {
+              "name": "sapaicore-service-key"
+            },
+            "endpoint": "https://api.ai.prod.eu-central-1.aws.ml.hana.ondemand.com",
+            "model": "anthropic--claude-3.5-sonnet",
+            "provider": "sapAICore"
+          }
+        },
+        {
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "Recipe",
           "metadata": {
             "labels": {
@@ -730,7 +790,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    createdAt: "2026-06-11T21:40:32Z"
+    createdAt: "2026-06-12T00:38:15Z"
     operators.operatorframework.io/builder: operator-sdk-unknown
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
   name: keese.v0.0.1
@@ -768,6 +828,13 @@ spec:
       displayName: Memory
       kind: Memory
       name: memories.keese.ai
+      version: v1alpha1
+    - description: |-
+        ModelProvider is the Schema for the modelproviders API. It declares a model
+        endpoint and credential source, decoupled from Recipe.
+      displayName: Model Provider
+      kind: ModelProvider
+      name: modelproviders.keese.ai
       version: v1alpha1
     - description: |-
         OIDCProvider is the Schema for the oidcproviders API.
@@ -941,6 +1008,32 @@ spec:
           verbs:
           - update
         - apiGroups:
+          - keese.ai
+          resources:
+          - modelproviders
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - keese.ai
+          resources:
+          - modelproviders/status
+          verbs:
+          - get
+          - update
+          - patch
+        - apiGroups:
+          - keese.ai
+          resources:
+          - modelproviders/finalizers
+          verbs:
+          - update
+        - apiGroups:
           - ""
           resources:
           - persistentvolumeclaims
@@ -960,32 +1053,6 @@ spec:
           - get
           - list
           - watch
-        - apiGroups:
-          - keese.ai
-          resources:
-          - crosstenantagreements
-          verbs:
-          - get
-          - list
-          - watch
-          - create
-          - update
-          - patch
-          - delete
-        - apiGroups:
-          - keese.ai
-          resources:
-          - crosstenantagreements/status
-          verbs:
-          - get
-          - update
-          - patch
-        - apiGroups:
-          - keese.ai
-          resources:
-          - crosstenantagreements/finalizers
-          verbs:
-          - update
         - apiGroups:
           - ""
           resources:
@@ -1049,14 +1116,6 @@ spec:
           - list
           - patch
           - update
-          - watch
-        - apiGroups:
-          - authz.keese.ai
-          resources:
-          - crosstenanagreements
-          verbs:
-          - get
-          - list
           - watch
         - apiGroups:
           - authz.keese.ai

@@ -41,6 +41,13 @@ spec:
       name: memories.keese.ai
       version: v1alpha1
     - description: |-
+        ModelProvider is the Schema for the modelproviders API. It declares a model
+        endpoint and credential source, decoupled from Recipe.
+      displayName: Model Provider
+      kind: ModelProvider
+      name: modelproviders.keese.ai
+      version: v1alpha1
+    - description: |-
         OIDCProvider is the Schema for the oidcproviders API.
         OIDCProvider is cluster-scoped and configures OIDC issuer trust for the Envoy AI Gateway
         ext_authz pipeline. Bootstrap CRs (kubernetes-default, google, github-actions, etc.) are
