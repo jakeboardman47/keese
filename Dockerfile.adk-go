@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+
+# keese adk-go runtime image — Google ADK Go (google.golang.org/adk) +
+# github.com/a2aproject/a2a-go wrapped as a thin keese A2A server. The keese
+# WorkspaceSession controller supplies the command line at pod spec time
+# (typically `/app/adk-go serve --workspace $WS --a2a-port 8080`); the image
+# only carries the statically-linked binary and CA certs.
+#
+# Smaller footprint than the Python sibling: a single CGO-free Go binary on
+# gcr.io/distroless/static-debian12 lands at ~50 MB versus ~200 MB for
+# Dockerfile.adk-python's interpreter + venv. The binary serves A2A on :8080
+# and exposes /healthz + /readyz for kubelet probes.
+#
+# Build:
+#   docker build -f Dockerfile.adk-go -t keese/adk-go:dev .
+# Load into kind:
+#   make adk-go-load
+# Smoke:
+#   docker run --rm keese/adk-go:dev --version
+#
+# Production images MUST be digest-pinned (rule 05.12). VAP
+# `adk-runtime-image-digest-pinned` rejects unpinned references outside
+# namespaces labeled keese.ai/environment=dev. Dev/CI tag only here.
+#
+# Plan ref: docs/plans/expansion/E3-adk-go-runtime.md §T1
+
+# ── Stage 1: build the adk-go binary (pure Go, CGO disabled) ──────────
+# golang:1.24-bookworm per the E3 plan; the keese module's own toolchain
+# directive (go 1.25.0) is satisfied by the bookworm image's Go ≥ 1.24 plus
+# the auto-download of the pinned toolchain when newer.
+FROM golang:1.24-bookworm AS build
+ARG TARGETOS
+ARG TARGETARCH
+WORKDIR /workspace
+
+# Module graph first so the layer caches across source-only changes.
+COPY go.mod go.mod
+COPY go.sum go.sum
+RUN go mod download
+
+# adk-go binary sources + the packages it imports. CGO_ENABLED=0 keeps the
+# binary fully static so it runs on distroless/static (no glibc) — the E3
+# risk-table mitigation for "distroless static missing glibc for CGO deps".
+COPY cmd/ cmd/
+COPY internal/ internal/
+COPY api/ api/
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -a -o /out/adk-go ./cmd/adk-go
+
+# ── Stage 2: distroless static runtime ────────────────────────────────
+# static-debian12 ships CA certs + tzdata + the nonroot user (uid 65532)
+# and nothing else — no shell, no libc. The pod-spec command must invoke the
+# binary directly. /var/run/keese/{session,tokens,ca} are mounted at runtime
+# by the pod template (E3 T2); no need to mkdir here.
+FROM gcr.io/distroless/static-debian12:nonroot
+
+COPY --from=build /out/adk-go /app/adk-go
+
+# Runs as the distroless nonroot user (uid 65532). The pod's SecurityContext
+# pins runAsNonRoot:true + readOnlyRootFilesystem:true (rule 05.11); all
+# writes go to mounted volumes.
+USER 65532:65532
+
+# A2A server port (localhost-only in the pod; the a2a-bridge sidecar fronts
+# peer ingress). Documentation only — the NetworkPolicy is the enforcement.
+EXPOSE 8080
+
+# Default entrypoint is the binary; the keese controller overrides command +
+# args per session. Smoke check: `docker run --rm IMAGE --version`.
+ENTRYPOINT ["/app/adk-go"]
