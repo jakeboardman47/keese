@@ -8,6 +8,7 @@ resources:
 - workflow_v1alpha1_workflow.yaml
 - workflow_v1alpha1_workflowrun.yaml
 - runtime_v1alpha1_agentruntime.yaml
+- runtime_v1alpha1_agentruntime_adk_go_full.yaml
 - runtime_v1alpha1_runtimeextension.yaml
 - memory_v1alpha1_memory.yaml
 - memory_v1alpha1_sharedmemory.yaml
