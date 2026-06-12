@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+---
+# E3 T6 — fully populated ADK Go AgentRuntime. Exercises every optional
+# ADKGoSpec field (goVersion, adkVersion, sessionStoreRef, compactionInterval)
+# so the full spec passes server-side dry-run / kubeconform. Image is
+# digest-pinned per rule 05.12 (VAP adk-runtime-image-digest-pinned rejects
+# unpinned refs outside dev-labeled namespaces).
+apiVersion: keese.ai/v1alpha1
+kind: AgentRuntime
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: agentruntime-adk-go-full
+spec:
+  implementation:
+    adkGo:
+      image: ghcr.io/keese-ai/adk-go@sha256:0000000000000000000000000000000000000000000000000000000000000002
+      goVersion: "1.24"
+      adkVersion: "0.1.0"
+      sessionStoreRef:
+        name: adk-go-session-store
+      compactionInterval: 1h
