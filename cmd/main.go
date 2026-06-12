@@ -363,6 +363,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "SharedMemory")
 		os.Exit(1)
 	}
+	if err := (&keesecontroller.ModelProviderReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		// Rebac + Discoverer default to the no-op writer and the HTTP discoverer
+		// in SetupWithManager. OpenFGA wiring lands when the model is extended.
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ModelProvider")
+		os.Exit(1)
+	}
 	if err := (&keesecontroller.RecipeReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
