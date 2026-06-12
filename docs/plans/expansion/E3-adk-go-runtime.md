@@ -14,14 +14,16 @@ depends:
   - ../../designs/07-agent-runtime-spi.md
 related_skills: [plan-management, controller-authoring]
 status: planned
-last_verified: 2026-05-13
+last_verified: 2026-06-11
 phase: E3
 model_tier: sonnet
 depends_on: [E0]
 agent: implementer
 outputs:
-  - internal/runtime/providers/adk/
+  - internal/runtime/providers/adkgo/
+  - internal/controller/keese/workspacesession_controller.go
   - Dockerfile.adk-go
+  - config/samples/
 ---
 
 # E3 — ADK Go runtime
