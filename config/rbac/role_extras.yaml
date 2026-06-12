@@ -31,6 +31,16 @@ rules:
   - apiGroups: [keese.ai]
     resources: [memories/finalizers, sharedmemories/finalizers]
     verbs: [update]
+  # ---- keese.ai ----
+  - apiGroups: [keese.ai]
+    resources: [modelproviders]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [keese.ai]
+    resources: [modelproviders/status]
+    verbs: [get, update, patch]
+  - apiGroups: [keese.ai]
+    resources: [modelproviders/finalizers]
+    verbs: [update]
   # ---- core: PVC and ConfigMap reads (recipe + memory) ----
   - apiGroups: [""]
     resources: [persistentvolumeclaims]

@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# ModelProvider sample — SAP AI Core. Tenant-specific endpoint; the SAP credential
+# is treated as an opaque secret, projected as a file at the gateway (no custom
+# auth logic, rule 05.7). Discovery is left off (SAP AI Core has no standard
+# model-list endpoint in this build).
+apiVersion: keese.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: modelprovider-sapaicore
+  namespace: default
+spec:
+  provider: sapAICore
+  endpoint: "https://api.ai.prod.eu-central-1.aws.ml.hana.ondemand.com"
+  credentialSecretRef:
+    name: sapaicore-service-key
+  model: "anthropic--claude-3.5-sonnet"

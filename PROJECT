@@ -165,4 +165,13 @@ resources:
   kind: WorkspaceSession
   path: github.com/keese-ai/keese/api/keese/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: keese.ai
+  group: ""
+  kind: ModelProvider
+  path: github.com/keese-ai/keese/api/keese/v1alpha1
+  version: v1alpha1
 version: "3"

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Fully-populated ModelProvider sample — in-cluster Ollama with discovery enabled.
+# Ollama requires an explicit endpoint (OllamaEndpointRequired CEL rule). It runs
+# locally and needs no upstream credential, so credentialSecretRef is omitted.
+apiVersion: keese.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: modelprovider-ollama
+  namespace: default
+spec:
+  provider: ollama
+  endpoint: "http://ollama.keese-system:11434"
+  discoveryEnabled: true
+  discoveryInterval: "30m"
+  model: "llama3.1"

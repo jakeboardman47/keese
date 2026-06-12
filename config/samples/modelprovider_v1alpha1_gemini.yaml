@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Minimal ModelProvider sample — Gemini direct, well-known endpoint, no discovery.
+# Credential is referenced by name only (rule 05.7); the Secret is populated from
+# OpenBao via ExternalSecrets and projected as a file at the gateway — never inline.
+apiVersion: keese.ai/v1alpha1
+kind: ModelProvider
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: modelprovider-gemini
+  namespace: default
+spec:
+  provider: gemini
+  credentialSecretRef:
+    name: gemini-api-credential

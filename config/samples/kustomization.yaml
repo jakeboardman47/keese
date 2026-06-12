@@ -16,6 +16,9 @@ resources:
 - guardrail_v1alpha1_guardrailbinding.yaml
 - observability_v1alpha1_tokenbudget.yaml
 - transport_v1alpha1_transport.yaml
+- modelprovider_v1alpha1_gemini.yaml
+- modelprovider_v1alpha1_ollama.yaml
+- modelprovider_v1alpha1_sapaicore.yaml
 - tenancy/tenant-minimal.yaml
 - tenancy/cra-alpha-to-beta-minimal.yaml
 - authz/oidcprovider-minimal.yaml
