@@ -51,9 +51,9 @@ kagent integration is explicitly out of scope; keese remains standalone.
 | E1b | [· A2A bridge sidecar](E1b-adk-python-a2a-bridge.md) | 3 d | E1a | yes | shipped-with-stubs |
 | E1c | [· NetworkPolicy + envtest](E1c-adk-python-networkpolicy-envtest.md) | 3 d | E1b | yes | complete |
 | E2 | [A2A protocol on Workspace](E2-a2a-protocol.md) | 1 w | E1 | yes | shipped-with-stubs |
-| E3 | [ADK Go runtime](E3-adk-go-runtime.md) | 2 w | E0 | yes | planned |
+| E3 | [ADK Go runtime](E3-adk-go-runtime.md) | 2 w | E0 | yes | shipped-with-stubs |
 | E4 | [Context compaction](E4-context-compaction.md) | 3 d | E1 | yes | planned |
-| E5 | [ModelProvider CRD](E5-model-provider-config.md) | 3 d | E2 | parallel | planned |
+| E5 | [ModelProvider CRD](E5-model-provider-config.md) | 3 d | E2 | parallel | shipped-with-stubs |
 | E6 | [Skills CRD](E6-skills.md) | 1 w | E2 | parallel | planned |
 | E7 | [ScheduledRun CRD](E7-scheduled-run.md) | 2 d | E2 | parallel | planned |
 | E8 | [SessionStore CRD](E8-session-store.md) | 1 w | E2 | parallel | planned |

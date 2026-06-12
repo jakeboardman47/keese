@@ -11,8 +11,10 @@ depends:
   - ../../designs/05a-envoy-ai-gateway-topology.md
   - ../../designs/05b-credential-injection-patterns.md
 related_skills: [plan-management, crd-authoring, controller-authoring]
-status: planned
-last_verified: 2026-05-13
+status: shipped-with-stubs
+last_verified: 2026-06-11
+revisit_when_modelprovider_openfga: true
+revisit_when_discovery_providers: true
 phase: E5
 model_tier: sonnet
 depends_on: [E2]

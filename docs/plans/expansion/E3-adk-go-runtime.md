@@ -13,8 +13,9 @@ depends:
   - ../../../internal/runtime/providers/adk/
   - ../../designs/07-agent-runtime-spi.md
 related_skills: [plan-management, controller-authoring]
-status: planned
+status: shipped-with-stubs
 last_verified: 2026-06-11
+revisit_when_adkgo_image_built: true
 phase: E3
 model_tier: sonnet
 depends_on: [E0]

@@ -77,6 +77,28 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-11 — expansion Wave 3a: E5 ModelProvider CRD + E3 ADK Go runtime
+
+- **E5 — ModelProvider CRD** (`keese.ai/v1alpha1`, `mp`): 9-provider enum, FSM reconciler
+  (Pending→Validating→Ready↔Degraded), injectable `ModelDiscoverer` (openai/azure/ollama/
+  gemini; others `ErrDiscoveryUnsupported`), 429 backoff, finalizer. **Creds projected**:
+  `credentialSecretRef` is a name-only `LocalObjectReference` (rule 05.7, never inline);
+  `+keese:rebac-tuple=modelprovider.credential` marker but the tuple WRITE is noop-deferred
+  (no `model.fga` change — **rebac-modeler must add the `modelprovider` type**:
+  `revisit_when_modelprovider_openfga`). `Recipe.spec.model` gained a backwards-compatible
+  literal-XOR-`modelProviderRef` one-of. bundle-validate green.
+- **E3 — ADK Go runtime** (`internal/runtime/providers/adkgo/`): mirrors E1's adkPython pod
+  template (zero API keys, projected token, hardened SC) + NetworkPolicy; reuses E1's
+  a2a-bridge (no new code). Discriminator is now a `switch` (adkPython/adkGo cases, goose
+  default) — goose+python behavior preserved. **Distinct netpol name** `…-adk-go-netpol`
+  so runtime switches don't strand a stale policy / SSA-fight. 100% adkgo coverage. Stub:
+  `Dockerfile.adk-go` builds `cmd/adk-go` which doesn't exist (`revisit_when_adkgo_image_built`).
+- **Backlog surfaced:** (1) `scripts/coverage-check.sh` is RED on `main` — adkpython floor
+  100.0 unattainable (E1 tagged pure-render tests `integration` → −short coverage 36.8) +
+  policy 15.3 vs 16.0; fix = untag adkpython render tests (like E3) or lower floors.
+  (2) E5's OpenFGA `modelprovider` type (rebac-modeler). (3) `cmd/adk-go` + E2 wiring + the
+  ADK image builds. CRD chain E6→E7→E8 serializes (shared keese.ai deepcopy/PROJECT/bundle).
+
 ### 2026-06-11 — expansion E2 authz core: A2A a2a_callable_by (shipped-with-stubs)
 
 - Workspace `spec.a2a` (Enabled/Scope/Port) + the `a2a_callable_by` OpenFGA relation
