@@ -372,6 +372,17 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ModelProvider")
 		os.Exit(1)
 	}
+	if err := (&keesecontroller.SessionStoreReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		// Rebac defaults to the no-op writer (the OpenFGA model has no
+		// `sessionstore` type yet — deferred to rebac-modeler) and Migrator to the
+		// no-op migrator in SetupWithManager. The real PG migrator + OpenFGA writer
+		// wire in with no spec change once available.
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "SessionStore")
+		os.Exit(1)
+	}
 	if err := (&keesecontroller.RecipeReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

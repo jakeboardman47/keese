@@ -41,6 +41,20 @@ rules:
   - apiGroups: [keese.ai]
     resources: [modelproviders/finalizers]
     verbs: [update]
+  # ---- keese.ai ----
+  - apiGroups: [keese.ai]
+    resources: [sessionstores]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [keese.ai]
+    resources: [sessionstores/status]
+    verbs: [get, update, patch]
+  - apiGroups: [keese.ai]
+    resources: [sessionstores/finalizers]
+    verbs: [update]
+  # ---- core: SessionStore PG DSN secret reads (rule 05.7 projected file) ----
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list, watch]
   # ---- core: PVC and ConfigMap reads (recipe + memory) ----
   - apiGroups: [""]
     resources: [persistentvolumeclaims]
