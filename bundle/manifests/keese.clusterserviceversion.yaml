@@ -315,6 +315,31 @@ metadata:
               "app.kubernetes.io/name": "keese",
               "keese.ai/managed": "true"
             },
+            "name": "agentruntime-adk-go-full"
+          },
+          "spec": {
+            "implementation": {
+              "adkGo": {
+                "adkVersion": "0.1.0",
+                "compactionInterval": "1h",
+                "goVersion": "1.24",
+                "image": "ghcr.io/keese-ai/adk-go@sha256:0000000000000000000000000000000000000000000000000000000000000002",
+                "sessionStoreRef": {
+                  "name": "adk-go-session-store"
+                }
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "keese.ai/v1alpha1",
+          "kind": "AgentRuntime",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese",
+              "keese.ai/managed": "true"
+            },
             "name": "agentruntime-minimal"
           },
           "spec": {
@@ -572,6 +597,52 @@ metadata:
         },
         {
           "apiVersion": "keese.ai/v1alpha1",
+          "kind": "SessionStore",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese",
+              "keese.ai/managed": "true"
+            },
+            "name": "sessionstore-postgres",
+            "namespace": "default"
+          },
+          "spec": {
+            "postgres": {
+              "dsnSecretRef": {
+                "name": "session-pg-dsn"
+              },
+              "maxConnections": 25,
+              "sslMode": "verify-full"
+            },
+            "type": "postgres",
+            "workspaceRef": "demo-workspace"
+          }
+        },
+        {
+          "apiVersion": "keese.ai/v1alpha1",
+          "kind": "SessionStore",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "keese",
+              "keese.ai/managed": "true"
+            },
+            "name": "sessionstore-sqlite",
+            "namespace": "default"
+          },
+          "spec": {
+            "sqlite": {
+              "pvcRef": {
+                "name": "sessions-pvc"
+              }
+            },
+            "type": "sqlite",
+            "workspaceRef": "demo-workspace"
+          }
+        },
+        {
+          "apiVersion": "keese.ai/v1alpha1",
           "kind": "SharedMemory",
           "metadata": {
             "labels": {
@@ -790,7 +861,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    createdAt: "2026-06-12T00:38:15Z"
+    createdAt: "2026-06-16T00:17:25Z"
     operators.operatorframework.io/builder: operator-sdk-unknown
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
   name: keese.v0.0.1
@@ -868,6 +939,13 @@ spec:
       displayName: Runtime Extension
       kind: RuntimeExtension
       name: runtimeextensions.keese.ai
+      version: v1alpha1
+    - description: |-
+        SessionStore is the Schema for the sessionstores API. It declares where ADK /
+        goose runtimes persist structured session + event logs (postgres or sqlite).
+      displayName: Session Store
+      kind: SessionStore
+      name: sessionstores.keese.ai
       version: v1alpha1
     - description: SharedMemory is the Schema for the sharedmemories API.
       displayName: Shared Memory
@@ -1033,6 +1111,40 @@ spec:
           - modelproviders/finalizers
           verbs:
           - update
+        - apiGroups:
+          - keese.ai
+          resources:
+          - sessionstores
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - keese.ai
+          resources:
+          - sessionstores/status
+          verbs:
+          - get
+          - update
+          - patch
+        - apiGroups:
+          - keese.ai
+          resources:
+          - sessionstores/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - get
+          - list
+          - watch
         - apiGroups:
           - ""
           resources:

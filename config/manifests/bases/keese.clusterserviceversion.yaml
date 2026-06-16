@@ -80,6 +80,13 @@ spec:
       kind: RuntimeExtension
       name: runtimeextensions.keese.ai
       version: v1alpha1
+    - description: |-
+        SessionStore is the Schema for the sessionstores API. It declares where ADK /
+        goose runtimes persist structured session + event logs (postgres or sqlite).
+      displayName: Session Store
+      kind: SessionStore
+      name: sessionstores.keese.ai
+      version: v1alpha1
     - description: SharedMemory is the Schema for the sharedmemories API.
       displayName: Shared Memory
       kind: SharedMemory
