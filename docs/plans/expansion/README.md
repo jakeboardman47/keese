@@ -56,7 +56,7 @@ kagent integration is explicitly out of scope; keese remains standalone.
 | E5 | [ModelProvider CRD](E5-model-provider-config.md) | 3 d | E2 | parallel | shipped-with-stubs |
 | E6 | [Skills CRD](E6-skills.md) | 1 w | E2 | parallel | planned |
 | E7 | [ScheduledRun CRD](E7-scheduled-run.md) | 2 d | E2 | parallel | planned |
-| E8 | [SessionStore CRD](E8-session-store.md) | 1 w | E2 | parallel | planned |
+| E8 | [SessionStore CRD](E8-session-store.md) | 1 w | E2 | parallel | shipped-with-stubs |
 | E9 | [keese CLI](E9-cli.md) | 2 w | E8 | parallel | planned |
 | E10 | [Web UI](E10-web-ui.md) | 6–8 w | E8 | parallel | planned |
 | E11 | [Sandbox runtime](E11-sandbox-runtime.md) | 2 w | E1 | parallel | planned |

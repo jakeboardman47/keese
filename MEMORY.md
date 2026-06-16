@@ -77,6 +77,27 @@ ephemeral task state — that belongs in a plan or a TodoWrite list.
   - FeatureGate admission-outcome flip + real-drain in-cluster run need bootstrap
     wiring (OLM + cosign-webhook overlay; `make goose-runtime-load`) — both gated.
 
+### 2026-06-15 — expansion Wave 3b: E8 SessionStore CRD + coverage-gate fix
+
+- **E8 — SessionStore CRD** (`keese.ai/v1alpha1`, `ss`): `postgres|sqlite` **discriminated
+  one-of** (`exists_one` CEL + type-match guards, rule 04.6); FSM Pending→Migrating(pg)→
+  Ready↔Degraded; PG migration runs **RLS on `tenant_id`** (idempotent, gated on
+  `status.migrationVersion`); finalizer. **DB cred projected**: `postgres.dsnSecretRef` is a
+  name-only `LocalObjectReference` (rule 05.7, never inline). OpenFGA deferred (noop writer;
+  `+keese:rebac-tuple=sessionstore.workspace`; `model.fga` untouched — rebac-modeler adds
+  the `sessionstore` type). Migrator + adapter sidecar (T3/T4) also noop/deferred. 10-spec
+  envtest + bundle-validate green. **Unblocks Wave 4 (E9 CLI + E10 Web UI).**
+- **Coverage gate (was 3-red):** E1c had mis-tagged adkpython pure-render tests
+  `//go:build integration` → −short coverage collapsed. Untagged them (36.8→97.4); honest
+  floor drops (adkpython 100→97, policy 16→15 with inline justifications). **Still 1-red:**
+  `internal/featuregate` 77.7 vs 79.0 (OpenFeature `*Evaluation`/`Hooks` 0% covered — genuine
+  gap, NOT mis-tagging) → a `test-engineer` uplift is dispatched to author honest tests.
+- **Flake watch:** the `keese` integration package flaked ONCE under concurrent
+  `make test-integration` load (passes isolated) — load-related, not E8. Investigate if it recurs.
+- **Uncommitted on `main` (orchestrator did NOT author — left untouched):** `CONTRIBUTING.md`,
+  `Makefile`, `book/docs/development/dev-environment.md` (Nix dev-env setup + book/ MkDocs
+  targets) — surfaced to the user for commit/revert decision.
+
 ### 2026-06-11 — expansion Wave 3a: E5 ModelProvider CRD + E3 ADK Go runtime
 
 - **E5 — ModelProvider CRD** (`keese.ai/v1alpha1`, `mp`): 9-provider enum, FSM reconciler

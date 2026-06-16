@@ -11,8 +11,10 @@ depends:
   - ../../designs/15-memory-management.md
   - ../../designs/08b-goose-acp-stdio-k8s.md
 related_skills: [plan-management, crd-authoring, controller-authoring]
-status: planned
-last_verified: 2026-05-13
+status: shipped-with-stubs
+last_verified: 2026-06-15
+revisit_when_sessionstore_openfga: true
+revisit_when_sessionstore_adapter: true
 phase: E8
 model_tier: sonnet
 depends_on: [E2]
