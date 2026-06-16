@@ -20,6 +20,7 @@ resources:
 - bases/keese.ai_recipesources.yaml
 - bases/keese.ai_transports.yaml
 - bases/keese.ai_modelproviders.yaml
+- bases/keese.ai_sessionstores.yaml
 # authz (`authz.keese.ai`) — access control.
 - bases/authz.keese.ai_oidcproviders.yaml
 - bases/authz.keese.ai_crosstenantagreements.yaml
