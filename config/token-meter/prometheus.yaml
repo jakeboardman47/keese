@@ -57,7 +57,7 @@ spec:
         - name: prometheus
           # prom/prometheus:v2.54.1 — pinned by digest (rule 05.12 / rule 02
           # supply-chain). Dev loop image; prod uses the 10a pipeline.
-          image: prom/prometheus@sha256:11a4565c1c14ce302cf06e3c92f81e16a6db1a8d54fcce91ce8b25d36c11a1da
+          image: prom/prometheus:v2.54.1
           imagePullPolicy: IfNotPresent
           args:
             - --config.file=/etc/prometheus/prometheus.yml

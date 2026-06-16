@@ -27,7 +27,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # shellcheck source=../scripts/lib/log.sh
 source "${REPO_ROOT}/scripts/lib/log.sh"
@@ -89,7 +89,7 @@ apply_chart_crds() {
     return 0
   fi
 
-  log::step "apply CRDs from ${ref}@${version} (${crd_root})"
+  log::info "apply CRDs from ${ref}@${version} (${crd_root})"
   # SSA + force-conflicts: chart owns the schema; we cleanly take
   # ownership on first apply and update on subsequent applies.
   if find "${crd_root}" -name '*.yaml' -print0 | head -c 1 | grep -q .; then

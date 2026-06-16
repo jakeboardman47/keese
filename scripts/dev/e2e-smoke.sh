@@ -310,6 +310,9 @@ phase_06_sample_tenant() {
 
 phase_07_sample_workspace() {
   kubectl --context="${KUBE_CTX}" \
+    apply -f "${REPO_ROOT}/config/samples/runtime_v1alpha1_agentruntime.yaml"
+
+  kubectl --context="${KUBE_CTX}" \
     apply -f "${REPO_ROOT}/config/samples/workspace_v1alpha1_workspace.yaml"
 
   local ws_name
@@ -471,6 +474,11 @@ phase_09_teardown() {
   log::info "Deleting Workspace samples…"
   kubectl --context="${KUBE_CTX}" \
     delete -f "${REPO_ROOT}/config/samples/workspace_v1alpha1_workspace.yaml" \
+    --wait=true --timeout="${TIMEOUT_TEARDOWN}s" 2>/dev/null || true
+
+  log::info "Deleting AgentRuntime samples…"
+  kubectl --context="${KUBE_CTX}" \
+    delete -f "${REPO_ROOT}/config/samples/runtime_v1alpha1_agentruntime.yaml" \
     --wait=true --timeout="${TIMEOUT_TEARDOWN}s" 2>/dev/null || true
 
   log::info "Deleting Tenant samples…"

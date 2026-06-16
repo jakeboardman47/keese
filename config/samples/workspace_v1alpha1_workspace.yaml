@@ -16,5 +16,6 @@ spec:
     name: default-runtime
   tenantRef:
     name: acme-tenant
+  interactive: true
   sessionMode: OnDemand
   concurrencyPolicy: Allow

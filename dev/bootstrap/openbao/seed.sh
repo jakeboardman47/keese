@@ -18,8 +18,8 @@ set -euo pipefail
 IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../../scripts/lib/log.sh
-source "${SCRIPT_DIR}/../../scripts/lib/log.sh"
+# shellcheck source=../../../scripts/lib/log.sh
+source "${SCRIPT_DIR}/../../../scripts/lib/log.sh"
 
 BAO_ADDR="${BAO_ADDR:-http://localhost:8200}"
 # Dev-mode default — values/openbao.yaml runs OpenBao with `dev.enabled=true`

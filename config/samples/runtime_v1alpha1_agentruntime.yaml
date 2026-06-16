@@ -7,8 +7,8 @@ metadata:
     app.kubernetes.io/name: keese
     app.kubernetes.io/managed-by: kustomize
     keese.ai/managed: "true"
-  name: agentruntime-minimal
+  name: default-runtime
 spec:
   implementation:
     goose:
-      image: ghcr.io/block/goose:latest
+      image: ghcr.io/keese-ai/goose-runtime:dev

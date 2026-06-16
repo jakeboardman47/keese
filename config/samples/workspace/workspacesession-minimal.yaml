@@ -8,13 +8,13 @@ apiVersion: keese.ai/v1alpha1
 kind: WorkspaceSession
 metadata:
   name: ws-dev-a1b2c3d4e5f6a7b8-default
-  namespace: tenant-alpha
+  namespace: default
   labels:
-    keese.ai/workspace: ws-dev
+    keese.ai/workspace: workspace-sample-minimal
     keese.ai/subject-hash: a1b2c3d4e5f6a7b8
     keese.ai/session-name: default
 spec:
-  workspaceRef: ws-dev
+  workspaceRef: workspace-sample-minimal
   attachSubject: "user:alice@example.com"
   sessionName: default
   mode: per-user

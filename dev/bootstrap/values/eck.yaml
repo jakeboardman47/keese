@@ -22,7 +22,8 @@ resources:
 # Memory mapped files disabled (vm.max_map_count override not required in kind).
 extraObjects:
   # ── Elasticsearch ──────────────────────────────────────────────────────
-  - apiVersion: elasticsearch.k8s.elastic.co/v1
+  - |
+    apiVersion: elasticsearch.k8s.elastic.co/v1
     kind: Elasticsearch
     metadata:
       name: keese-es
@@ -58,7 +59,8 @@ extraObjects:
                     storage: 5Gi
 
   # ── Kibana ────────────────────────────────────────────────────────────
-  - apiVersion: kibana.k8s.elastic.co/v1
+  - |
+    apiVersion: kibana.k8s.elastic.co/v1
     kind: Kibana
     metadata:
       name: keese-kibana
@@ -70,7 +72,8 @@ extraObjects:
         name: keese-es
 
   # ── APM Server ────────────────────────────────────────────────────────
-  - apiVersion: apm.k8s.elastic.co/v1
+  - |
+    apiVersion: apm.k8s.elastic.co/v1
     kind: ApmServer
     metadata:
       name: keese-apm

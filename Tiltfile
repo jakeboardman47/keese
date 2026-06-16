@@ -16,6 +16,8 @@
 # Refs: docs/references/tilt-local-loop.md
 #       dev/bootstrap/README.md
 
+load('ext://restart_process', 'docker_build_with_restart')
+
 # ── 1. Preflight ──────────────────────────────────────────────────────────────
 
 local_resource(
@@ -66,7 +68,7 @@ local_resource(
 # Tilt rebuilds whenever Go source files change.
 local_resource(
     "compile-manager",
-    cmd = "go build -gcflags='all=-N -l' -o bin/manager ./cmd/main.go",
+    cmd = "CGO_ENABLED=0 GOOS=linux go build -gcflags='all=-N -l' -o bin/manager ./cmd/main.go",
     deps = [
         "cmd",
         "internal",
@@ -81,7 +83,7 @@ local_resource(
 docker_build_with_restart(
     "keese-ai/keese-operator:dev",
     ".",
-    dockerfile = "Dockerfile",
+    dockerfile = "Dockerfile.dev",
     entrypoint = ["/manager"],
     live_update = [
         sync("./bin/manager", "/manager"),

@@ -102,6 +102,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var disableWebhooks bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -111,6 +112,8 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&secureMetrics, "metrics-secure", true,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
+	flag.BoolVar(&disableWebhooks, "disable-webhooks", false,
+		"Disable the webhook server and webhook registration.")
 	flag.StringVar(&webhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook certificate.")
 	flag.StringVar(&webhookCertName, "webhook-cert-name", "tls.crt", "The name of the webhook certificate file.")
 	flag.StringVar(&webhookCertKey, "webhook-cert-key", "tls.key", "The name of the webhook key file.")
@@ -391,9 +394,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Recipe")
 		os.Exit(1)
 	}
-	if err := keesecontroller.SetupRecipeWebhookWithManager(mgr, nil); err != nil {
-		setupLog.Error(err, "unable to register webhook", "webhook", "Recipe")
-		os.Exit(1)
+	if !disableWebhooks {
+		if err := keesecontroller.SetupRecipeWebhookWithManager(mgr, nil); err != nil {
+			setupLog.Error(err, "unable to register webhook", "webhook", "Recipe")
+			os.Exit(1)
+		}
 	}
 	if err := (&keesecontroller.RecipeSourceReconciler{
 		Client: mgr.GetClient(),

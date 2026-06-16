@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+
+# Minimal developer Dockerfile that packages the host-compiled binary.
+# Uses alpine for development to support Tilt's hot-reload wrapper (requires touch/chmod).
+FROM alpine:3.20
+WORKDIR /
+COPY bin/manager /manager
+USER 65532:65532
+ENTRYPOINT ["/manager"]

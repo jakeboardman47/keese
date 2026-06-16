@@ -180,23 +180,24 @@ releases:
       - values/kyverno.yaml
 
   # ── Layer 1: Messaging ─────────────────────────────────────────────────
-  - name: nack
-    namespace: nats
-    createNamespace: true
-    chart: nats/nack
-    version: 0.33.2
-    needs:
-      - cert-manager/cert-manager
-
   - name: nats
     namespace: nats
-    createNamespace: false
+    createNamespace: true
     chart: nats/nats
     version: 1.3.16
     needs:
       - cert-manager/cert-manager
     values:
       - values/nats.yaml
+
+  - name: nack
+    namespace: nats
+    createNamespace: false
+    chart: nats/nack
+    version: 0.33.2
+    needs:
+      - cert-manager/cert-manager
+      - nats/nats
 
   # ── Layer 1: Logging / observability backend ───────────────────────────
   - name: eck-operator

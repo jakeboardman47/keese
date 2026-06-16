@@ -21,9 +21,6 @@ networking:
   serviceSubnet: "10.96.0.0/16"
   kubeProxyMode: iptables
 
-featureGates:
-  # GA in K8s 1.25; keep explicit for clarity and documentation purposes.
-  PodSecurity: true
 
 nodes:
   # ── Control plane ──────────────────────────────────────────────────────
@@ -73,7 +70,7 @@ nodes:
         listenAddress: "127.0.0.1"
     extraMounts:
       # Persist containerd image layers so cluster re-creation skips pulls.
-      - hostPath: /tmp/keese-containerd-worker1
+      - hostPath: /var/tmp/keese-containerd-worker1
         containerPath: /var/lib/containerd
 
   # ── Worker 2 — tenant-a / standard tier ───────────────────────────────
@@ -82,7 +79,7 @@ nodes:
       keese.ai/tenant: tenant-a
       keese.ai/tier: standard
     extraMounts:
-      - hostPath: /tmp/keese-containerd-worker2
+      - hostPath: /var/tmp/keese-containerd-worker2
         containerPath: /var/lib/containerd
 
   # ── Worker 3 — tenant-b / isolated tier ───────────────────────────────
@@ -99,5 +96,5 @@ nodes:
               value: "true"
               effect: NoSchedule
     extraMounts:
-      - hostPath: /tmp/keese-containerd-worker3
+      - hostPath: /var/tmp/keese-containerd-worker3
         containerPath: /var/lib/containerd

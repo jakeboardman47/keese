@@ -100,7 +100,7 @@
             # operator-sdk       # unverified; overlay fallback
             # setup-envtest      # unverified; go-install fallback
             # controller-gen     # unverified nixpkgs naming
-            # ctlptl             # unverified nixpkgs naming
+            ctlptl
             cfssl
             # cmctl              # unverified nixpkgs naming
 

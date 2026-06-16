@@ -133,12 +133,20 @@ spec:
         []
       containers:
         - name: seed
-          # fga CLI image — pin by digest in production.
-          image: ghcr.io/openfga/cli:v0.6.2 # unverified-2026
+          image: alpine/k8s:1.30.2
           command: ["/bin/sh", "-c"]
           args:
             - |
               set -euo pipefail
+
+              # Download and install fga CLI
+              ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
+              echo "Downloading fga CLI for ${ARCH}..."
+              curl -sSL -o /tmp/fga.tar.gz "https://github.com/openfga/cli/releases/download/v0.6.2/fga_0.6.2_linux_${ARCH}.tar.gz"
+              tar -xzf /tmp/fga.tar.gz -C /tmp fga
+              chmod +x /tmp/fga
+              export PATH="/tmp:$PATH"
+              echo "fga CLI installed successfully."
 
               FGA_API_URL="${FGA_API_URL:-http://openfga.openfga.svc.cluster.local:8080}"
               CM_NAME="openfga-config"
