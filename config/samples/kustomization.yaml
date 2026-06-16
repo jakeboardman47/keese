@@ -20,6 +20,8 @@ resources:
 - modelprovider_v1alpha1_gemini.yaml
 - modelprovider_v1alpha1_ollama.yaml
 - modelprovider_v1alpha1_sapaicore.yaml
+- sessionstore_v1alpha1_sqlite.yaml
+- sessionstore_v1alpha1_postgres.yaml
 - tenancy/tenant-minimal.yaml
 - tenancy/cra-alpha-to-beta-minimal.yaml
 - authz/oidcprovider-minimal.yaml

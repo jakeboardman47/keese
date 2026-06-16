@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Fully-populated SessionStore sample — PostgreSQL with RLS on tenant_id.
+# The DSN is referenced by name only (rule 05.7); the Secret is populated from
+# OpenBao via ExternalSecrets and is mounted by the adapter sidecar as a PROJECTED
+# FILE at /var/run/keese/secrets/dsn — never inline, never an env var. The DSN
+# must name a NON-superuser role so RLS cannot be bypassed.
+apiVersion: keese.ai/v1alpha1
+kind: SessionStore
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: sessionstore-postgres
+  namespace: default
+spec:
+  workspaceRef: demo-workspace
+  type: postgres
+  postgres:
+    dsnSecretRef:
+      name: session-pg-dsn
+    maxConnections: 25
+    sslMode: verify-full

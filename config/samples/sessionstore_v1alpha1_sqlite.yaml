@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 keese-ai
+# Minimal SessionStore sample — SQLite on an existing PVC. Single-replica only.
+apiVersion: keese.ai/v1alpha1
+kind: SessionStore
+metadata:
+  labels:
+    app.kubernetes.io/name: keese
+    app.kubernetes.io/managed-by: kustomize
+    keese.ai/managed: "true"
+  name: sessionstore-sqlite
+  namespace: default
+spec:
+  workspaceRef: demo-workspace
+  type: sqlite
+  sqlite:
+    pvcRef:
+      name: sessions-pvc
