@@ -60,6 +60,17 @@ Every doc has YAML frontmatter and is kept under 200 lines. See
 
 ## Development environment
 
+**Prerequisite — a flake-enabled Nix.** The toolchain is pinned in `flake.nix`; you
+need Nix with flakes to materialize it. We recommend the
+[Determinate Nix Installer](https://github.com/DeterminateSystems/nix-installer),
+which enables flakes by default:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://install.determinate.systems/nix | sh -s -- install
+```
+
+Then, from a fresh terminal in the repo root:
+
 ```sh
 direnv allow                 # one-time, on first clone
 nix develop                  # or rely on direnv's auto-activation
@@ -67,7 +78,8 @@ pre-commit install --install-hooks
 pre-commit install --hook-type commit-msg
 ```
 
-See [docs/references/nix-dev-env.md](docs/references/nix-dev-env.md).
+See [docs/references/nix-dev-env.md](docs/references/nix-dev-env.md) and the
+[development environment guide](book/docs/development/dev-environment.md#prerequisite-install-nix-with-flakes).
 
 ## Commits
 

@@ -397,6 +397,25 @@ diagram-render:  ## Render D2 / Mermaid / Graphviz sources
 plan-score:  ## Pointer: use the plan-scorer agent on a doc path
 	@echo "Dispatch the plan-scorer agent: /dispatch <phase-id> plan-scorer <path/to/doc.md>"
 
+# ==== End-user docs site (book/) ========================================
+#
+# book/ is the MkDocs Material site for end users (book/mkdocs.yml). mkdocs +
+# mkdocs-material come from the Nix dev shell (flake.nix); output builds to the
+# gitignored book/site/. Production publishes via CI, not these local targets.
+
+BOOK_DIR        := $(REPO_ROOT)/book
+BOOK_ADDR       ?= 127.0.0.1:8000
+
+.PHONY: book-serve
+book-serve:  ## Live-reload preview of the end-user docs at $(BOOK_ADDR)
+	@command -v mkdocs >/dev/null || { echo "mkdocs missing — run 'nix develop' or 'pip install mkdocs-material'"; exit 1; }
+	@cd $(BOOK_DIR) && mkdocs serve --dev-addr $(BOOK_ADDR)
+
+.PHONY: book-build
+book-build:  ## Build the static end-user docs into book/site/
+	@command -v mkdocs >/dev/null || { echo "mkdocs missing — run 'nix develop' or 'pip install mkdocs-material'"; exit 1; }
+	@cd $(BOOK_DIR) && mkdocs build
+
 # ==== IDE configs =======================================================
 
 .PHONY: ide-config

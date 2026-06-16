@@ -35,6 +35,36 @@ CI imports the same flake — there is no separate toolchain matrix. If it build
 
 ---
 
+## Prerequisite — install Nix (with flakes)
+
+Everything below assumes a **flake-enabled Nix** on your `PATH`. keese recommends the [Determinate Nix Installer](https://github.com/DeterminateSystems/nix-installer): it turns on flakes and the unified `nix` CLI by default (stock Nix requires hand-editing `nix.conf`), works the same on macOS and Linux, and ships a clean uninstaller.
+
+```bash
+# macOS or Linux — installs Nix with flakes + nix-command enabled
+curl --proto '=https' --tlsv1.2 -sSf https://install.determinate.systems/nix | sh -s -- install
+```
+
+Open a new terminal (so `nix` lands on your `PATH`) and verify:
+
+```bash
+nix --version       # nix (Nix) 2.18 or newer
+```
+
+Then bring up the keese dev shell in three steps:
+
+```bash
+git clone https://github.com/keese-ai/keese && cd keese
+nix develop         # builds the pinned toolchain (~60 s cold, cached after)
+make help           # confirm the shell is live — prints the target catalog
+```
+
+That is the entire prerequisite. The rest of this page makes shell entry automatic (direnv) and explains what the toolchain contains.
+
+!!! tip "Already running Nix?"
+    Stock Nix works too — add `experimental-features = nix-command flakes` to `~/.config/nix/nix.conf` (the Determinate installer sets this for you), then continue below.
+
+---
+
 ## Entering the shell
 
 ### Option A — direnv (recommended)
