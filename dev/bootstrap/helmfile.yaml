@@ -64,7 +64,7 @@ releases:
     version: 1.18.2
     values:
       - kubeProxyReplacement: true
-        k8sServiceHost: keese-demo-control-plane
+        k8sServiceHost: keese-dev-control-plane
         k8sServicePort: 6443
         hubble:
           enabled: true

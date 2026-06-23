@@ -146,3 +146,7 @@ type memory
 # No relations defined on oidc_provider itself — it is a leaf type referenced
 # only via tenant.uses_oidc_provider.  CRD: authz.keese.ai/v1alpha1/OIDCProvider (D28).
 type oidc_provider
+
+type session
+  relations
+    define attached_by: [user, service_account]
